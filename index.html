@@ -2,8 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TaskManager</title>
+    <title>Hiro Tasks</title>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("tm-preferences");
+          var dark = false;
+          if (raw) {
+            var p = JSON.parse(raw);
+            var th = p.state && p.state.themePreference;
+            if (th === "dark") dark = true;
+            else if (th === "light") dark = false;
+            else {
+              dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            }
+          } else {
+            dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          }
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

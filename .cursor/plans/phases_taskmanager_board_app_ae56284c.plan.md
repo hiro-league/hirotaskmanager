@@ -1,6 +1,6 @@
 ---
 name: TaskManager Board App
-overview: Build a browser-based, local-only task board app with a Bun + Hono backend serving a React 19 SPA, organized in 11 incremental phases -- from project scaffolding through advanced features and final polish.
+overview: Build a browser-based, local-only task board app with a Bun + Hono backend serving a React 19 SPA, organized in phased increments -- column-first list layout (full-height draggable columns with in-column status sections), then tasks, filters, export, and polish.
 todos:
   - id: p1-bun-init
     content: "Phase 1: bun init, install all dependencies (React 19, Vite 6, Hono, Tailwind 4, shadcn/ui, Zustand, TanStack Query, @dnd-kit, markdown libs, nanoid)"
@@ -59,14 +59,20 @@ todos:
   - id: p3-list-mutations
     content: "Phase 3: Add list mutations -- useCreateList, useRenameList, useDeleteList"
     status: pending
-  - id: p3-matrix-skeleton
-    content: "Phase 3: Build MatrixGrid.tsx skeleton -- CSS Grid with one column per list"
+  - id: p3-boardview-stub
+    content: "Phase 3: BoardView shows board name + list CRUD; minimal placeholder for lane area until 3B"
     status: pending
-  - id: p3-cell
-    content: "Phase 3: Build Cell.tsx as empty placeholder"
+  - id: p3b-board-columns
+    content: "Phase 3B: Build BoardColumns.tsx -- horizontal scroll strip, lists sorted by list.order"
     status: pending
-  - id: p3-statusrow
-    content: "Phase 3: Build StatusRow.tsx as a single default row"
+  - id: p3b-list-column
+    content: "Phase 3B: Build ListColumn.tsx -- full-height column: ListHeader + vertical body for status sections"
+    status: pending
+  - id: p3b-status-section
+    content: "Phase 3B: Build StatusSection.tsx -- labeled block per status inside each column (empty placeholders)"
+    status: pending
+  - id: p3b-layout-verify
+    content: "Phase 3B: Wire BoardView to BoardColumns; horizontal scroll when many lists; structure ready for Phase 10 column DnD"
     status: pending
   - id: p4-taskcard
     content: "Phase 4: Build TaskCard.tsx -- compact card with title and body preview"
@@ -78,10 +84,10 @@ todos:
     content: "Phase 4: Add task mutations -- useCreateTask, useUpdateTask, useDeleteTask"
     status: pending
   - id: p4-add-task-btn
-    content: "Phase 4: Add 'Add Task' button inside each Cell.tsx"
+    content: "Phase 4: Add 'Add Task' button inside each StatusSection (per list + status)"
     status: pending
   - id: p4-render-tasks
-    content: "Phase 4: Render tasks in cells filtered by (listId, status)"
+    content: "Phase 4: Render tasks in StatusSection lists filtered by (listId, status)"
     status: pending
   - id: p4-zustand-store
     content: "Phase 4: Build src/client/store/board-ui.ts Zustand store with activeTaskType and visibleStatuses"
@@ -90,22 +96,22 @@ todos:
     content: "Phase 5: Build TypeModeSwitcher.tsx -- tab bar of board taskTypes"
     status: pending
   - id: p5-wire-filter
-    content: "Phase 5: Wire activeTaskType from Zustand to matrix cell filter logic"
+    content: "Phase 5: Wire activeTaskType from Zustand to task filtering inside each StatusSection"
     status: pending
   - id: p5-toolbar
-    content: "Phase 5: Build BoardToolbar.tsx container bar, embed TypeModeSwitcher"
+    content: "Phase 5: Build BoardToolbar.tsx container bar above BoardColumns, embed TypeModeSwitcher"
     status: pending
   - id: p5-persist-type
-    content: "Phase 5: Persist activeTaskType to board JSON on change"
+    content: "Phase 5: Persist activeTaskType to board JSON on change; update ListColumn/StatusSection filters"
     status: pending
   - id: p6-status-filter
     content: "Phase 6: Build StatusFilter.tsx -- toggle list of statusDefinitions"
     status: pending
   - id: p6-wire-statuses
-    content: "Phase 6: Wire visibleStatuses from Zustand to matrix rendering"
+    content: "Phase 6: Wire visibleStatuses from Zustand to which StatusSections render inside each ListColumn"
     status: pending
-  - id: p6-status-rows
-    content: "Phase 6: Update MatrixGrid to render one StatusRow per visible status with label column"
+  - id: p6-status-sections
+    content: "Phase 6: Render one StatusSection per visible status in every ListColumn (same status order in each column)"
     status: pending
   - id: p6-persist-statuses
     content: "Phase 6: Embed StatusFilter in BoardToolbar and persist visibleStatuses to board JSON"
@@ -129,7 +135,7 @@ todos:
     content: "Phase 8: Apply board background image as CSS background on BoardView"
     status: pending
   - id: p8-counts
-    content: "Phase 8: Render count badges on list headers and status row labels"
+    content: "Phase 8: Render count badges on list headers and status section headers"
     status: pending
   - id: p9-md-editor
     content: "Phase 9: Replace textarea with @uiw/react-md-editor in TaskEditor"
@@ -141,13 +147,13 @@ todos:
     content: "Phase 9: Build ColorPicker.tsx, add to TaskEditor, apply color on TaskCard"
     status: pending
   - id: p9-dnd-within
-    content: "Phase 9: Implement @dnd-kit task reorder within a cell (SortableContext per cell)"
+    content: "Phase 9: Implement @dnd-kit task reorder within a StatusSection (SortableContext per section)"
     status: pending
   - id: p9-dnd-across
-    content: "Phase 9: Implement @dnd-kit cross-cell task movement (change listId/status)"
+    content: "Phase 9: Implement @dnd-kit cross-section task movement (change listId and/or status)"
     status: pending
   - id: p9-drag-handlers
-    content: "Phase 9: Build useDragHandlers.ts and wrap MatrixGrid in DndContext"
+    content: "Phase 9: Build useDragHandlers.ts and wrap BoardColumns (or ListColumn tree) in DndContext"
     status: pending
   - id: p10-list-color
     content: "Phase 10: Add accent color to ListHeader (color dot or header border)"
@@ -156,10 +162,10 @@ todos:
     content: "Phase 10: Build ListSettings.tsx popover to set list color"
     status: pending
   - id: p10-list-dnd
-    content: "Phase 10: Implement @dnd-kit horizontal drag for list column reordering"
+    content: "Phase 10: Implement @dnd-kit horizontal drag to reorder ListColumns in BoardColumns (update list.order)"
     status: pending
   - id: p11-empty-states
-    content: "Phase 11: Empty states for no boards, no lists, no tasks"
+    content: "Phase 11: Empty states for no boards, no lists, no tasks in a StatusSection"
     status: pending
   - id: p11-responsive
     content: "Phase 11: Responsive layout -- collapse sidebar, horizontal scroll for many lists"
@@ -256,7 +262,7 @@ interface Task {
   body: string;                  // Markdown
   type: string;
   status: string;
-  order: number;                 // Within (list, status) cell
+  order: number;                 // Within (list, status) section
   color?: string;
   createdAt: string;
   updatedAt: string;
@@ -297,39 +303,44 @@ graph TD
   App --> BoardView
 
   BoardView --> BoardToolbar
-  BoardView --> MatrixGrid
+  BoardView --> BoardColumns
 
   BoardToolbar --> TypeModeSwitcher
   BoardToolbar --> StatusFilter
   BoardToolbar --> ExportMenu
   BoardToolbar --> BoardSettings
 
-  MatrixGrid --> StatusRow
-  StatusRow --> Cell
-  Cell --> TaskCard
+  BoardColumns --> ListColumn
+  ListColumn --> ListHeader
+  ListColumn --> StatusSection
+  StatusSection --> TaskCard
 
   TaskCard --> MarkdownPreview
   TaskCard -->|"click"| TaskEditor
   TaskEditor --> MarkdownEditor
 ```
 
-### Matrix rendering logic
+### Board layout and task grouping
 
-The core board is a CSS Grid. Columns = lists, rows = visible statuses. Each cell shows tasks matching `(listId, status, activeTaskType)`.
+The board body is **not** a single spreadsheet grid (global status rows × list columns). It is a **horizontal strip of full-height list columns** (`BoardColumns`), each containing **vertical status sections** (`StatusSection`). Lists are ordered by `list.order` and scroll horizontally when there are many columns; Phase 10 adds drag-to-reorder along that strip.
+
+Grouping is still `(listId, status, activeTaskType)` -- only the **presentation** is column-first:
 
 ```typescript
-visibleStatuses.map(status =>
-  board.lists.map(list =>
-    tasks.filter(t =>
-      t.type === activeTaskType &&
-      t.listId === list.id &&
-      t.status === status
-    ).sort(byOrder)
+board.lists
+  .sort(byListOrder)
+  .map(list =>
+    visibleStatuses.map(status =>
+      tasks.filter(t =>
+        t.type === activeTaskType &&
+        t.listId === list.id &&
+        t.status === status
+      ).sort(byOrder)
+    )
   )
-)
 ```
 
-CSS: `grid-template-columns: auto repeat(N, 1fr)` where first column is the status label and N = number of lists.
+Each `ListColumn` has a fixed minimum width, uses the viewport height for a “full lane” feel, and scrolls internally if content overflows.
 
 ## Project File Structure
 
@@ -365,9 +376,9 @@ taskmanager/
         board/
           BoardView.tsx
           BoardToolbar.tsx
-          MatrixGrid.tsx
-          StatusRow.tsx
-          Cell.tsx
+          BoardColumns.tsx
+          ListColumn.tsx
+          StatusSection.tsx
           TypeModeSwitcher.tsx
           StatusFilter.tsx
         task/
@@ -427,52 +438,61 @@ CRUD for boards (server + client). The user can create, rename, open, switch, an
 
 ---
 
-### Phase 3 -- Empty Lists
+### Phase 3 -- Empty Lists (CRUD)
 
-Lists appear as columns inside a board. No tasks yet -- just list headers with create/rename/delete.
+List metadata and mutations exist; the board body can show a minimal placeholder until Phase 3B.
 
 - Build `ListHeader.tsx` -- displays list name, inline rename on double-click, delete button
 - Add "New List" button to `BoardView.tsx` (or toolbar area)
 - Add list mutations to `mutations.ts` -- `useCreateList`, `useRenameList`, `useDeleteList`
-- Build initial `MatrixGrid.tsx` skeleton -- CSS Grid that renders one column per list (headers only, empty cells below)
-- Build `Cell.tsx` as an empty drop zone placeholder
-- Build `StatusRow.tsx` as a single default row (all statuses visible = one row for now)
+- `BoardView` shows the loaded board name and list CRUD; optional short empty-state copy until columns exist
+
+---
+
+### Phase 3B -- Column layout (full lists)
+
+The **physical** board is a row of **full-height list columns** (Kanban-style lanes), not a single CSS grid of global status rows. Status splits sit **inside** each column. Data is still keyed by `(listId, status)`; only layout changes.
+
+- Build `BoardColumns.tsx` -- horizontal scroll container (`flex` / `overflow-x-auto`); render one column per list sorted by `list.order`
+- Build `ListColumn.tsx` -- column chrome: `ListHeader` on top, full-height body below for stacked `StatusSection` components
+- Build `StatusSection.tsx` -- labeled block per status (empty drop area for later DnD); for 3B use `board.statusDefinitions` or a single default status until Phase 6 toggles `visibleStatuses`
+- Wire `BoardView` to render `BoardColumns` when the board has lists; many lists cause horizontal scroll
+- Structure columns so Phase 10 can attach **horizontal** @dnd-kit reorder on the strip (drag whole column or header handle) without restructuring
 
 ---
 
 ### Phase 4 -- Basic Tasks
 
-Users can create, view, edit, and delete tasks. Tasks appear inside the correct cell of the matrix.
+Users can create, view, edit, and delete tasks. Tasks appear inside the correct **status section** of the correct **list column**.
 
 - Build `TaskCard.tsx` -- compact card showing title and a truncated body preview
 - Build `TaskEditor.tsx` -- modal/dialog with fields: title (input), body (textarea for now), type (select), status (select)
 - Add task mutations -- `useCreateTask`, `useUpdateTask`, `useDeleteTask`
-- Add "Add Task" button inside each `Cell.tsx`
-- Render tasks inside cells by filtering `board.tasks` by `(listId, status)` (show all types for now)
+- Add "Add Task" button inside each `StatusSection`
+- Render tasks by filtering `board.tasks` by `(listId, status)` within that section (show all types for now)
 - Build `src/client/store/board-ui.ts` -- Zustand store with `activeTaskType` and `visibleStatuses` state
 
 ---
 
 ### Phase 5 -- Task Type Filtering
 
-The board-level type switcher filters which tasks are visible across all lists.
+The board-level type switcher filters which tasks are visible **inside every column’s sections**.
 
 - Build `TypeModeSwitcher.tsx` -- tab bar or segmented control showing board's `taskTypes`
-- Wire `activeTaskType` from Zustand store to the matrix filter logic
-- Update `MatrixGrid.tsx` cell rendering to filter by `t.type === activeTaskType`
-- Build `BoardToolbar.tsx` as the container bar above the grid, embed `TypeModeSwitcher`
+- Wire `activeTaskType` from Zustand store to the filter used when rendering tasks in each `StatusSection`
+- Update task rendering so `t.type === activeTaskType` (or equivalent) applies consistently in every `ListColumn`
+- Build `BoardToolbar.tsx` as the container bar above `BoardColumns`, embed `TypeModeSwitcher`
 - Persist `activeTaskType` back to the board JSON on change (via `useUpdateBoard`)
 
 ---
 
 ### Phase 6 -- Task Status Breakdown
 
-Status rows split the board vertically. Users can toggle which statuses are visible.
+Users toggle which **status sections** appear **inside each list column** (same set of statuses for every column, in a consistent order).
 
 - Build `StatusFilter.tsx` -- checkbox/toggle list of `board.statusDefinitions`
-- Wire `visibleStatuses` from Zustand store to the matrix rendering
-- Update `MatrixGrid.tsx` to render one `StatusRow` per visible status
-- Add status label column (first column of the CSS Grid) showing the status name per row
+- Wire `visibleStatuses` from Zustand store so each `ListColumn` renders one `StatusSection` per visible status
+- Status labels live on each section header inside the column -- not a global grid label column
 - Embed `StatusFilter` in `BoardToolbar`
 - Persist `visibleStatuses` back to the board JSON on change
 
@@ -502,7 +522,7 @@ Board-level settings panel and visual enhancements.
   - Set background image URL
 - Apply board background image as a CSS background on `BoardView`
 - Render count badges on list headers (task count per list for active type)
-- Render count badges on status row labels (task count per status for active type)
+- Render count badges on **status section** headers (task count per status for active type)
 
 ---
 
@@ -514,20 +534,20 @@ Rich markdown editing, task colors, and drag-and-drop for tasks.
 - Build `MarkdownViewer.tsx` using `react-markdown` for card preview
 - Build `ColorPicker.tsx` and add it to `TaskEditor` for per-task color
 - Apply task color as a left-border or background tint on `TaskCard`
-- Implement @dnd-kit for task reorder within a cell (`SortableContext` per cell)
-- Implement @dnd-kit cross-cell task movement (changes `listId` and/or `status`)
+- Implement @dnd-kit for task reorder within a `StatusSection` (`SortableContext` per section)
+- Implement @dnd-kit cross-section task movement (changes `listId` and/or `status`)
 - Build `src/client/hooks/useDragHandlers.ts` with optimistic reorder logic
-- Wrap `MatrixGrid` in `DndContext`
+- Wrap `BoardColumns` (or the list-column subtree) in `DndContext`
 
 ---
 
 ### Phase 10 -- Advanced Lists
 
-List visual customization and drag-and-drop column reordering.
+List visual customization and drag-and-drop **column** reordering along the horizontal strip.
 
 - Add accent color field to `ListHeader` (small color dot or header border)
 - Build `ListSettings.tsx` -- popover to set list color
-- Implement @dnd-kit horizontal drag for list column reordering
+- Implement @dnd-kit horizontal drag to reorder `ListColumn` siblings inside `BoardColumns`
 - Update `list.order` for all affected lists on drop and persist
 
 ---
@@ -536,7 +556,7 @@ List visual customization and drag-and-drop column reordering.
 
 Final visual refinements and edge-case handling.
 
-- Empty states: no boards, no lists, no tasks in a cell
+- Empty states: no boards, no lists, no tasks in a `StatusSection`
 - Responsive layout: collapse sidebar on small screens, horizontal scroll for many lists
 - Keyboard accessibility: focus management in modals, escape to close
 - Loading and error states for all async operations

@@ -2,24 +2,24 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { nanoid } from "nanoid";
 import {
   DEFAULT_STATUS_DEFINITIONS,
-  DEFAULT_TASK_TYPES,
+  DEFAULT_TASK_GROUPS,
   type Board,
   type BoardIndexEntry,
   type List,
+  type Task,
 } from "../../shared/models";
 import { useSelectionStore } from "@/store/selection";
 import { fetchBoard } from "./queries";
 
 function buildOptimisticBoard(id: string, name: string): Board {
   const now = new Date().toISOString();
-  const taskTypes = [...DEFAULT_TASK_TYPES];
+  const taskGroups = [...DEFAULT_TASK_GROUPS];
   const statusDefinitions = [...DEFAULT_STATUS_DEFINITIONS];
   return {
     id,
     name,
-    taskTypes,
+    taskGroups,
     statusDefinitions,
-    activeTaskType: taskTypes[0] ?? "task",
     visibleStatuses: [...statusDefinitions],
     showCounts: true,
     lists: [],
@@ -42,8 +42,29 @@ export function useCreateBoard() {
       return res.json() as Promise<Board>;
     },
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: ["boards"] });
+      /** Only cancel the board index query — not `["boards", id]` detail queries. */
+      await qc.cancelQueries({ queryKey: ["boards"], exact: true });
       const previous = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
+      // #region agent log
+      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "bfa499",
+        },
+        body: JSON.stringify({
+          sessionId: "bfa499",
+          runId: "post-fix",
+          hypothesisId: "H5",
+          location: "mutations.ts:useCreateBoard.onMutate",
+          message: "create board onMutate",
+          data: { prevListLen: previous?.length ?? -1 },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      const previousSelectedId =
+        useSelectionStore.getState().selectedBoardId;
       const optimisticId = nanoid();
       const name =
         typeof input.name === "string" && input.name.trim()
@@ -51,6 +72,7 @@ export function useCreateBoard() {
           : "New board";
       const entry: BoardIndexEntry = {
         id: optimisticId,
+        slug: "",
         name,
         createdAt: new Date().toISOString(),
       };
@@ -63,16 +85,39 @@ export function useCreateBoard() {
         buildOptimisticBoard(optimisticId, name),
       );
       useSelectionStore.getState().setSelectedBoardId(optimisticId);
-      return { previous, optimisticId };
+      return { previous, optimisticId, previousSelectedId };
     },
     onError: (_err, _input, context) => {
+      // #region agent log
+      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "bfa499",
+        },
+        body: JSON.stringify({
+          sessionId: "bfa499",
+          runId: "post-fix",
+          hypothesisId: "H5",
+          location: "mutations.ts:useCreateBoard.onError",
+          message: "create board onError",
+          data: {
+            restoreTo: context?.previousSelectedId ?? null,
+            hadOptimisticId: Boolean(context?.optimisticId),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (context?.previous) {
         qc.setQueryData<BoardIndexEntry[]>(["boards"], context.previous);
       }
       if (context?.optimisticId) {
         qc.removeQueries({ queryKey: ["boards", context.optimisticId] });
       }
-      useSelectionStore.getState().setSelectedBoardId(null);
+      useSelectionStore
+        .getState()
+        .setSelectedBoardId(context?.previousSelectedId ?? null);
     },
     onSuccess: (data, _input, context) => {
       const optId = context?.optimisticId;
@@ -83,6 +128,7 @@ export function useCreateBoard() {
             e.id === optId
               ? {
                   id: data.id,
+                  slug: e.slug,
                   name: data.name,
                   createdAt: data.createdAt,
                 }
@@ -92,6 +138,24 @@ export function useCreateBoard() {
       }
       qc.setQueryData<Board>(["boards", data.id], data);
       useSelectionStore.getState().setSelectedBoardId(data.id);
+      // #region agent log
+      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "bfa499",
+        },
+        body: JSON.stringify({
+          sessionId: "bfa499",
+          runId: "post-fix",
+          hypothesisId: "H5",
+          location: "mutations.ts:useCreateBoard.onSuccess",
+          message: "create board onSuccess",
+          data: { dataId: data.id, hadOptContext: Boolean(context?.optimisticId) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
     },
   });
 }
@@ -109,9 +173,31 @@ export function useUpdateBoard() {
       return res.json() as Promise<Board>;
     },
     onMutate: async (board) => {
-      await qc.cancelQueries({ queryKey: ["boards"] });
+      await qc.cancelQueries({ queryKey: ["boards"], exact: true });
       const prevList = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
       const prevDetail = qc.getQueryData<Board>(["boards", board.id]);
+      // #region agent log
+      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "bfa499",
+        },
+        body: JSON.stringify({
+          sessionId: "bfa499",
+          runId: "post-fix",
+          hypothesisId: "H4",
+          location: "mutations.ts:useUpdateBoard.onMutate",
+          message: "update board onMutate",
+          data: {
+            boardId: board.id,
+            prevListLen: prevList?.length ?? -1,
+            hadPrevDetail: prevDetail !== undefined,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       qc.setQueryData<BoardIndexEntry[]>(["boards"], (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
           e.id === board.id ? { ...e, name: board.name } : e,
@@ -147,13 +233,32 @@ export function useDeleteBoard() {
       if (!res.ok) throw new Error(await res.text());
     },
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: ["boards"] });
+      await qc.cancelQueries({ queryKey: ["boards"], exact: true });
+      await qc.cancelQueries({ queryKey: ["boards", id], exact: true });
       const prevList = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
       qc.setQueryData<BoardIndexEntry[]>(["boards"], (old) =>
         (old ?? []).filter((e: BoardIndexEntry) => e.id !== id),
       );
       qc.removeQueries({ queryKey: ["boards", id] });
       const selected = useSelectionStore.getState().selectedBoardId;
+      // #region agent log
+      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "bfa499",
+        },
+        body: JSON.stringify({
+          sessionId: "bfa499",
+          runId: "post-fix",
+          hypothesisId: "H1",
+          location: "mutations.ts:useDeleteBoard.onMutate",
+          message: "delete board onMutate",
+          data: { deleteId: id, selected, willClearSelection: selected === id },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (selected === id) {
         useSelectionStore.getState().setSelectedBoardId(null);
       }
@@ -174,13 +279,16 @@ export function useCreateList() {
   const qc = useQueryClient();
   const updateBoard = useUpdateBoard();
   return useMutation({
-    mutationFn: async (boardId: string) => {
+    mutationFn: async (input: { boardId: string; name: string }) => {
+      const { boardId } = input;
+      const trimmed = input.name.trim();
+      const listName = trimmed || "New list";
       const board =
         qc.getQueryData<Board>(["boards", boardId]) ?? (await fetchBoard(boardId));
       const maxOrder = board.lists.reduce((m, l) => Math.max(m, l.order), -1);
       const newList: List = {
         id: nanoid(),
-        name: "New list",
+        name: listName,
         order: maxOrder + 1,
       };
       const next: Board = {
@@ -231,6 +339,131 @@ export function useDeleteList() {
         ...board,
         lists: board.lists.filter((l) => l.id !== input.listId),
         tasks: board.tasks.filter((t) => t.listId !== input.listId),
+        updatedAt: new Date().toISOString(),
+      };
+      return updateBoard.mutateAsync(next);
+    },
+  });
+}
+
+export function useCreateTask() {
+  const qc = useQueryClient();
+  const updateBoard = useUpdateBoard();
+  return useMutation({
+    mutationFn: async (input: {
+      boardId: string;
+      listId: string;
+      status: string;
+      title: string;
+      body: string;
+      group: string;
+    }) => {
+      const board =
+        qc.getQueryData<Board>(["boards", input.boardId]) ??
+        (await fetchBoard(input.boardId));
+      const inBand = board.tasks.filter(
+        (t) => t.listId === input.listId && t.status === input.status,
+      );
+      const maxOrder = inBand.reduce((m, t) => Math.max(m, t.order), -1);
+      const now = new Date().toISOString();
+      const task: Task = {
+        id: nanoid(),
+        listId: input.listId,
+        title: input.title,
+        body: input.body,
+        group: input.group,
+        status: input.status,
+        order: maxOrder + 1,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const next: Board = {
+        ...board,
+        tasks: [...board.tasks, task],
+        updatedAt: now,
+      };
+      return updateBoard.mutateAsync(next);
+    },
+  });
+}
+
+export function useUpdateTask() {
+  const qc = useQueryClient();
+  const updateBoard = useUpdateBoard();
+  return useMutation({
+    mutationFn: async (input: { boardId: string; task: Task }) => {
+      const board =
+        qc.getQueryData<Board>(["boards", input.boardId]) ??
+        (await fetchBoard(input.boardId));
+      const prev = board.tasks.find((t) => t.id === input.task.id);
+      if (!prev) throw new Error("Task not found");
+      const statusChanged = prev.status !== input.task.status;
+      const listChanged = prev.listId !== input.task.listId;
+      let order = input.task.order;
+      if (statusChanged || listChanged) {
+        const inBand = board.tasks.filter(
+          (t) =>
+            t.id !== input.task.id &&
+            t.listId === input.task.listId &&
+            t.status === input.task.status,
+        );
+        order = inBand.reduce((m, t) => Math.max(m, t.order), -1) + 1;
+      }
+      const task: Task = {
+        ...input.task,
+        order,
+        updatedAt: new Date().toISOString(),
+      };
+      const next: Board = {
+        ...board,
+        tasks: board.tasks.map((t) => (t.id === task.id ? task : t)),
+        updatedAt: task.updatedAt,
+      };
+      return updateBoard.mutateAsync(next);
+    },
+  });
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  const updateBoard = useUpdateBoard();
+  return useMutation({
+    mutationFn: async (input: { boardId: string; taskId: string }) => {
+      const board =
+        qc.getQueryData<Board>(["boards", input.boardId]) ??
+        (await fetchBoard(input.boardId));
+      const now = new Date().toISOString();
+      const next: Board = {
+        ...board,
+        tasks: board.tasks.filter((t) => t.id !== input.taskId),
+        updatedAt: now,
+      };
+      return updateBoard.mutateAsync(next);
+    },
+  });
+}
+
+/** Reorder lists left/right; `orderedListIds` is the full list of ids in display order. */
+export function useReorderLists() {
+  const qc = useQueryClient();
+  const updateBoard = useUpdateBoard();
+  return useMutation({
+    mutationFn: async (input: { boardId: string; orderedListIds: string[] }) => {
+      const board =
+        qc.getQueryData<Board>(["boards", input.boardId]) ??
+        (await fetchBoard(input.boardId));
+      if (input.orderedListIds.length !== board.lists.length) {
+        throw new Error("Invalid reorder: list count mismatch");
+      }
+      const byId = new Map(board.lists.map((l) => [l.id, l] as const));
+      const lists: List[] = input.orderedListIds.map((id, order) => {
+        const list = byId.get(id);
+        if (!list) throw new Error(`Unknown list id: ${id}`);
+        return { ...list, order };
+      });
+      const next: Board = {
+        ...board,
+        lists,
         updatedAt: new Date().toISOString(),
       };
       return updateBoard.mutateAsync(next);

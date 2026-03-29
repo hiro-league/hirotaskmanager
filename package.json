@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npx --yes bun --watch src/server/index.ts",
-    "dev:client": "vite",
+    "dev:client": "npx --yes wait-on tcp:127.0.0.1:3001 && vite",
     "build": "vite build",
-    "preview": "vite preview",
+    "start": "NODE_ENV=production npx --yes bun src/server/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -40,6 +40,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
+    "wait-on": "^8.0.5",
     "typescript": "^6.0.2",
     "vite": "^8.0.2"
   },

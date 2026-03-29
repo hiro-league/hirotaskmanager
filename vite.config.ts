@@ -14,6 +14,9 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      ignored: ["**/data/**"],
+    },
     proxy: {
       "/api": {
         target: "http://localhost:3001",

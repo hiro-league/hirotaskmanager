@@ -1,0 +1,24 @@
+{
+  "id": "T__QMnAGwz6tir09-UPNg",
+  "name": "New board",
+  "taskGroups": [
+    "feature",
+    "bug",
+    "enhancement"
+  ],
+  "statusDefinitions": [
+    "open",
+    "in-progress",
+    "closed"
+  ],
+  "visibleStatuses": [
+    "open",
+    "in-progress",
+    "closed"
+  ],
+  "showCounts": true,
+  "lists": [],
+  "tasks": [],
+  "createdAt": "2026-03-29T16:57:07.540Z",
+  "updatedAt": "2026-03-29T16:57:07.540Z"
+}

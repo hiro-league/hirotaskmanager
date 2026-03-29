@@ -1,5 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Board, BoardIndexEntry } from "../../shared/models";
+import {
+  normalizeBoardFromJson,
+  type Board,
+  type BoardIndexEntry,
+} from "../../shared/models";
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -11,7 +15,8 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 }
 
 export async function fetchBoard(id: string): Promise<Board> {
-  return fetchJson<Board>(`/api/boards/${id}`);
+  const raw = await fetchJson<Record<string, unknown>>(`/api/boards/${id}`);
+  return normalizeBoardFromJson(raw);
 }
 
 export function useBoards() {

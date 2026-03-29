@@ -1,0 +1,3 @@
+- use MCP or CLI or what, for AI Connection?
+- Export as screenshot or as markdown or as an Interactive Visualization for adding to website progress.
+- Connecting to Github Issues, Jira

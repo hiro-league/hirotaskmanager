@@ -2,30 +2,47 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Bun: Debug API server",
-      "type": "bun",
+      "name": "Dev (API + Vite)",
+      "type": "node",
       "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/src/server/index.ts",
       "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen",
-      "stopOnEntry": false,
-      "watchMode": true
+      "internalConsoleOptions": "neverOpen"
     },
     {
-      "name": "Chrome: Debug client (Vite)",
-      "type": "pwa-chrome",
+      "name": "Build",
+      "type": "node",
       "request": "launch",
-      "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}",
-      "preLaunchTask": "dev:client (background)"
-    }
-  ],
-  "compounds": [
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "build"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
     {
-      "name": "Full stack: Debug API + Chrome client",
-      "configurations": ["Bun: Debug API server", "Chrome: Debug client (Vite)"],
-      "stopAll": true
+      "name": "Start (production)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "bun", "src/server/index.ts"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    {
+      "name": "Debug API (Bun only)",
+      "type": "bun",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/server/index.ts",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopOnEntry": false,
+      "watchMode": true
     }
   ]
 }

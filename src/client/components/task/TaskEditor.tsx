@@ -1,0 +1,233 @@
+import { useCallback, useEffect, useId, useState } from "react";
+import type { Board, Task } from "../../../shared/models";
+import { ALL_TASK_GROUPS } from "../../../shared/models";
+import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
+import { useResolvedActiveTaskGroup } from "@/store/preferences";
+
+interface TaskEditorProps {
+  board: Board;
+  open: boolean;
+  onClose: () => void;
+  mode: "create" | "edit";
+  /** Required when mode is create */
+  createContext?: { listId: string; status: string };
+  task?: Task | null;
+}
+
+export function TaskEditor({
+  board,
+  open,
+  onClose,
+  mode,
+  createContext,
+  task,
+}: TaskEditorProps) {
+  const titleId = useId();
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
+  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [group, setGroup] = useState("");
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "edit" && task) {
+      setTitle(task.title);
+      setBody(task.body);
+      setGroup(task.group);
+      setStatus(task.status);
+    } else if (mode === "create" && createContext) {
+      setTitle("");
+      setBody("");
+      const defaultGroup =
+        activeGroup !== ALL_TASK_GROUPS
+          ? activeGroup
+          : board.taskGroups[0] ?? "task";
+      setGroup(defaultGroup);
+      setStatus(createContext.status);
+    }
+  }, [
+    open,
+    mode,
+    task,
+    createContext,
+    board.taskGroups,
+    activeGroup,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  const handleSave = useCallback(async () => {
+    const trimmedTitle = title.trim() || "Untitled";
+    const now = new Date().toISOString();
+    if (mode === "create" && createContext) {
+      await createTask.mutateAsync({
+        boardId: board.id,
+        listId: createContext.listId,
+        status: status.trim() || createContext.status,
+        title: trimmedTitle,
+        body,
+        group: group.trim() || board.taskGroups[0] || "task",
+      });
+    } else if (mode === "edit" && task) {
+      await updateTask.mutateAsync({
+        boardId: board.id,
+        task: {
+          ...task,
+          title: trimmedTitle,
+          body,
+          group: group.trim() || task.group,
+          status: status.trim() || task.status,
+          updatedAt: now,
+        },
+      });
+    }
+    onClose();
+  }, [
+    mode,
+    createContext,
+    task,
+    board,
+    title,
+    body,
+    group,
+    status,
+    createTask,
+    updateTask,
+    onClose,
+  ]);
+
+  const handleDelete = useCallback(async () => {
+    if (mode !== "edit" || !task) return;
+    if (!window.confirm("Delete this task?")) return;
+    await deleteTask.mutateAsync({ boardId: board.id, taskId: task.id });
+    onClose();
+  }, [mode, task, board.id, deleteTask, onClose]);
+
+  if (!open) return null;
+
+  const busy =
+    createTask.isPending || updateTask.isPending || deleteTask.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id={titleId} className="text-lg font-semibold text-foreground">
+          {mode === "create" ? "New task" : "Edit task"}
+        </h2>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label htmlFor={`${titleId}-title`} className="text-xs font-medium text-muted-foreground">
+              Title
+            </label>
+            <input
+              id={`${titleId}-title`}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor={`${titleId}-body`} className="text-xs font-medium text-muted-foreground">
+              Body
+            </label>
+            <textarea
+              id={`${titleId}-body`}
+              rows={6}
+              className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={`${titleId}-group`} className="text-xs font-medium text-muted-foreground">
+                Group
+              </label>
+              <select
+                id={`${titleId}-group`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+              >
+                {board.taskGroups.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${titleId}-status`} className="text-xs font-medium text-muted-foreground">
+                Status
+              </label>
+              <select
+                id={`${titleId}-status`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                {board.statusDefinitions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+          {mode === "edit" && (
+            <button
+              type="button"
+              className="mr-auto rounded-md border border-destructive/50 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              disabled={busy}
+              onClick={() => void handleDelete()}
+            >
+              Delete
+            </button>
+          )}
+          <button
+            type="button"
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void handleSave()}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

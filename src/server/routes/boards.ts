@@ -2,27 +2,31 @@ import { Hono } from "hono";
 import { nanoid } from "nanoid";
 import {
   DEFAULT_STATUS_DEFINITIONS,
-  DEFAULT_TASK_TYPES,
+  DEFAULT_TASK_GROUPS,
+  normalizeBoardFromJson,
   type Board,
 } from "../../shared/models";
 import {
   deleteBoardFile,
+  entryByIdOrSlug,
+  generateSlug,
   readBoardFile,
   readBoardIndex,
+  renameBoardFile,
   removeBoardFromIndex,
+  slugForId,
   syncIndexFromBoard,
   writeBoardAtomic,
 } from "../storage";
 
 function newBoardDocument(id: string, name: string, now: string): Board {
-  const taskTypes = [...DEFAULT_TASK_TYPES];
+  const taskGroups = [...DEFAULT_TASK_GROUPS];
   const statusDefinitions = [...DEFAULT_STATUS_DEFINITIONS];
   return {
     id,
     name,
-    taskTypes,
+    taskGroups,
     statusDefinitions,
-    activeTaskType: taskTypes[0] ?? "task",
     visibleStatuses: [...statusDefinitions],
     showCounts: true,
     lists: [],
@@ -54,24 +58,31 @@ boardsRoute.post("/", async (c) => {
     typeof body.name === "string" && body.name.trim()
       ? body.name.trim()
       : "New board";
+  const slug = await generateSlug(name);
   const board = newBoardDocument(id, name, now);
-  await writeBoardAtomic(board);
-  await syncIndexFromBoard(board);
+  await writeBoardAtomic(board, slug);
+  await syncIndexFromBoard(board, slug);
   return c.json(board, 201);
 });
 
 boardsRoute.get("/:id", async (c) => {
-  const id = c.req.param("id");
-  const board = await readBoardFile(id);
+  const param = c.req.param("id");
+  const entry = await entryByIdOrSlug(param);
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const board = await readBoardFile(entry.id);
   if (!board) return c.json({ error: "Board not found" }, 404);
   return c.json(board);
 });
 
 boardsRoute.put("/:id", async (c) => {
-  const id = c.req.param("id");
+  const param = c.req.param("id");
+  const entry = await entryByIdOrSlug(param);
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const id = entry.id;
   let board: Board;
   try {
-    board = (await c.req.json()) as Board;
+    const raw = (await c.req.json()) as Record<string, unknown>;
+    board = normalizeBoardFromJson(raw);
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
@@ -81,22 +92,38 @@ boardsRoute.put("/:id", async (c) => {
   const existing = await readBoardFile(id);
   if (!existing) return c.json({ error: "Board not found" }, 404);
 
+  const oldSlug = await slugForId(id);
+  if (!oldSlug) return c.json({ error: "Board slug not found" }, 500);
+
+  const nameChanged = existing.name !== board.name;
+  const newSlug = nameChanged
+    ? await generateSlug(board.name, id)
+    : oldSlug;
+
+  if (nameChanged) {
+    await renameBoardFile(oldSlug, newSlug);
+  }
+
   const now = new Date().toISOString();
   const next: Board = {
     ...board,
     createdAt: existing.createdAt,
     updatedAt: now,
   };
-  await writeBoardAtomic(next);
-  await syncIndexFromBoard(next);
+  await writeBoardAtomic(next, newSlug);
+  await syncIndexFromBoard(next, newSlug);
   return c.json(next);
 });
 
 boardsRoute.delete("/:id", async (c) => {
-  const id = c.req.param("id");
+  const param = c.req.param("id");
+  const entry = await entryByIdOrSlug(param);
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const id = entry.id;
+  const slug = entry.slug;
   const existing = await readBoardFile(id);
   if (!existing) return c.json({ error: "Board not found" }, 404);
   await removeBoardFromIndex(id);
-  await deleteBoardFile(id);
+  await deleteBoardFile(slug);
   return c.body(null, 204);
 });

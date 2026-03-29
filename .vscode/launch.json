@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Bun: Debug API server",
+      "type": "bun",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/src/server/index.ts",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "stopOnEntry": false,
+      "watchMode": true
+    },
+    {
+      "name": "Chrome: Debug client (Vite)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "dev:client (background)"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack: Debug API + Chrome client",
+      "configurations": ["Bun: Debug API server", "Chrome: Debug client (Vite)"],
+      "stopAll": true
+    }
+  ]
+}

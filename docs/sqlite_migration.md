@@ -611,6 +611,8 @@ Following the project's bottom-up discipline:
 12. **Test** — Verify existing UI works identically against the new backend. Confirm localStorage self-heals (section 5f).
 13. **Phase 2** — Granular endpoints + client mutation updates (can be done incrementally).
 
+**Progress (main branch):** Steps **1–11** are implemented (SQLite storage, import, integer IDs, `GET /api/statuses`, `useStatuses()` / workflow order, **`nanoid` removed** from `package.json`). **Step 13 (Phase 2)** — granular REST endpoints and client hooks are implemented: `PATCH` view-prefs / groups / board name, list and task CRUD + reorder routes, `usePatchBoardViewPrefs`, `usePatchBoardName`, `usePatchBoardTaskGroups`, and list/task mutations calling the new APIs. Monolithic **`PUT /api/boards/:id`** remains available; **`normalizeBoardFromJson`** / **`coerceTaskStatus`** still used for that path and for `GET` response parsing. Step **12** is ongoing manual QA.
+
 ---
 
 ## 12. Rollback / Safety

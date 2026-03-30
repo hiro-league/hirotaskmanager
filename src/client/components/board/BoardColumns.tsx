@@ -23,7 +23,8 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import type { Board } from "../../../shared/models";
-import { useCreateList, useReorderLists, useUpdateBoard } from "@/api/mutations";
+import { useCreateList, usePatchBoardViewPrefs, useReorderLists } from "@/api/mutations";
+import { useStatusWorkflowOrder } from "@/api/queries";
 import {
   bandWeightsForBoard,
   visibleStatusesForBoard,
@@ -35,7 +36,7 @@ interface BoardColumnsProps {
   board: Board;
 }
 
-function sortedListIds(board: Board): string[] {
+function sortedListIds(board: Board): number[] {
   return [...board.lists]
     .sort((a, b) => a.order - b.order)
     .map((l) => l.id);
@@ -51,7 +52,7 @@ export function AddListSlot({
   boardId,
   stacked = false,
 }: {
-  boardId: string;
+  boardId: number;
   /** Stacked layout: column-aligned, content height (no full-height lane). */
   stacked?: boolean;
 }) {
@@ -145,12 +146,13 @@ export function AddListSlot({
 
 export function BoardColumns({ board }: BoardColumnsProps) {
   const qc = useQueryClient();
-  const updateBoard = useUpdateBoard();
+  const patchViewPrefs = usePatchBoardViewPrefs();
   const reorder = useReorderLists();
+  const workflowOrder = useStatusWorkflowOrder();
 
   const visibleStatuses = useMemo(
-    () => visibleStatusesForBoard(board),
-    [board],
+    () => visibleStatusesForBoard(board, workflowOrder),
+    [board, workflowOrder],
   );
 
   const serverListIds = useMemo(() => sortedListIds(board), [board]);
@@ -159,7 +161,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   const localListIdsRef = useRef(localListIds);
   localListIdsRef.current = localListIds;
 
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -169,7 +171,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   }, [serverListIds]);
 
   const [weights, setWeights] = useState<number[]>(() =>
-    bandWeightsForBoard(board),
+    bandWeightsForBoard(board, workflowOrder),
   );
   const weightsRef = useRef(weights);
   weightsRef.current = weights;
@@ -181,14 +183,14 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   boardRef.current = board;
 
   useEffect(() => {
-    setWeights(bandWeightsForBoard(boardRef.current));
-  }, [board.id, visKey, weightsSyncKey]);
+    setWeights(bandWeightsForBoard(boardRef.current, workflowOrder));
+  }, [board.id, visKey, weightsSyncKey, workflowOrder]);
 
   const flushWeights = useCallback(() => {
     const b = qc.getQueryData<Board>(["boards", board.id]);
     if (!b) return;
     const w = weightsRef.current;
-    const vis = visibleStatusesForBoard(b);
+    const vis = visibleStatusesForBoard(b, workflowOrder);
     if (w.length !== vis.length) return;
     const prev = b.statusBandWeights;
     if (
@@ -198,12 +200,11 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     ) {
       return;
     }
-    updateBoard.mutate({
-      ...b,
-      statusBandWeights: [...w],
-      updatedAt: new Date().toISOString(),
+    patchViewPrefs.mutate({
+      boardId: b.id,
+      patch: { statusBandWeights: [...w] },
     });
-  }, [board.id, qc, updateBoard]);
+  }, [board.id, qc, patchViewPrefs, workflowOrder]);
 
   const adjustAt = useCallback((i: number, deltaY: number) => {
     setWeights((w) => {
@@ -231,15 +232,15 @@ export function BoardColumns({ board }: BoardColumnsProps) {
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     isDraggingRef.current = true;
-    setActiveId(String(event.active.id));
+    setActiveId(Number(event.active.id));
   }, []);
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const { active, over } = event;
       if (over == null) return;
-      const aid = String(active.id);
-      const oid = String(over.id);
+      const aid = Number(active.id);
+      const oid = Number(over.id);
       if (aid === oid) return;
 
       setLocalListIds((prev) => {

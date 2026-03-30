@@ -1,24 +1,28 @@
 import {
   ALL_TASK_GROUPS,
-  TASK_STATUSES,
+  DEFAULT_STATUS_IDS,
   type Board,
   type Task,
-  type TaskStatus,
 } from "../../../shared/models";
 
-/** Statuses shown on the board, in fixed workflow order. */
-export function visibleStatusesForBoard(board: Board): string[] {
-  const vis = board.visibleStatuses.filter((s) =>
-    (TASK_STATUSES as readonly string[]).includes(s),
-  );
+/** Statuses shown on the board, in workflow order (`GET /api/statuses`). */
+export function visibleStatusesForBoard(
+  board: Board,
+  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
+): string[] {
+  const valid = new Set(workflowOrder);
+  const vis = board.visibleStatuses.filter((s) => valid.has(s));
   if (vis.length > 0) {
-    return TASK_STATUSES.filter((s) => vis.includes(s));
+    return workflowOrder.filter((s) => vis.includes(s));
   }
-  return [...TASK_STATUSES];
+  return [...workflowOrder];
 }
 
-export function bandWeightsForBoard(board: Board): number[] {
-  const vis = visibleStatusesForBoard(board);
+export function bandWeightsForBoard(
+  board: Board,
+  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
+): number[] {
+  const vis = visibleStatusesForBoard(board, workflowOrder);
   const stored = board.statusBandWeights;
   if (
     stored &&
@@ -45,8 +49,11 @@ export function weightsAfterVisibilityChange(
   return raw.map((w) => (w / sum) * target);
 }
 
-function statusOrderIndex(status: TaskStatus): number {
-  const i = TASK_STATUSES.indexOf(status);
+function statusOrderIndex(
+  status: string,
+  workflowOrder: readonly string[],
+): number {
+  const i = workflowOrder.indexOf(status);
   return i >= 0 ? i : 0;
 }
 
@@ -56,20 +63,21 @@ function statusOrderIndex(status: TaskStatus): number {
  */
 export function listTasksMergedSorted(
   board: Board,
-  listId: string,
+  listId: number,
   visibleStatuses: string[],
   activeGroup: string,
+  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): Task[] {
   const vis = new Set(visibleStatuses);
   let tasks = board.tasks.filter(
     (t) => t.listId === listId && vis.has(t.status),
   );
   if (activeGroup !== ALL_TASK_GROUPS) {
-    tasks = tasks.filter((t) => t.group === activeGroup);
+    tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
   }
   return [...tasks].sort((a, b) => {
-    const da = statusOrderIndex(a.status);
-    const db = statusOrderIndex(b.status);
+    const da = statusOrderIndex(a.status, workflowOrder);
+    const db = statusOrderIndex(b.status, workflowOrder);
     if (da !== db) return da - db;
     return a.order - b.order;
   });

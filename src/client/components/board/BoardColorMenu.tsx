@@ -7,19 +7,22 @@ import {
   resolvedBoardColor,
 } from "../../../shared/boardColor";
 import type { Board } from "../../../shared/models";
-import { useUpdateBoard } from "@/api/mutations";
+import { usePatchBoardViewPrefs } from "@/api/mutations";
 
 interface BoardColorMenuProps {
   board: Board;
 }
 
 export function BoardColorMenu({ board }: BoardColorMenuProps) {
-  const updateBoard = useUpdateBoard();
+  const patchViewPrefs = usePatchBoardViewPrefs();
   const current = resolvedBoardColor(board);
-  const busy = updateBoard.isPending;
+  const busy = patchViewPrefs.isPending;
 
   const pick = (preset: BoardColorPreset) => {
-    updateBoard.mutate({ ...board, boardColor: preset });
+    patchViewPrefs.mutate({
+      boardId: board.id,
+      patch: { boardColor: preset },
+    });
   };
 
   return (

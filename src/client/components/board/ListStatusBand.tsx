@@ -27,7 +27,9 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
       (t) => t.listId === list.id && t.status === status,
     );
     if (activeGroup !== ALL_TASK_GROUPS) {
-      listTasks = listTasks.filter((t) => t.group === activeGroup);
+      listTasks = listTasks.filter(
+        (t) => String(t.groupId) === activeGroup,
+      );
     }
     return listTasks.sort((a, b) => a.order - b.order);
   }, [board.tasks, list.id, status, activeGroup]);
@@ -53,10 +55,10 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
   const submitCard = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const defaultGroup =
+    const defaultGroupId =
       activeGroup !== ALL_TASK_GROUPS
-        ? activeGroup
-        : board.taskGroups[0]?.id ?? "";
+        ? Number(activeGroup)
+        : board.taskGroups[0]?.id ?? 0;
     createTask.mutate(
       {
         boardId: board.id,
@@ -64,7 +66,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
         status,
         title: trimmed,
         body: "",
-        group: defaultGroup,
+        groupId: defaultGroupId,
       },
       {
         onSuccess: () => {
@@ -98,7 +100,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
             <TaskCard
               key={task.id}
               task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.group)}
+              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
               onOpen={() => setEditingTask(task)}
             />
           ))}

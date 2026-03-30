@@ -32,7 +32,7 @@ interface BoardColumnsStackedProps {
   board: Board;
 }
 
-function sortedListIds(board: Board): string[] {
+function sortedListIds(board: Board): number[] {
   return [...board.lists]
     .sort((a, b) => a.order - b.order)
     .map((l) => l.id);
@@ -53,7 +53,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
   const localListIdsRef = useRef(localListIds);
   localListIdsRef.current = localListIds;
 
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -78,14 +78,14 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     isDraggingRef.current = true;
-    setActiveId(String(event.active.id));
+    setActiveId(Number(event.active.id));
   }, []);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (over == null) return;
-    const aid = String(active.id);
-    const oid = String(over.id);
+    const aid = Number(active.id);
+    const oid = Number(over.id);
     if (aid === oid) return;
 
     setLocalListIds((prev) => {

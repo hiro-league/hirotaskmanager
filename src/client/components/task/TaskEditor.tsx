@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { Board, Task } from "../../../shared/models";
-import {
-  ALL_TASK_GROUPS,
-  coerceTaskStatus,
-  TASK_STATUSES,
-} from "../../../shared/models";
+import { ALL_TASK_GROUPS, coerceTaskStatus } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
 
 interface TaskEditorProps {
@@ -14,7 +11,7 @@ interface TaskEditorProps {
   onClose: () => void;
   mode: "create" | "edit";
   /** Required when mode is create */
-  createContext?: { listId: string; status: string };
+  createContext?: { listId: number; status: string };
   task?: Task | null;
 }
 
@@ -30,10 +27,13 @@ export function TaskEditor({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
+  const { data: statuses } = useStatuses();
+  const workflowOrder = useStatusWorkflowOrder();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
   const [status, setStatus] = useState("");
 
@@ -42,7 +42,7 @@ export function TaskEditor({
     if (mode === "edit" && task) {
       setTitle(task.title);
       setBody(task.body);
-      setGroup(task.group);
+      setGroup(String(task.groupId));
       setStatus(task.status);
     } else if (mode === "create" && createContext) {
       setTitle("");
@@ -50,7 +50,7 @@ export function TaskEditor({
       const defaultGroup =
         activeGroup !== ALL_TASK_GROUPS
           ? activeGroup
-          : board.taskGroups[0]?.id ?? "";
+          : String(board.taskGroups[0]?.id ?? "");
       setGroup(defaultGroup);
       setStatus(createContext.status);
     }
@@ -76,23 +76,28 @@ export function TaskEditor({
     const trimmedTitle = title.trim() || "Untitled";
     const now = new Date().toISOString();
     if (mode === "create" && createContext) {
+      const gid = Number(group) || board.taskGroups[0]?.id || 0;
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
-        status: coerceTaskStatus(status.trim() || createContext.status),
+        status: coerceTaskStatus(
+          status.trim() || createContext.status,
+          workflowOrder,
+        ),
         title: trimmedTitle,
         body,
-        group: group.trim() || board.taskGroups[0]?.id || "",
+        groupId: gid,
       });
     } else if (mode === "edit" && task) {
+      const gid = Number(group) || task.groupId;
       await updateTask.mutateAsync({
         boardId: board.id,
         task: {
           ...task,
           title: trimmedTitle,
           body,
-          group: group.trim() || task.group,
-          status: coerceTaskStatus(status.trim() || task.status),
+          groupId: gid,
+          status: coerceTaskStatus(status.trim() || task.status, workflowOrder),
           updatedAt: now,
         },
       });
@@ -110,6 +115,7 @@ export function TaskEditor({
     createTask,
     updateTask,
     onClose,
+    workflowOrder,
   ]);
 
   const handleDelete = useCallback(async () => {
@@ -177,7 +183,7 @@ export function TaskEditor({
                 onChange={(e) => setGroup(e.target.value)}
               >
                 {board.taskGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
+                  <option key={g.id} value={String(g.id)}>
                     {g.label}
                   </option>
                 ))}
@@ -193,9 +199,9 @@ export function TaskEditor({
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
-                {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {workflowOrder.map((sid: string) => (
+                  <option key={sid} value={sid}>
+                    {statuses?.find((st) => st.id === sid)?.label ?? sid}
                   </option>
                 ))}
               </select>

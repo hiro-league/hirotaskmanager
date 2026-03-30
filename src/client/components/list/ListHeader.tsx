@@ -17,7 +17,7 @@ import type { List } from "../../../shared/models";
 const TAP_MOVE_THRESHOLD_SQ = 8 * 8;
 
 interface ListHeaderProps {
-  boardId: string;
+  boardId: number;
   list: List;
   /** When set, the title strip is the list drag handle (board columns). */
   dragAttributes?: DraggableAttributes;

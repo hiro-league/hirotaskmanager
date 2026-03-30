@@ -17,7 +17,7 @@ function statusAriaLabel(status: TaskStatus): string {
     case "closed":
       return "Closed";
     default:
-      return "Status";
+      return status || "Status";
   }
 }
 
@@ -48,13 +48,21 @@ function TaskStatusIndicator({ status }: { status: TaskStatus }) {
           <Check className="size-2.5 stroke-[3]" aria-hidden />
         </span>
       ) : null}
+      {status !== "open" &&
+      status !== "in-progress" &&
+      status !== "closed" ? (
+        <span
+          className="size-3.5 rounded-full bg-muted-foreground/35"
+          title={label}
+        />
+      ) : null}
     </span>
   );
 }
 
 interface TaskCardProps {
   task: Task;
-  /** Display label for `task.group` (resolved from board definitions). */
+  /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
   onOpen: () => void;
 }

@@ -20,6 +20,7 @@ import {
   type Task,
 } from "../../../shared/models";
 import { useCreateTask } from "@/api/mutations";
+import { useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { ListHeader } from "@/components/list/ListHeader";
@@ -33,8 +34,9 @@ import {
 interface ListStackedBodyProps {
   board: Board;
   list: List;
-  listId: string;
+  listId: number;
   visibleStatuses: string[];
+  workflowOrder: readonly string[];
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
 }
@@ -44,6 +46,7 @@ function ListStackedBody({
   list,
   listId,
   visibleStatuses,
+  workflowOrder,
   dragAttributes,
   dragListeners,
 }: ListStackedBodyProps) {
@@ -52,8 +55,14 @@ function ListStackedBody({
 
   const tasks = useMemo(
     () =>
-      listTasksMergedSorted(board, listId, visibleStatuses, activeGroup),
-    [board, listId, visibleStatuses, activeGroup],
+      listTasksMergedSorted(
+        board,
+        listId,
+        visibleStatuses,
+        activeGroup,
+        workflowOrder,
+      ),
+    [board, listId, visibleStatuses, activeGroup, workflowOrder],
   );
 
   const [adding, setAdding] = useState(false);
@@ -77,18 +86,18 @@ function ListStackedBody({
   const submitTask = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const defaultGroup =
+    const defaultGroupId =
       activeGroup !== ALL_TASK_GROUPS
-        ? activeGroup
-        : board.taskGroups[0]?.id ?? "";
+        ? Number(activeGroup)
+        : board.taskGroups[0]?.id ?? 0;
     createTask.mutate(
       {
         boardId: board.id,
         listId: list.id,
-        status: "open",
+        status: quickAddStatus,
         title: trimmed,
         body: "",
-        group: defaultGroup,
+        groupId: defaultGroupId,
       },
       {
         onSuccess: () => {
@@ -114,7 +123,9 @@ function ListStackedBody({
     }, 0);
   };
 
-  const canAddOpen = visibleStatuses.includes("open");
+  const quickAddStatus =
+    workflowOrder.includes("open") ? "open" : (workflowOrder[0] ?? "open");
+  const canAddOpen = visibleStatuses.includes(quickAddStatus);
 
   return (
     <>
@@ -138,7 +149,7 @@ function ListStackedBody({
             <TaskCard
               key={task.id}
               task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.group)}
+              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
               onOpen={() => setEditingTask(task)}
             />
           ))}
@@ -216,7 +227,7 @@ function ListStackedBody({
 
 export interface BoardListStackedColumnOverlayProps {
   board: Board;
-  listId: string;
+  listId: number;
 }
 
 /** Drag overlay clone for stacked list columns. */
@@ -224,9 +235,10 @@ export function BoardListStackedColumnOverlay({
   board,
   listId,
 }: BoardListStackedColumnOverlayProps) {
+  const workflowOrder = useStatusWorkflowOrder();
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
-  const visibleStatuses = visibleStatusesForBoard(board);
+  const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
   return (
     <div className="pointer-events-none w-72 shrink-0 cursor-grabbing overflow-hidden rounded-lg border border-border bg-list-column opacity-90 shadow-xl ring-2 ring-primary/25">
       <ListStackedBody
@@ -234,6 +246,7 @@ export function BoardListStackedColumnOverlay({
         list={list}
         listId={listId}
         visibleStatuses={visibleStatuses}
+        workflowOrder={workflowOrder}
       />
     </div>
   );
@@ -241,19 +254,17 @@ export function BoardListStackedColumnOverlay({
 
 interface BoardListStackedColumnProps {
   board: Board;
-  listId: string;
+  listId: number;
 }
 
 export function BoardListStackedColumn({
   board,
   listId,
 }: BoardListStackedColumnProps) {
-  const list = board.lists.find((l) => l.id === listId);
-  if (!list) return null;
-
+  const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
-    () => visibleStatusesForBoard(board),
-    [board],
+    () => visibleStatusesForBoard(board, workflowOrder),
+    [board, workflowOrder],
   );
 
   const {
@@ -263,7 +274,10 @@ export function BoardListStackedColumn({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: list.id });
+  } = useSortable({ id: listId });
+
+  const list = board.lists.find((l) => l.id === listId);
+  if (!list) return null;
 
   const style: CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -292,6 +306,7 @@ export function BoardListStackedColumn({
             list={list}
             listId={listId}
             visibleStatuses={visibleStatuses}
+            workflowOrder={workflowOrder}
             dragAttributes={attributes}
             dragListeners={listeners}
           />

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 interface ListColumnBodyProps {
   board: Board;
   list: List;
-  listId: string;
+  listId: number;
   visibleStatuses: string[];
   weights: number[];
   dragAttributes?: DraggableAttributes;
@@ -65,7 +65,7 @@ function ListColumnBody({
 
 export interface BoardListColumnOverlayProps {
   board: Board;
-  listId: string;
+  listId: number;
   visibleStatuses: string[];
   weights: number[];
 }
@@ -94,7 +94,7 @@ export function BoardListColumnOverlay({
 
 interface BoardListColumnProps {
   board: Board;
-  listId: string;
+  listId: number;
   visibleStatuses: string[];
   weights: number[];
 }
@@ -105,9 +105,6 @@ export function BoardListColumn({
   visibleStatuses,
   weights,
 }: BoardListColumnProps) {
-  const list = board.lists.find((l) => l.id === listId);
-  if (!list) return null;
-
   const {
     attributes,
     listeners,
@@ -115,7 +112,10 @@ export function BoardListColumn({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: list.id });
+  } = useSortable({ id: listId });
+
+  const list = board.lists.find((l) => l.id === listId);
+  if (!list) return null;
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),

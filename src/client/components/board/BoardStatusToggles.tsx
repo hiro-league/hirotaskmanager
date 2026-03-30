@@ -1,5 +1,7 @@
-import { useUpdateBoard } from "@/api/mutations";
-import { TASK_STATUSES, type Board } from "../../../shared/models";
+import type { PointerEvent } from "react";
+import { usePatchBoardViewPrefs } from "@/api/mutations";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
+import type { Board } from "../../../shared/models";
 import { cn } from "@/lib/utils";
 import {
   bandWeightsForBoard,
@@ -12,19 +14,21 @@ interface BoardStatusTogglesProps {
 }
 
 export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
-  const updateBoard = useUpdateBoard();
+  const patchViewPrefs = usePatchBoardViewPrefs();
+  const { data: statuses } = useStatuses();
+  const workflowOrder = useStatusWorkflowOrder();
 
   const toggle = (status: string) => {
-    const current = visibleStatusesForBoard(board);
+    const current = visibleStatusesForBoard(board, workflowOrder);
     const isOn = current.includes(status);
-    const prevWeights = bandWeightsForBoard(board);
+    const prevWeights = bandWeightsForBoard(board, workflowOrder);
 
     let nextVis: string[];
     if (isOn) {
       if (current.length <= 1) return;
       nextVis = current.filter((s) => s !== status);
     } else {
-      nextVis = TASK_STATUSES.filter(
+      nextVis = workflowOrder.filter(
         (s) => current.includes(s) || s === status,
       );
     }
@@ -35,12 +39,17 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       nextVis,
     );
 
-    updateBoard.mutate({
-      ...board,
-      visibleStatuses: nextVis,
-      statusBandWeights: nextWeights,
-      updatedAt: new Date().toISOString(),
+    patchViewPrefs.mutate({
+      boardId: board.id,
+      patch: {
+        visibleStatuses: nextVis,
+        statusBandWeights: nextWeights,
+      },
     });
+  };
+
+  const stopPan = (e: PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
   };
 
   return (
@@ -50,11 +59,15 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       aria-label="Show or hide task statuses"
     >
       <span className="text-xs font-medium text-muted-foreground">Statuses</span>
-      {TASK_STATUSES.map((status) => {
-        const active = visibleStatusesForBoard(board).includes(status);
+      {workflowOrder.map((statusId) => {
+        const active = visibleStatusesForBoard(board, workflowOrder).includes(
+          statusId,
+        );
+        const label =
+          statuses?.find((s) => s.id === statusId)?.label ?? statusId;
         return (
           <button
-            key={status}
+            key={statusId}
             type="button"
             className={cn(
               "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
@@ -63,9 +76,10 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
                 : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
             )}
             aria-pressed={active}
-            onClick={() => toggle(status)}
+            onPointerDown={stopPan}
+            onClick={() => toggle(statusId)}
           >
-            {status}
+            {label}
           </button>
         );
       })}

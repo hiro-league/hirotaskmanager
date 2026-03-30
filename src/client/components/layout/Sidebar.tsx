@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { LayoutGrid, Plus, Trash2, X } from "lucide-react";
-import { fetchBoard, useBoards } from "@/api/queries";
+import { useBoards } from "@/api/queries";
 import {
   useCreateBoard,
   useDeleteBoard,
-  useUpdateBoard,
+  usePatchBoardName,
 } from "@/api/mutations";
 import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
@@ -30,10 +30,10 @@ export function Sidebar() {
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
   const selectedBoardId = boardMatch?.params.boardId ?? null;
   const createBoard = useCreateBoard();
-  const updateBoard = useUpdateBoard();
+  const patchBoardName = usePatchBoardName();
   const deleteBoard = useDeleteBoard();
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null); // String(board.id)
   const [editValue, setEditValue] = useState("");
   const [addingBoard, setAddingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
@@ -43,8 +43,8 @@ export function Sidebar() {
     setNewBoardName("");
   }, [sidebarCollapsed]);
 
-  const startRename = useCallback((id: string, name: string) => {
-    setEditingId(id);
+  const startRename = useCallback((id: number, name: string) => {
+    setEditingId(String(id));
     setEditValue(name);
   }, []);
 
@@ -59,18 +59,20 @@ export function Sidebar() {
     const trimmed = editValue.trim();
     cancelRename();
     if (!trimmed) return;
-    const row = boards.find((b) => b.id === id);
+    const row = boards.find((b) => String(b.id) === id);
     if (!row || row.name === trimmed) return;
     try {
-      const board = await fetchBoard(id);
-      await updateBoard.mutateAsync({ ...board, name: trimmed });
+      await patchBoardName.mutateAsync({
+        boardId: Number(id),
+        name: trimmed,
+      });
     } catch {
       /* toast in a later phase */
     }
-  }, [boards, cancelRename, editValue, editingId, updateBoard]);
+  }, [boards, cancelRename, editValue, editingId, patchBoardName]);
 
   const handleDelete = useCallback(
-    (id: string, name: string) => {
+    (id: number, name: string) => {
       if (!window.confirm(`Delete board “${name}”? This cannot be undone.`)) {
         return;
       }
@@ -125,7 +127,7 @@ export function Sidebar() {
           {!isLoading &&
             !isError &&
             boards.map((b) => {
-              const active = b.id === selectedBoardId;
+              const active = String(b.id) === selectedBoardId;
               const label = boardCollapsedLabel(b.name);
               return (
                 <button
@@ -140,7 +142,7 @@ export function Sidebar() {
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
-                  onClick={() => navigate(boardPath(b.id))}
+                  onClick={() => navigate(boardPath(String(b.id)))}
                 >
                   {label}
                 </button>
@@ -174,8 +176,8 @@ export function Sidebar() {
         )}
         <ul className="space-y-0.5">
           {boards.map((b) => {
-            const active = b.id === selectedBoardId;
-            const editing = b.id === editingId;
+            const active = String(b.id) === selectedBoardId;
+            const editing = String(b.id) === editingId;
             return (
               <li key={b.id}>
                 <div
@@ -207,7 +209,7 @@ export function Sidebar() {
                         "min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm",
                         !active && "hover:bg-sidebar-accent/50",
                       )}
-                      onClick={() => navigate(boardPath(b.id))}
+                      onClick={() => navigate(boardPath(String(b.id)))}
                       onDoubleClick={() => startRename(b.id, b.name)}
                     >
                       {b.name}

@@ -1,11 +1,20 @@
 import path from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { getDb, runMigrations } from "./db";
+import { importFromJsonIfNeeded } from "./import";
 import { boardsRoute } from "./routes/boards";
-import { ensureDataDirs, migrateToSlugs } from "./storage";
+import { statusesRoute } from "./routes/statuses";
+import { ensureDataDir } from "./storage";
 
-await ensureDataDirs();
-await migrateToSlugs();
+/**
+ * Startup sequence (docs/sqlite_migration §5d):
+ * ensure data dir → open/create SQLite → apply migrations → import legacy JSON if DB empty.
+ */
+await ensureDataDir();
+getDb();
+runMigrations();
+await importFromJsonIfNeeded();
 
 const isProd = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT) || 3001;
@@ -13,6 +22,7 @@ const port = Number(process.env.PORT) || 3001;
 const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+app.route("/api/statuses", statusesRoute);
 app.route("/api/boards", boardsRoute);
 
 if (isProd) {

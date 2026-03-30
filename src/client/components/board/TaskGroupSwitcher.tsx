@@ -10,13 +10,13 @@ interface TaskGroupSwitcherProps {
 export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
   const setActive = usePreferencesStore((s) => s.setActiveTaskGroupForBoard);
   const raw = usePreferencesStore(
-    (s) => s.activeTaskGroupByBoardId[board.id],
+    (s) => s.activeTaskGroupByBoardId[String(board.id)],
   );
 
   const resolved =
     raw === ALL_TASK_GROUPS
       ? ALL_TASK_GROUPS
-      : raw && board.taskGroups.some((g) => g.id === raw)
+      : raw && board.taskGroups.some((g) => String(g.id) === raw)
         ? raw
         : ALL_TASK_GROUPS;
 
@@ -45,7 +45,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
         All groups
       </button>
       {board.taskGroups.map((g) => {
-        const active = resolved === g.id;
+        const active = resolved === String(g.id);
         return (
           <button
             key={g.id}
@@ -57,7 +57,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
                 : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
             )}
             aria-pressed={active}
-            onClick={() => pick(g.id)}
+            onClick={() => pick(String(g.id))}
           >
             {g.label}
           </button>

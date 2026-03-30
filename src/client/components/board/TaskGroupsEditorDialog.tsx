@@ -5,7 +5,7 @@ import {
   type Board,
   type GroupDefinition,
 } from "../../../shared/models";
-import { useUpdateBoard } from "@/api/mutations";
+import { usePatchBoardTaskGroups } from "@/api/mutations";
 
 interface TaskGroupsEditorDialogProps {
   board: Board;
@@ -19,7 +19,7 @@ export function TaskGroupsEditorDialog({
   onClose,
 }: TaskGroupsEditorDialogProps) {
   const titleId = useId();
-  const updateBoard = useUpdateBoard();
+  const patchGroups = usePatchBoardTaskGroups();
   const [rows, setRows] = useState<GroupDefinition[]>([]);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function TaskGroupsEditorDialog({
     setRows(
       board.taskGroups.length > 0
         ? board.taskGroups.map((g) => ({ ...g }))
-        : [{ id: "0", label: "" }],
+        : [{ id: 0, label: "" }],
     );
   }, [open, board.taskGroups]);
 
@@ -40,7 +40,7 @@ export function TaskGroupsEditorDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const { nextGroups, removedIds, remapCount } = useMemo(() => {
+  const { nextGroups, remapCount } = useMemo(() => {
     const trimmed = rows
       .map((r) => ({ id: r.id, label: r.label.trim() }))
       .filter((r) => r.label.length > 0);
@@ -48,38 +48,22 @@ export function TaskGroupsEditorDialog({
     const removed = board.taskGroups
       .filter((g) => !nextIds.has(g.id))
       .map((g) => g.id);
-    const count = board.tasks.filter((t) => removed.includes(t.group))
+    const count = board.tasks.filter((t) => removed.includes(t.groupId))
       .length;
     return {
       nextGroups: trimmed,
-      removedIds: removed,
       remapCount: count,
     };
   }, [rows, board.taskGroups, board.tasks]);
 
   if (!open) return null;
 
-  const busy = updateBoard.isPending;
+  const busy = patchGroups.isPending;
 
   const save = () => {
     if (nextGroups.length === 0) return;
-    const now = new Date().toISOString();
-    const firstId = nextGroups[0]!.id;
-    const tasks =
-      removedIds.length === 0
-        ? board.tasks
-        : board.tasks.map((t) =>
-            removedIds.includes(t.group)
-              ? { ...t, group: firstId, updatedAt: now }
-              : t,
-          );
-    updateBoard.mutate(
-      {
-        ...board,
-        taskGroups: nextGroups,
-        tasks,
-        updatedAt: now,
-      },
+    patchGroups.mutate(
+      { boardId: board.id, taskGroups: nextGroups },
       { onSuccess: () => onClose() },
     );
   };

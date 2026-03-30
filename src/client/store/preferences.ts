@@ -80,7 +80,7 @@ interface PreferencesState {
   setBoardFilterStripCollapsed: (v: boolean) => void;
   toggleBoardFilterStripCollapsed: () => void;
   activeTaskGroupByBoardId: Record<string, string>;
-  setActiveTaskGroupForBoard: (boardId: string, group: string) => void;
+  setActiveTaskGroupForBoard: (boardId: string | number, group: string) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -104,7 +104,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         set((s) => ({
           activeTaskGroupByBoardId: {
             ...s.activeTaskGroupByBoardId,
-            [boardId]: group,
+            [String(boardId)]: group,
           },
         })),
     }),
@@ -122,15 +122,16 @@ export const usePreferencesStore = create<PreferencesState>()(
 
 /** Subscribe to prefs and validate against current `taskGroups` ids. */
 export function useResolvedActiveTaskGroup(
-  boardId: string,
+  boardId: string | number,
   taskGroups: GroupDefinition[],
 ): string {
+  const key = String(boardId);
   const raw = usePreferencesStore(
-    (s) => s.activeTaskGroupByBoardId[boardId],
+    (s) => s.activeTaskGroupByBoardId[key],
   );
   return useMemo(() => {
     if (raw === ALL_TASK_GROUPS) return ALL_TASK_GROUPS;
-    if (raw && taskGroups.some((g) => g.id === raw)) return raw;
+    if (raw && taskGroups.some((g) => String(g.id) === raw)) return raw;
     return ALL_TASK_GROUPS;
-  }, [raw, boardId, taskGroups]);
+  }, [raw, key, taskGroups]);
 }

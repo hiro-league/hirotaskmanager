@@ -6,15 +6,15 @@ Reference for future development. Update this file when architecture or scope ch
 
 1. **Development runtime** — ~~CLOSED.~~ `npm run dev` runs two processes via `concurrently` (Bun API on fixed port **3001** + Vite dev server). Vite's built-in `server.proxy` forwards `/api` requests to `http://localhost:3001`. No port scanning, no `.dev/api-port` file, no custom proxy plugin.
 
-2. **Production serving** — ~~CLOSED.~~ `npm run build && npm start` runs a single Bun process. Hono serves API routes **and** the Vite-built SPA from `dist/` via `serveStatic` + an `index.html` fallback for client-side routing. Default port is **3001** (override with `PORT` env var). Data is stored at `~/.taskmanager/data` in production (override with `DATA_DIR` env var); in development it defaults to `./data` in the repo root.
+2. **Production serving** — ~~CLOSED.~~ `npm run build && npm start` runs a single Bun process. Hono serves API routes **and** the Vite-built SPA from `dist/` via `serveStatic` + an `index.html` fallback for client-side routing. Default port is **3001** (override with `PORT` env var). Persistent state lives in **`taskmanager.db`** (SQLite via `bun:sqlite`) under `~/.taskmanager/data` in production (override with `DATA_DIR`); in development it defaults to **`./data`** in the repo root.
 
-## Early development (on-disk data)
+## Early development (data & migrations)
 
 Until the app is explicitly versioned or released for external users:
 
-- **No backward-compatibility promise** for JSON under `data/` or for API payloads. Breaking changes are allowed; it is acceptable to **delete all board files** and reset **`data/_index.json`** to `[]` when the schema changes.
-- **Prefer readable, simple files:** task group ids use **numeric strings** (`"0"`, `"1"`, `"2"`, …) for defaults and for new rows added in the UI (next free integer). Workflow statuses remain the fixed three strings (`open`, `in-progress`, `closed`).
-- **`normalizeBoardFromJson`** applies only **light coercion** (unknown task `group` → first group id, invalid `status` → `open`). It is **not** a multi-version migration layer; do not add elaborate legacy branches while still in early development.
+- **No backward-compatibility promise** for the SQLite schema or API payloads. Breaking changes are allowed; during development it is acceptable to **delete `data/taskmanager.db`** and re-run migrations (and optional one-time JSON import) — see **`docs/sqlite_migration.md`**.
+- **Primary store:** SQLite (`board`, `list`, `task`, `task_group`, `status`, `board_view_prefs`). **Integer primary keys** for boards, lists, tasks, and task groups. Workflow **status** ids are strings (`open`, `in-progress`, …) from the seeded **`status`** table; the client loads labels and order via **`GET /api/statuses`**.
+- **Legacy JSON:** A startup import can migrate from `data/_index.json` + `data/boards/*.json` once when the DB is empty; sources are then archived (e.g. `boards_imported/`). **`normalizeBoardFromJson`** still applies **light coercion** for API/PUT payloads (unknown `groupId` → first group, invalid `status` → coerced). It is **not** a full migration framework.
 
 ## Investigation (open decisions / partial implementation)
 
@@ -36,7 +36,7 @@ Planned or described in earlier specs but **absent or incomplete** in the codeba
 
 ## Scope
 
-Browser-based, **local-only** task board: JSON on disk for human/AI readability, **list columns** (each list is a column) with **stacked status bands** inside each column. Workflow **status** is one of three fixed values (`open`, `in-progress`, `closed`). Each task has a **`group`** id referencing the board’s **`taskGroups`** entries; the list view can filter by one group or show all (filter selection is client-persisted, not in board JSON).
+Browser-based, **local-only** task board: SQLite persistence with **list columns** (each list is a column) and **stacked status bands** inside each column. Workflow **status** is a string id (seeded defaults include `open`, `in-progress`, `closed`; more can be added via migrations). Each task has a **`groupId`** (integer FK) referencing the board’s **`taskGroups`**; the list view can filter by one group or show all (filter selection is client-persisted, not in the DB row beyond the task’s `group_id`).
 
 ## Tech Stack
 
@@ -52,7 +52,7 @@ Browser-based, **local-only** task board: JSON on disk for human/AI readability,
 | Server / remote state | TanStack Query v5 (caching, optimistic updates) |
 | Drag & drop | @dnd-kit — patterns in [`docs/drag_drop.md`](drag_drop.md) |
 | Markdown | `@uiw/react-md-editor` (edit), `react-markdown` (preview) |
-| IDs | nanoid for entity ids (boards, lists, tasks); **task group ids** are numeric strings (`"0"` …) for readability |
+| IDs | **Integer** auto-increment PKs for boards, lists, tasks, task groups; optimistic UI uses **temporary negative** numbers until the server responds. **`status.id`** remains string (human-readable ids in the `status` table) |
 
 ## High-Level Architecture
 
@@ -69,17 +69,17 @@ graph LR
   subgraph server [Bun Process]
     Hono["Hono Server"]
     Storage["storage.ts"]
+    DBLayer["db.ts + migrations"]
     Hono --> Storage
+    Storage --> DBLayer
   end
 
   subgraph disk [Disk]
-    Index["data/_index.json"]
-    Boards["data/boards/*.json"]
+    DB["data/taskmanager.db (SQLite)"]
   end
 
   TQ -->|"fetch /api/*"| Hono
-  Storage -->|"read/write JSON"| Boards
-  Storage -->|"read/write index"| Index
+  DBLayer --> DB
 ```
 
 **Process model (dev):** `npm run dev` runs two processes via `concurrently` — Bun API on port 3001 and Vite dev server. Vite's built-in `server.proxy` forwards `/api` to the API.
@@ -88,7 +88,7 @@ graph LR
 
 **Data directory:** Configurable via `DATA_DIR` env var. Defaults to `./data` in development, `~/.taskmanager/data` in production.
 
-**Server role:** Thin file I/O layer — no heavy business logic in routes; persistence and atomic writes live in storage.
+**Server role:** Thin API layer — routes delegate to **`storage.ts`** (SQLite queries + transactions). No heavy domain logic in route handlers.
 
 ## Client routing
 
@@ -105,30 +105,34 @@ Guidelines for future features (bookmarking, deep links, navigation after mutati
 All shared types belong in `src/shared/models.ts` and are used by both server and client.
 
 ```typescript
-/** Row in `data/_index.json` — lightweight board list for the sidebar. */
+/** Row from `GET /api/boards` — lightweight board list for the sidebar. */
 interface BoardIndexEntry {
-  id: string;
+  id: number;
   slug: string;
   name: string;
   createdAt: string;
 }
 
-/** Workflow statuses are fixed app-wide (`open`, `in-progress`, `closed`); not per-board. */
-const TASK_STATUSES = ["open", "in-progress", "closed"] as const;
+/** From `GET /api/statuses` — workflow definitions (seeded in DB, extended via migrations). */
+interface Status {
+  id: string;
+  label: string;
+  sortOrder: number;
+  isClosed: boolean;
+}
 
 interface GroupDefinition {
-  id: string;
+  id: number;
   label: string;
 }
 
 interface Board {
-  id: string;
+  id: number;
+  slug?: string;
   name: string;
   backgroundImage?: string;
-  /** User-defined groups (stable id + editable label). */
   taskGroups: GroupDefinition[];
   visibleStatuses: string[];
-  /** Flex weights for each visible status band (same length / order as rendered visible statuses). */
   statusBandWeights?: number[];
   showCounts: boolean;
   lists: List[];
@@ -138,19 +142,19 @@ interface Board {
 }
 
 interface List {
-  id: string;
+  id: number;
   name: string;
   order: number;
   color?: string;
 }
 
 interface Task {
-  id: string;
-  listId: string;
+  id: number;
+  listId: number;
   title: string;
   body: string;                  // Markdown
-  group: string;                 // Task group id (from board.taskGroups[].id)
-  status: (typeof TASK_STATUSES)[number];
+  groupId: number;               // FK → task_group.id
+  status: string;                // status.id (e.g. open, in-progress, closed)
   order: number;                 // Within (list, status) band
   color?: string;
   createdAt: string;
@@ -158,21 +162,21 @@ interface Task {
 }
 ```
 
-**Guideline:** Tasks are stored **flat** (sibling to `lists`) with `listId`. **`normalizeBoardFromJson`** coerces invalid `status` and unknown `group` to safe values (see [Early development](#early-development-on-disk-data)). Filtering by group/status uses a simple `.filter()` without deep nesting. Optional **tags** for finer labels (e.g. “in testing”) are a possible future addition; they are not the same as workflow status.
+**Guideline:** The API still returns a **single assembled `Board`** document (lists + tasks + view prefs) for convenience. **`normalizeBoardFromJson`** coerces invalid `status` and unknown `groupId` when parsing PUT/GET payloads. Filtering by group/status uses a simple `.filter()` without deep nesting. Optional **tags** for finer labels are a possible future addition; they are not the same as workflow status.
 
-## On-Disk Storage
+## Persistence (SQLite)
 
 ```
 data/
-  _index.json              # BoardIndexEntry[] — board catalog
-  boards/
-    {board-id}.json        # Full board document (lists + tasks)
+  taskmanager.db           # SQLite — boards, lists, tasks, groups, statuses, view prefs
+  _index.json              # Optional: present only before/during one-time JSON import
+  boards/                  # Optional: legacy JSON sources for import
+  boards_imported/         # Archived JSON after successful import (if used)
 ```
 
-- One JSON file per board so tools (and people) can open a single file and see the whole board.
-- `_index.json` is the lightweight index for listing boards.
-- Storage code should use **atomic writes** (e.g. write temp file then rename) in `src/server/storage.ts`.
-- Data directory is resolved by `storage.ts`: `DATA_DIR` env var > `./data` (dev) > `~/.taskmanager/data` (production).
+- **`src/server/db.ts`** opens the DB file and enables foreign keys; **`src/server/migrations/`** applies schema versions.
+- **`src/server/import.ts`** runs **once** when `board` is empty and catalog JSON exists (see **`docs/sqlite_migration.md`**).
+- Data directory: `DATA_DIR` env var, else `./data` (dev) or `~/.taskmanager/data` (production).
 
 ## API Routes
 
@@ -181,11 +185,23 @@ Implemented today: list/create/read/update/delete boards. **Export is not implem
 | Method | Endpoint | Action |
 | ------ | -------- | ------ |
 | GET | `/api/health` | Liveness check |
-| GET | `/api/boards` | List boards from `_index.json` |
-| POST | `/api/boards` | Create board, write new file, update index |
-| GET | `/api/boards/:id` | Read board JSON |
-| PUT | `/api/boards/:id` | Overwrite board JSON |
-| DELETE | `/api/boards/:id` | Remove board file and index entry |
+| GET | `/api/statuses` | List workflow statuses (`status` table) |
+| GET | `/api/boards` | List boards (`SELECT` from `board`) |
+| POST | `/api/boards` | Create board + default groups + view prefs |
+| GET | `/api/boards/:id` | Assembled board (numeric id or slug) |
+| PATCH | `/api/boards/:id` | Update board name (and slug) |
+| PATCH | `/api/boards/:id/view-prefs` | Update board view prefs only |
+| PATCH | `/api/boards/:id/groups` | Update task group definitions |
+| POST | `/api/boards/:id/lists` | Create list |
+| PATCH | `/api/boards/:id/lists/:listId` | Update list |
+| DELETE | `/api/boards/:id/lists/:listId` | Delete list |
+| PUT | `/api/boards/:id/lists/order` | Reorder lists |
+| POST | `/api/boards/:id/tasks` | Create task |
+| PATCH | `/api/boards/:id/tasks/:taskId` | Update task |
+| DELETE | `/api/boards/:id/tasks/:taskId` | Delete task |
+| PUT | `/api/boards/:id/tasks/reorder` | Reorder tasks within a list+status band |
+| PUT | `/api/boards/:id` | Monolithic update (optional; granular routes preferred) |
+| DELETE | `/api/boards/:id` | Delete board row (cascades) |
 
 Implement routes under `src/server/routes/`; keep I/O in `storage.ts`.
 
@@ -193,7 +209,7 @@ Implement routes under `src/server/routes/`; keep I/O in `storage.ts`.
 
 **Layout:** The board is **list columns all the way** — a horizontal sequence of list columns. Each column has a **header** and a **vertical stack of status bands** (one band per visible status). Band heights use **`statusBandWeights`** (flex) with splitters as needed. A **status label column** aligns with those bands across lists. Tasks appear inside the band that matches `(listId, status)`, then optionally by **task group** depending on the client filter.
 
-**Data selection (conceptual):** Let `activeGroup` be the persisted preference (`ALL_TASK_GROUPS` or a string in `board.taskGroups`). For each list column, for each visible status:
+**Data selection (conceptual):** Let `activeGroup` be the persisted preference (`ALL_TASK_GROUPS` or a **string** form of `task_group.id`). For each list column, for each visible status:
 
 ```typescript
 board.lists.map((list) =>
@@ -201,7 +217,8 @@ board.lists.map((list) =>
     tasks
       .filter((t) => {
         const groupOk =
-          activeGroup === ALL_TASK_GROUPS || t.group === activeGroup;
+          activeGroup === ALL_TASK_GROUPS ||
+          String(t.groupId) === activeGroup;
         return (
           groupOk && t.listId === list.id && t.status === status
         );
@@ -230,14 +247,18 @@ taskmanager/
       models.ts
     server/
       index.ts
+      db.ts
+      import.ts
+      migrations/
       routes/
         boards.ts
+        statuses.ts
       storage.ts
     client/
       main.tsx
       App.tsx
       api/
-        queries.ts              # useBoards, useBoard, fetch helpers
+        queries.ts              # useBoards, useBoard, useStatuses, fetch helpers
         mutations.ts
       store/
         preferences.ts          # theme, sidebar, task group filter per board, filter strip collapsed
@@ -253,10 +274,11 @@ taskmanager/
         utils.ts
         boardPath.ts            # board URL helpers + last-board localStorage key (shared with routing)
         appNavigate.ts          # imperative navigate for mutations (registered from the router)
-  data/                         # runtime (dev default; see On-Disk Storage)
-    _index.json
-    boards/
+  data/                         # runtime (dev default; see Persistence)
+    taskmanager.db
 ```
+
+See **`docs/sqlite_migration.md`** for schema, import, and Phase 2 API plans.
 
 ## shadcn/ui primitives (`components/ui/`)
 

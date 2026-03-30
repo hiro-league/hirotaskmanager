@@ -15,7 +15,8 @@ export function HomeRedirect() {
     if (isLoading || isError) return;
     if (!boards?.length) return;
     const last = localStorage.getItem(LAST_BOARD_STORAGE_KEY);
-    const pick = boards.find((b) => b.id === last) ?? boards[0];
+    const pick =
+      boards.find((b) => String(b.id) === last) ?? boards[0];
     navigate(boardPath(pick.id), { replace: true });
   }, [isLoading, isError, boards, navigate]);
 

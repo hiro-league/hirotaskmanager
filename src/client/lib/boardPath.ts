@@ -1,8 +1,8 @@
 /** Persisted hint for `/` → which board to open first. */
 export const LAST_BOARD_STORAGE_KEY = "taskmanager:lastBoardId";
 
-export function boardPath(boardId: string): string {
-  return `/board/${encodeURIComponent(boardId)}`;
+export function boardPath(boardId: string | number): string {
+  return `/board/${encodeURIComponent(String(boardId))}`;
 }
 
 /** Current board id when the URL is `/board/:id` (SPA). */

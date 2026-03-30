@@ -1,196 +1,252 @@
 {
   "id": "EwGgsCx7v0rb3efWDKodd",
   "name": "Hiro Tasks Board",
-  "boardColor": "cyan",
+  "boardColor": "violet",
   "taskGroups": [
     {
       "id": "0",
-      "label": "feature"
+      "label": "Feature"
     },
     {
       "id": "1",
-      "label": "bug"
+      "label": "Bug"
     },
     {
       "id": "2",
-      "label": "enhancement"
+      "label": "Enhancement"
     },
     {
       "id": "3",
-      "label": "design"
+      "label": "Architecture"
+    },
+    {
+      "id": "4",
+      "label": "UI/UX"
+    },
+    {
+      "id": "5",
+      "label": "Doc"
     }
   ],
   "visibleStatuses": [
-    "open",
-    "closed"
+    "open"
   ],
   "statusBandWeights": [
-    0.8727272949218771,
-    1.1272727050781277
+    1
   ],
-  "boardLayout": "lanes",
+  "boardLayout": "stacked",
   "showCounts": true,
   "lists": [
     {
-      "id": "pvxXXspUR4XQ8kU_7y1uU",
-      "name": "Two",
+      "id": "izk5PufnmBBuyY1-MsIyy",
+      "name": "General Ideas",
       "order": 0
     },
     {
-      "id": "h55uNHY7aCMcIzMbYEisg",
-      "name": "thre",
+      "id": "5YEYVqF-HJeXKTcpLiY7f",
+      "name": "Boards",
       "order": 1
     },
     {
-      "id": "poxq5uG_GYbADmU2mOes8",
-      "name": "one",
+      "id": "h55uNHY7aCMcIzMbYEisg",
+      "name": "Tasks",
       "order": 2
     },
     {
-      "id": "aw1IjFgEq70tFKgHarOyU",
-      "name": "Fine",
+      "id": "VWPDK_s0-rZh6JMPF2xIq",
+      "name": "Lists",
       "order": 3
-    },
-    {
-      "id": "qQpHvWwPMvNR2N10C_D-v",
-      "name": "six",
-      "order": 4
     }
   ],
   "tasks": [
     {
-      "id": "tztHJmNicM9FB5UTnRhNY",
-      "listId": "poxq5uG_GYbADmU2mOes8",
-      "title": "hi",
+      "id": "8FT_mSaq2SjdHN_4XAOnl",
+      "listId": "h55uNHY7aCMcIzMbYEisg",
+      "title": "Drag&Drop Tasks Anywhere",
       "body": "",
       "group": "0",
-      "status": "closed",
-      "order": 0,
-      "createdAt": "2026-03-29T22:25:29.167Z",
-      "updatedAt": "2026-03-30T01:38:36.989Z"
-    },
-    {
-      "id": "O819oFSFZnJc0bJbbqw3F",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "my task",
-      "body": "",
-      "group": "3",
       "status": "open",
       "order": 0,
-      "createdAt": "2026-03-29T22:27:06.628Z",
-      "updatedAt": "2026-03-29T22:27:06.628Z"
+      "createdAt": "2026-03-30T02:13:46.859Z",
+      "updatedAt": "2026-03-30T02:13:46.859Z"
     },
     {
-      "id": "ZDd92iqg1nZZLs-JSPisw",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "why",
-      "body": "",
-      "group": "3",
-      "status": "open",
-      "order": 1,
-      "createdAt": "2026-03-29T22:27:18.404Z",
-      "updatedAt": "2026-03-29T22:27:18.404Z"
-    },
-    {
-      "id": "BqnFYY-ffeJ43JfrNtIc8",
-      "listId": "poxq5uG_GYbADmU2mOes8",
-      "title": "hey",
-      "body": "",
-      "group": "2",
-      "status": "open",
-      "order": 1,
-      "createdAt": "2026-03-29T22:35:51.651Z",
-      "updatedAt": "2026-03-29T22:35:51.651Z"
-    },
-    {
-      "id": "s2LPGzRbO41M_CGwo358i",
+      "id": "hLJOHTX5VNZ98kKB_zJ7Z",
       "listId": "h55uNHY7aCMcIzMbYEisg",
-      "title": "task",
+      "title": "Mark Task Completed",
       "body": "",
-      "group": "2",
+      "group": "0",
       "status": "open",
-      "order": 0,
-      "createdAt": "2026-03-29T22:36:03.552Z",
-      "updatedAt": "2026-03-29T22:36:03.552Z"
-    },
-    {
-      "id": "jKdBG5S-wehxXkN-8qnte",
-      "listId": "poxq5uG_GYbADmU2mOes8",
-      "title": "hey again",
-      "body": "",
-      "group": "2",
-      "status": "closed",
       "order": 1,
-      "createdAt": "2026-03-29T22:36:24.200Z",
-      "updatedAt": "2026-03-30T01:40:50.847Z"
+      "createdAt": "2026-03-30T02:15:13.875Z",
+      "updatedAt": "2026-03-30T02:15:13.875Z"
     },
     {
-      "id": "rZo-V2dUiQ3ZP-OD1jHmX",
-      "listId": "poxq5uG_GYbADmU2mOes8",
-      "title": "whatsup",
-      "body": "",
-      "group": "2",
-      "status": "in-progress",
-      "order": 0,
-      "createdAt": "2026-03-29T22:36:28.257Z",
-      "updatedAt": "2026-03-30T01:39:24.050Z"
-    },
-    {
-      "id": "l2UIuKwdeIuK5MXjQrFqI",
+      "id": "mlph5y1WQyp5u-ljsqlxs",
       "listId": "h55uNHY7aCMcIzMbYEisg",
-      "title": "hi",
-      "body": "",
-      "group": "3",
-      "status": "open",
-      "order": 1,
-      "createdAt": "2026-03-29T22:37:19.206Z",
-      "updatedAt": "2026-03-29T22:37:19.206Z"
-    },
-    {
-      "id": "ZU56tpv8pr-_MwVwX_MWE",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "hi",
+      "title": "Tag Task with Colors/Text",
       "body": "",
       "group": "0",
       "status": "open",
       "order": 2,
-      "createdAt": "2026-03-30T01:13:44.494Z",
-      "updatedAt": "2026-03-30T01:13:44.494Z"
+      "createdAt": "2026-03-30T02:16:03.379Z",
+      "updatedAt": "2026-03-30T02:16:03.379Z"
     },
     {
-      "id": "sdie8T_9pGHxwVbxDNANI",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "task1",
+      "id": "GQhfYZK2NKjdC3zxY290f",
+      "listId": "5YEYVqF-HJeXKTcpLiY7f",
+      "title": "Add Background Image",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 0,
+      "createdAt": "2026-03-30T02:16:43.731Z",
+      "updatedAt": "2026-03-30T02:16:43.731Z"
+    },
+    {
+      "id": "PQvc_0SYKiLw9DgE61OM1",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "What about Priorities",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 0,
+      "createdAt": "2026-03-30T02:16:51.835Z",
+      "updatedAt": "2026-03-30T02:16:51.835Z"
+    },
+    {
+      "id": "k7lHl5KJMe7CZbHzMZtZD",
+      "listId": "5YEYVqF-HJeXKTcpLiY7f",
+      "title": "Compact Tasks View",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 1,
+      "createdAt": "2026-03-30T02:17:26.779Z",
+      "updatedAt": "2026-03-30T02:17:26.779Z"
+    },
+    {
+      "id": "6Ia832uNQ9cXLWQwvRH95",
+      "listId": "5YEYVqF-HJeXKTcpLiY7f",
+      "title": "Setting - Hide Empty Lists",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 2,
+      "createdAt": "2026-03-30T02:19:24.531Z",
+      "updatedAt": "2026-03-30T02:19:24.531Z"
+    },
+    {
+      "id": "CDV69Eddhi4VO8MoWviBt",
+      "listId": "5YEYVqF-HJeXKTcpLiY7f",
+      "title": "Organize Header Filters/Settings",
       "body": "",
       "group": "0",
       "status": "open",
       "order": 3,
-      "createdAt": "2026-03-30T01:36:59.412Z",
-      "updatedAt": "2026-03-30T01:36:59.412Z"
+      "createdAt": "2026-03-30T02:19:54.619Z",
+      "updatedAt": "2026-03-30T02:19:54.619Z"
     },
     {
-      "id": "22ibqIttqqNXvik8AH-gZ",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "task2",
+      "id": "pFEfrqbppBJjEu4sniagz",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Use markdown for Task Description",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 1,
+      "createdAt": "2026-03-30T02:20:59.755Z",
+      "updatedAt": "2026-03-30T02:20:59.755Z"
+    },
+    {
+      "id": "unde0VRfE2gdhLEVUE4gE",
+      "listId": "VWPDK_s0-rZh6JMPF2xIq",
+      "title": "List Color",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 0,
+      "createdAt": "2026-03-30T02:21:16.491Z",
+      "updatedAt": "2026-03-30T02:21:16.491Z"
+    },
+    {
+      "id": "06BKTCZuEBj5oQ_OjkbhX",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Handling Board Themes vs Light/Dark Theme",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 2,
+      "createdAt": "2026-03-30T02:21:42.987Z",
+      "updatedAt": "2026-03-30T02:21:42.987Z"
+    },
+    {
+      "id": "1zHRsJ26MWe5rExDw6o7m",
+      "listId": "5YEYVqF-HJeXKTcpLiY7f",
+      "title": "Fix Theme issues",
+      "body": "",
+      "group": "1",
+      "status": "open",
+      "order": 4,
+      "createdAt": "2026-03-30T02:21:55.996Z",
+      "updatedAt": "2026-03-30T02:21:55.996Z"
+    },
+    {
+      "id": "nRdyAt3PEk2-fLuuXKnfL",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Connect to AI",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 3,
+      "createdAt": "2026-03-30T02:23:48.236Z",
+      "updatedAt": "2026-03-30T02:23:48.236Z"
+    },
+    {
+      "id": "oZnpQ0kTO2ZBAdyhJl4yU",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Import from Trello/Other Tools",
       "body": "",
       "group": "0",
       "status": "open",
       "order": 4,
-      "createdAt": "2026-03-30T01:37:01.684Z",
-      "updatedAt": "2026-03-30T01:37:01.684Z"
+      "createdAt": "2026-03-30T02:24:07.347Z",
+      "updatedAt": "2026-03-30T02:24:07.347Z"
     },
     {
-      "id": "4cJ8TRrHWWqsTpplJt-KQ",
-      "listId": "pvxXXspUR4XQ8kU_7y1uU",
-      "title": "task3",
+      "id": "oXmZNz5OqQkTo2ieprd3y",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Make Open Source",
       "body": "",
       "group": "0",
       "status": "open",
       "order": 5,
-      "createdAt": "2026-03-30T01:37:04.080Z",
-      "updatedAt": "2026-03-30T01:37:04.080Z"
+      "createdAt": "2026-03-30T02:24:16.723Z",
+      "updatedAt": "2026-03-30T02:24:16.723Z"
+    },
+    {
+      "id": "hSBgz6ABITPZ_jVNjmQMs",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Add Projects",
+      "body": "",
+      "group": "0",
+      "status": "open",
+      "order": 6,
+      "createdAt": "2026-03-30T10:37:45.021Z",
+      "updatedAt": "2026-03-30T10:37:45.021Z"
+    },
+    {
+      "id": "XfBDe_TqwTmhI77NXMpUt",
+      "listId": "izk5PufnmBBuyY1-MsIyy",
+      "title": "Multiple Locations for Boards/Projects",
+      "body": "",
+      "group": "3",
+      "status": "open",
+      "order": 7,
+      "createdAt": "2026-03-30T10:38:40.592Z",
+      "updatedAt": "2026-03-30T10:38:40.592Z"
     }
   ],
   "createdAt": "2026-03-29T22:24:32.625Z",
-  "updatedAt": "2026-03-30T01:54:53.353Z"
+  "updatedAt": "2026-03-30T10:38:40.612Z"
 }

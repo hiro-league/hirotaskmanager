@@ -149,7 +149,7 @@ export function ListHeader({
   return (
     <div
       className={cn(
-        "group flex min-h-10 items-center gap-1 border-border bg-muted/40 px-2 py-1.5",
+        "group relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
         boardDrag ? "border-b border-border/80" : "rounded-t-md border border-b-0",
       )}
     >
@@ -171,26 +171,29 @@ export function ListHeader({
           }}
         />
       ) : boardDrag ? (
-        <div
-          className="flex min-w-0 flex-1 cursor-grab touch-none items-center active:cursor-grabbing"
-          {...dragAttributes}
-          {...(mergedListeners ?? {})}
-        >
-          <span className="truncate text-sm font-semibold text-foreground">
-            {list.name}
-          </span>
-        </div>
+        <>
+          <div className="pointer-events-none min-w-0 flex-1" aria-hidden />
+          <div
+            className="absolute inset-y-0 left-2 right-10 z-[1] flex cursor-grab touch-none items-center justify-center active:cursor-grabbing"
+            {...dragAttributes}
+            {...(mergedListeners ?? {})}
+          >
+            <span className="w-full truncate text-center text-[0.9375rem] font-bold leading-tight text-foreground">
+              {list.name}
+            </span>
+          </div>
+        </>
       ) : (
         <button
           type="button"
-          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-muted/80"
+          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-center text-[0.9375rem] font-bold leading-tight text-foreground hover:bg-muted/80"
           onDoubleClick={startRename}
         >
           {list.name}
         </button>
       )}
       {!editing && (
-        <div ref={menuRef} className="relative shrink-0">
+        <div ref={menuRef} className="relative z-10 shrink-0">
           <button
             type="button"
             className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted/80 group-hover:opacity-100 data-[open]:opacity-100"

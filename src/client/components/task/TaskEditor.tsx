@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { Board, Task } from "../../../shared/models";
-import { ALL_TASK_GROUPS } from "../../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  coerceTaskStatus,
+  TASK_STATUSES,
+} from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
 
@@ -46,7 +50,7 @@ export function TaskEditor({
       const defaultGroup =
         activeGroup !== ALL_TASK_GROUPS
           ? activeGroup
-          : board.taskGroups[0] ?? "task";
+          : board.taskGroups[0]?.id ?? "";
       setGroup(defaultGroup);
       setStatus(createContext.status);
     }
@@ -75,10 +79,10 @@ export function TaskEditor({
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
-        status: status.trim() || createContext.status,
+        status: coerceTaskStatus(status.trim() || createContext.status),
         title: trimmedTitle,
         body,
-        group: group.trim() || board.taskGroups[0] || "task",
+        group: group.trim() || board.taskGroups[0]?.id || "",
       });
     } else if (mode === "edit" && task) {
       await updateTask.mutateAsync({
@@ -88,7 +92,7 @@ export function TaskEditor({
           title: trimmedTitle,
           body,
           group: group.trim() || task.group,
-          status: status.trim() || task.status,
+          status: coerceTaskStatus(status.trim() || task.status),
           updatedAt: now,
         },
       });
@@ -173,8 +177,8 @@ export function TaskEditor({
                 onChange={(e) => setGroup(e.target.value)}
               >
                 {board.taskGroups.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
+                  <option key={g.id} value={g.id}>
+                    {g.label}
                   </option>
                 ))}
               </select>
@@ -189,7 +193,7 @@ export function TaskEditor({
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
-                {board.statusDefinitions.map((s) => (
+                {TASK_STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

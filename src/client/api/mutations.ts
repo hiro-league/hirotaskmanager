@@ -1,26 +1,29 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { nanoid } from "nanoid";
+import { DEFAULT_BOARD_COLOR } from "../../shared/boardColor";
 import {
-  DEFAULT_STATUS_DEFINITIONS,
-  DEFAULT_TASK_GROUPS,
+  coerceTaskStatus,
+  createDefaultTaskGroups,
+  TASK_STATUSES,
   type Board,
   type BoardIndexEntry,
   type List,
   type Task,
 } from "../../shared/models";
-import { useSelectionStore } from "@/store/selection";
+import { appNavigate } from "@/lib/appNavigate";
+import { boardPath, parseBoardIdFromPath } from "@/lib/boardPath";
 import { fetchBoard } from "./queries";
 
 function buildOptimisticBoard(id: string, name: string): Board {
   const now = new Date().toISOString();
-  const taskGroups = [...DEFAULT_TASK_GROUPS];
-  const statusDefinitions = [...DEFAULT_STATUS_DEFINITIONS];
+  const taskGroups = createDefaultTaskGroups();
   return {
     id,
     name,
     taskGroups,
-    statusDefinitions,
-    visibleStatuses: [...statusDefinitions],
+    visibleStatuses: [...TASK_STATUSES],
+    boardLayout: "stacked",
+    boardColor: DEFAULT_BOARD_COLOR,
     showCounts: true,
     lists: [],
     tasks: [],
@@ -63,8 +66,7 @@ export function useCreateBoard() {
         }),
       }).catch(() => {});
       // #endregion
-      const previousSelectedId =
-        useSelectionStore.getState().selectedBoardId;
+      const previousPath = window.location.pathname;
       const optimisticId = nanoid();
       const name =
         typeof input.name === "string" && input.name.trim()
@@ -84,8 +86,8 @@ export function useCreateBoard() {
         ["boards", optimisticId],
         buildOptimisticBoard(optimisticId, name),
       );
-      useSelectionStore.getState().setSelectedBoardId(optimisticId);
-      return { previous, optimisticId, previousSelectedId };
+      appNavigate(boardPath(optimisticId));
+      return { previous, optimisticId, previousPath };
     },
     onError: (_err, _input, context) => {
       // #region agent log
@@ -102,7 +104,7 @@ export function useCreateBoard() {
           location: "mutations.ts:useCreateBoard.onError",
           message: "create board onError",
           data: {
-            restoreTo: context?.previousSelectedId ?? null,
+            restoreTo: context?.previousPath ?? null,
             hadOptimisticId: Boolean(context?.optimisticId),
           },
           timestamp: Date.now(),
@@ -115,9 +117,9 @@ export function useCreateBoard() {
       if (context?.optimisticId) {
         qc.removeQueries({ queryKey: ["boards", context.optimisticId] });
       }
-      useSelectionStore
-        .getState()
-        .setSelectedBoardId(context?.previousSelectedId ?? null);
+      if (context?.previousPath != null) {
+        appNavigate(context.previousPath, { replace: true });
+      }
     },
     onSuccess: (data, _input, context) => {
       const optId = context?.optimisticId;
@@ -137,7 +139,7 @@ export function useCreateBoard() {
         );
       }
       qc.setQueryData<Board>(["boards", data.id], data);
-      useSelectionStore.getState().setSelectedBoardId(data.id);
+      appNavigate(boardPath(data.id), { replace: true });
       // #region agent log
       fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
         method: "POST",
@@ -240,7 +242,7 @@ export function useDeleteBoard() {
         (old ?? []).filter((e: BoardIndexEntry) => e.id !== id),
       );
       qc.removeQueries({ queryKey: ["boards", id] });
-      const selected = useSelectionStore.getState().selectedBoardId;
+      const selected = parseBoardIdFromPath(window.location.pathname);
       // #region agent log
       fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
         method: "POST",
@@ -260,7 +262,12 @@ export function useDeleteBoard() {
       }).catch(() => {});
       // #endregion
       if (selected === id) {
-        useSelectionStore.getState().setSelectedBoardId(null);
+        const remaining = (prevList ?? []).filter((e: BoardIndexEntry) => e.id !== id);
+        if (remaining.length > 0) {
+          appNavigate(boardPath(remaining[0].id), { replace: true });
+        } else {
+          appNavigate("/", { replace: true });
+        }
       }
       return { prevList, id, wasSelected: selected === id };
     },
@@ -269,7 +276,7 @@ export function useDeleteBoard() {
         qc.setQueryData<BoardIndexEntry[]>(["boards"], ctx.prevList);
       }
       if (ctx?.wasSelected) {
-        useSelectionStore.getState().setSelectedBoardId(ctx.id);
+        appNavigate(boardPath(ctx.id), { replace: true });
       }
     },
   });
@@ -372,7 +379,7 @@ export function useCreateTask() {
         title: input.title,
         body: input.body,
         group: input.group,
-        status: input.status,
+        status: coerceTaskStatus(input.status),
         order: maxOrder + 1,
         createdAt: now,
         updatedAt: now,

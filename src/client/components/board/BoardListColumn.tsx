@@ -8,7 +8,6 @@ import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { cn } from "@/lib/utils";
-import { statusBandSurfaceClass } from "./boardStatusUtils";
 
 interface ListColumnBodyProps {
   board: Board;
@@ -48,8 +47,8 @@ function ListColumnBody({
               minHeight: 0,
             }}
             className={cn(
-              "min-h-0 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
-              statusBandSurfaceClass(status),
+              "flex min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
+              "bg-muted/20 dark:bg-muted/10",
             )}
             data-board-id={board.id}
             data-list-id={listId}
@@ -81,7 +80,7 @@ export function BoardListColumnOverlay({
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
   return (
-    <div className="pointer-events-none flex h-full min-h-0 w-72 shrink-0 cursor-grabbing flex-col overflow-hidden rounded-lg border border-border bg-card opacity-90 shadow-xl ring-2 ring-primary/25">
+    <div className="pointer-events-none flex h-full min-h-0 w-72 shrink-0 cursor-grabbing flex-col overflow-hidden rounded-lg border border-border bg-list-column opacity-90 shadow-xl ring-2 ring-primary/25">
       <ListColumnBody
         board={board}
         list={list}
@@ -129,10 +128,11 @@ export function BoardListColumn({
       style={style}
       className="relative flex h-full min-h-0 w-72 shrink-0 flex-col"
       data-list-column={list.id}
+      data-board-no-pan
     >
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-sm transition-[opacity,border-color]",
+          "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",

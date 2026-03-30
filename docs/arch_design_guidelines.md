@@ -8,6 +8,14 @@ Reference for future development. Update this file when architecture or scope ch
 
 2. **Production serving** — ~~CLOSED.~~ `npm run build && npm start` runs a single Bun process. Hono serves API routes **and** the Vite-built SPA from `dist/` via `serveStatic` + an `index.html` fallback for client-side routing. Default port is **3001** (override with `PORT` env var). Data is stored at `~/.taskmanager/data` in production (override with `DATA_DIR` env var); in development it defaults to `./data` in the repo root.
 
+## Early development (on-disk data)
+
+Until the app is explicitly versioned or released for external users:
+
+- **No backward-compatibility promise** for JSON under `data/` or for API payloads. Breaking changes are allowed; it is acceptable to **delete all board files** and reset **`data/_index.json`** to `[]` when the schema changes.
+- **Prefer readable, simple files:** task group ids use **numeric strings** (`"0"`, `"1"`, `"2"`, …) for defaults and for new rows added in the UI (next free integer). Workflow statuses remain the fixed three strings (`open`, `in-progress`, `closed`).
+- **`normalizeBoardFromJson`** applies only **light coercion** (unknown task `group` → first group id, invalid `status` → `open`). It is **not** a multi-version migration layer; do not add elaborate legacy branches while still in early development.
+
 ## Investigation (open decisions / partial implementation)
 
 These items remain open. (Numbering preserved from the original architecture review.)
@@ -22,13 +30,13 @@ Planned or described in earlier specs but **absent or incomplete** in the codeba
 
 3. **`GET /api/boards/:id/export`** — Markdown/JSON export with optional type/status filters; server route module (e.g. `export.ts`) and any client export UI.
 
-4. **Board vs client prefs** — **`taskGroups`** (the list of group names) and **`visibleStatuses`** live on the **board document** and update via **PUT** + TanStack Query. **Which task group is active for filtering** (`ALL_TASK_GROUPS` = all groups, or a specific group id) is stored in **`src/client/store/preferences.ts`** (persisted to `localStorage`, keyed by board id). **Filter strip collapsed** is a **global** app preference in the same store. There is **no** `activeTaskType` (or similar) field on the board.
+4. **Board vs client prefs** — **`taskGroups`** (`{ id, label }[]`) and **`visibleStatuses`** (subset of fixed workflow statuses) live on the **board document** and update via **PUT** + TanStack Query. **Which task group is active for filtering** (`ALL_TASK_GROUPS` = all groups, or a specific **group id**) is stored in **`src/client/store/preferences.ts`** (persisted to `localStorage`, keyed by board id). **Filter strip collapsed** is a **global** app preference in the same store. There is **no** `activeTaskType` (or similar) field on the board.
 
 - **Other plan gaps** — e.g. full board settings beyond task groups, shared `ExportDialog`, etc., may still be missing; treat the repo as source of truth and extend this list when you add features.
 
 ## Scope
 
-Browser-based, **local-only** task board: JSON on disk for human/AI readability, **list columns** (each list is a column) with **stacked status bands** inside each column. Each task has a **`group`** string chosen from the board’s **`taskGroups`** list; the list view can filter by one group or show all (filter selection is client-persisted, not in board JSON).
+Browser-based, **local-only** task board: JSON on disk for human/AI readability, **list columns** (each list is a column) with **stacked status bands** inside each column. Workflow **status** is one of three fixed values (`open`, `in-progress`, `closed`). Each task has a **`group`** id referencing the board’s **`taskGroups`** entries; the list view can filter by one group or show all (filter selection is client-persisted, not in board JSON).
 
 ## Tech Stack
 
@@ -39,11 +47,12 @@ Browser-based, **local-only** task board: JSON on disk for human/AI readability,
 | Frontend | React 19 + TypeScript |
 | Build | Vite (see `package.json` for current major version) |
 | Styling | Tailwind CSS 4 + shadcn/ui |
-| Client UI state | Zustand: `store/selection.ts` (selected board); **`store/preferences.ts`** (theme, sidebar, **task group filter per board**, **board filter strip collapsed**); definitions on the board (`taskGroups`, `visibleStatuses`) via TanStack Query + PUT |
+| Client routing | React Router (`react-router-dom`) — **which board is open** is defined by the URL (see [Client routing](#client-routing)); not duplicated in a board-selection store |
+| Client UI state | Zustand: **`store/preferences.ts`** (theme, sidebar, **task group filter per board**, **board filter strip collapsed**); definitions on the board (`taskGroups`, `visibleStatuses`) via TanStack Query + PUT |
 | Server / remote state | TanStack Query v5 (caching, optimistic updates) |
 | Drag & drop | @dnd-kit — patterns in [`docs/drag_drop.md`](drag_drop.md) |
 | Markdown | `@uiw/react-md-editor` (edit), `react-markdown` (preview) |
-| IDs | nanoid |
+| IDs | nanoid for entity ids (boards, lists, tasks); **task group ids** are numeric strings (`"0"` …) for readability |
 
 ## High-Level Architecture
 
@@ -81,6 +90,16 @@ graph LR
 
 **Server role:** Thin file I/O layer — no heavy business logic in routes; persistence and atomic writes live in storage.
 
+## Client routing
+
+Guidelines for future features (bookmarking, deep links, navigation after mutations):
+
+- **URL is the source of truth for “current board.”** The active board is whatever `/board/:boardId` (or the home redirect) implies. Do not reintroduce a parallel “selected board id” in client-only global state unless there is a strong reason and a clear sync story with the URL.
+- **Separate concerns:** **What** the user is viewing (board, and later optional task-level deep links) belongs in the path; **how** they prefer to view it (theme, collapsed sidebar, task-group filter, filter strip) stays in **`preferences`** / `localStorage`, not in the URL unless you deliberately add shareable deep links.
+- **Home (`/`):** Resolves to a sensible default board when boards exist (using a persisted last-board hint); shows an empty state when there are no boards. Unknown client paths should fall back to home rather than breaking the shell.
+- **Mutations that change identity or remove the current board** (create with optimistic id, delete) must keep the **browser history** and **TanStack Query cache** consistent: after navigation, the URL should match a board id the client can load or the empty home experience.
+- **API vs app paths:** REST API lives under **`/api/*`**. Client routes (`/`, `/board/...`) are SPA-only and must not collide with API routing on the server (production already serves the SPA for non-API paths).
+
 ## Data Model
 
 All shared types belong in `src/shared/models.ts` and are used by both server and client.
@@ -94,13 +113,20 @@ interface BoardIndexEntry {
   createdAt: string;
 }
 
+/** Workflow statuses are fixed app-wide (`open`, `in-progress`, `closed`); not per-board. */
+const TASK_STATUSES = ["open", "in-progress", "closed"] as const;
+
+interface GroupDefinition {
+  id: string;
+  label: string;
+}
+
 interface Board {
   id: string;
   name: string;
   backgroundImage?: string;
-  /** User-defined task group names for this board. */
-  taskGroups: string[];
-  statusDefinitions: string[];
+  /** User-defined groups (stable id + editable label). */
+  taskGroups: GroupDefinition[];
   visibleStatuses: string[];
   /** Flex weights for each visible status band (same length / order as rendered visible statuses). */
   statusBandWeights?: number[];
@@ -123,8 +149,8 @@ interface Task {
   listId: string;
   title: string;
   body: string;                  // Markdown
-  group: string;                 // Task group id (from board.taskGroups)
-  status: string;
+  group: string;                 // Task group id (from board.taskGroups[].id)
+  status: (typeof TASK_STATUSES)[number];
   order: number;                 // Within (list, status) band
   color?: string;
   createdAt: string;
@@ -132,7 +158,7 @@ interface Task {
 }
 ```
 
-**Guideline:** Tasks are stored **flat** (sibling to `lists`) with `listId`. **`normalizeBoardFromJson`** in `models.ts` maps legacy on-disk keys (`taskTypes` → `taskGroups`, task `type` → `group`) when reading. Filtering by group/status uses a simple `.filter()` without deep nesting.
+**Guideline:** Tasks are stored **flat** (sibling to `lists`) with `listId`. **`normalizeBoardFromJson`** coerces invalid `status` and unknown `group` to safe values (see [Early development](#early-development-on-disk-data)). Filtering by group/status uses a simple `.filter()` without deep nesting. Optional **tags** for finer labels (e.g. “in testing”) are a possible future addition; they are not the same as workflow status.
 
 ## On-Disk Storage
 
@@ -214,9 +240,9 @@ taskmanager/
         queries.ts              # useBoards, useBoard, fetch helpers
         mutations.ts
       store/
-        selection.ts            # e.g. selectedBoardId
         preferences.ts          # theme, sidebar, task group filter per board, filter strip collapsed
       components/
+        routing/                # route-level wrappers (home redirect, board page), navigation registration
         ui/                     # shadcn/ui primitives (Button, Dialog, Input, …)
         layout/                 # AppShell, Sidebar
         board/                  # BoardView, BoardColumns, BoardListColumn,
@@ -225,6 +251,8 @@ taskmanager/
         list/                   # ListHeader, …
       lib/
         utils.ts
+        boardPath.ts            # board URL helpers + last-board localStorage key (shared with routing)
+        appNavigate.ts          # imperative navigate for mutations (registered from the router)
   data/                         # runtime (dev default; see On-Disk Storage)
     _index.json
     boards/

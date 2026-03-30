@@ -1,6 +1,5 @@
 import { Fragment } from "react";
 import { StatusBandSplitter } from "./StatusBandSplitter";
-import { statusBandSurfaceClass } from "./boardStatusUtils";
 
 interface StatusLabelColumnProps {
   visibleStatuses: string[];
@@ -21,7 +20,10 @@ export function StatusLabelColumn({
   splittersDisabled,
 }: StatusLabelColumnProps) {
   return (
-    <div className="sticky left-0 z-30 flex h-full min-h-0 w-11 shrink-0 flex-col bg-transparent">
+    <div
+      className="sticky left-0 z-30 flex h-full min-h-0 w-11 shrink-0 flex-col bg-transparent"
+      data-board-no-pan
+    >
       <div className="shrink-0 min-h-10 bg-transparent" aria-hidden />
       <div className="flex min-h-0 flex-1 flex-col">
         {visibleStatuses.map((status, i) => (
@@ -33,7 +35,7 @@ export function StatusLabelColumn({
                 flexBasis: 0,
                 minHeight: 0,
               }}
-              className={`flex min-h-0 items-center justify-center py-1 ${statusBandSurfaceClass(status)}`}
+              className="flex min-h-0 items-center justify-center bg-muted/20 py-1 dark:bg-muted/10"
             >
               <span
                 className="select-none text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"

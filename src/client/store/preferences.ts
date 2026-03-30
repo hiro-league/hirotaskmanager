@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { ALL_TASK_GROUPS } from "../../shared/models";
+import { ALL_TASK_GROUPS, type GroupDefinition } from "../../shared/models";
 
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -120,17 +120,17 @@ export const usePreferencesStore = create<PreferencesState>()(
   ),
 );
 
-/** Subscribe to prefs and validate against current `taskGroups`. */
+/** Subscribe to prefs and validate against current `taskGroups` ids. */
 export function useResolvedActiveTaskGroup(
   boardId: string,
-  taskGroups: string[],
+  taskGroups: GroupDefinition[],
 ): string {
   const raw = usePreferencesStore(
     (s) => s.activeTaskGroupByBoardId[boardId],
   );
   return useMemo(() => {
     if (raw === ALL_TASK_GROUPS) return ALL_TASK_GROUPS;
-    if (raw && taskGroups.includes(raw)) return raw;
+    if (raw && taskGroups.some((g) => g.id === raw)) return raw;
     return ALL_TASK_GROUPS;
   }, [raw, boardId, taskGroups]);
 }

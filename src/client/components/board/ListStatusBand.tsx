@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
-import type { Board, List, Task } from "../../../shared/models";
-import { ALL_TASK_GROUPS } from "../../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  groupLabelForId,
+  type Board,
+  type List,
+  type Task,
+} from "../../../shared/models";
 import { useCreateTask } from "@/api/mutations";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
@@ -30,7 +35,10 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const addCardRef = useRef<HTMLDivElement>(null);
+  const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  createPendingRef.current = createTask.isPending;
 
   useEffect(() => {
     if (!adding) return;
@@ -48,7 +56,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
     const defaultGroup =
       activeGroup !== ALL_TASK_GROUPS
         ? activeGroup
-        : board.taskGroups[0] ?? "task";
+        : board.taskGroups[0]?.id ?? "";
     createTask.mutate(
       {
         boardId: board.id,
@@ -58,8 +66,28 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
         body: "",
         group: defaultGroup,
       },
-      { onSuccess: () => cancelAdd() },
+      {
+        onSuccess: () => {
+          setTitle("");
+          window.setTimeout(() => inputRef.current?.focus(), 0);
+        },
+      },
     );
+  };
+
+  const handleTextareaBlur = () => {
+    window.setTimeout(() => {
+      if (createPendingRef.current) return;
+      const active = document.activeElement;
+      if (
+        addCardRef.current &&
+        active instanceof Node &&
+        addCardRef.current.contains(active)
+      ) {
+        return;
+      }
+      cancelAdd();
+    }, 0);
   };
 
   return (
@@ -70,25 +98,28 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
             <TaskCard
               key={task.id}
               task={task}
+              groupLabel={groupLabelForId(board.taskGroups, task.group)}
               onOpen={() => setEditingTask(task)}
             />
           ))}
         </div>
-        {!adding ? (
+        {!adding && status === "open" ? (
           <button
             type="button"
-            className="mt-auto flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
+            className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation();
               setAdding(true);
             }}
           >
             <Plus className="size-3.5" aria-hidden />
-            Add a card
+            Add task
           </button>
-        ) : (
+        ) : null}
+        {adding && status === "open" ? (
           <div
-            className="mt-auto shrink-0 rounded-md border border-border bg-background/80 p-2"
+            ref={addCardRef}
+            className="mt-2 shrink-0 rounded-md border border-border bg-background/80 p-2"
             onClick={(e) => e.stopPropagation()}
           >
             <textarea
@@ -99,6 +130,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
               value={title}
               disabled={createTask.isPending}
               onChange={(e) => setTitle(e.target.value)}
+              onBlur={handleTextareaBlur}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -114,7 +146,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
                 disabled={createTask.isPending || !title.trim()}
                 onClick={() => submitCard()}
               >
-                Add card
+                Add task
               </button>
               <button
                 type="button"
@@ -127,7 +159,7 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <TaskEditor

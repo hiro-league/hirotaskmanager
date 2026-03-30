@@ -6,11 +6,21 @@ import {
   Settings2,
 } from "lucide-react";
 import { useBoard } from "@/api/queries";
+import {
+  boardCanvasBackground,
+  resolvedBoardColor,
+} from "../../../shared/boardColor";
+import { resolvedBoardLayout } from "../../../shared/models";
 import { usePreferencesStore } from "@/store/preferences";
+import { BoardColorMenu } from "./BoardColorMenu";
 import { BoardColumns } from "./BoardColumns";
+import { BoardColumnsStacked } from "./BoardColumnsStacked";
+import { BoardLayoutToggle } from "./BoardLayoutToggle";
 import { BoardStatusToggles } from "./BoardStatusToggles";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
+import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
+import { cn } from "@/lib/utils";
 
 interface BoardViewProps {
   boardId: string | null;
@@ -67,6 +77,9 @@ export function BoardView({ boardId }: BoardViewProps) {
     // #endregion
   }, [boardId, data, isError, error, isLoading, isFetching]);
 
+  const { scrollRef, panning, boardCanvasPanHandlers } =
+    useBoardCanvasPanScroll();
+
   if (!boardId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
@@ -97,55 +110,84 @@ export function BoardView({ boardId }: BoardViewProps) {
     );
   }
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col px-6 pb-4 pt-5">
-      <div className="flex shrink-0 flex-col gap-2 border-b border-border pb-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {data.name}
-          </h1>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
-              title="Edit task groups for this board"
-              onClick={() => setGroupsEditorOpen(true)}
-            >
-              <Settings2 className="size-3.5 shrink-0" aria-hidden />
-              Task groups
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
-              title={
-                filterCollapsed
-                  ? "Show filters (statuses & groups)"
-                  : "Hide filters"
-              }
-              aria-expanded={!filterCollapsed}
-              onClick={() => toggleFilterStrip()}
-            >
-              <PanelTop className="size-3.5 shrink-0" aria-hidden />
-              Filters
-              {filterCollapsed ? (
-                <ChevronDown className="size-3.5 shrink-0" aria-hidden />
-              ) : (
-                <ChevronUp className="size-3.5 shrink-0" aria-hidden />
-              )}
-            </button>
-          </div>
-        </div>
+  const boardBg = boardCanvasBackground(resolvedBoardColor(data));
+  const stackedLayout = resolvedBoardLayout(data) === "stacked";
 
-        {!filterCollapsed ? (
-          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-start">
-            <TaskGroupSwitcher board={data} />
-            <BoardStatusToggles board={data} />
+  return (
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
+      style={{ background: boardBg }}
+    >
+      <div className="relative shrink-0 border-b border-black/25">
+        <div
+          className="pointer-events-none absolute inset-0 rounded-t-lg backdrop-brightness-[0.72]"
+          aria-hidden
+        />
+        <div className="relative z-10 flex flex-col gap-2 px-6 pb-3 pt-8">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {data.name}
+            </h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                title="Edit task groups for this board"
+                onClick={() => setGroupsEditorOpen(true)}
+              >
+                <Settings2 className="size-3.5 shrink-0" aria-hidden />
+                Task groups
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                title={
+                  filterCollapsed
+                    ? "Show filters (statuses & groups)"
+                    : "Hide filters"
+                }
+                aria-expanded={!filterCollapsed}
+                onClick={() => toggleFilterStrip()}
+              >
+                <PanelTop className="size-3.5 shrink-0" aria-hidden />
+                Filters
+                {filterCollapsed ? (
+                  <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+                ) : (
+                  <ChevronUp className="size-3.5 shrink-0" aria-hidden />
+                )}
+              </button>
+              <BoardColorMenu board={data} />
+            </div>
           </div>
-        ) : null}
+
+          {!filterCollapsed ? (
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-start">
+              <BoardLayoutToggle board={data} />
+              <TaskGroupSwitcher board={data} />
+              <BoardStatusToggles board={data} />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 flex flex-col">
-        <BoardColumns board={data} />
+      <div
+        ref={scrollRef}
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-6 pb-4 pt-3",
+          stackedLayout ? "overflow-y-auto" : "overflow-y-hidden",
+          "cursor-grab",
+          panning && "cursor-grabbing select-none",
+        )}
+        {...boardCanvasPanHandlers}
+      >
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
+          {stackedLayout ? (
+            <BoardColumnsStacked board={data} />
+          ) : (
+            <BoardColumns board={data} />
+          )}
+        </div>
       </div>
 
       <TaskGroupsEditorDialog

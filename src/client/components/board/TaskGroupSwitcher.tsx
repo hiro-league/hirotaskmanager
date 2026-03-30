@@ -16,7 +16,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
   const resolved =
     raw === ALL_TASK_GROUPS
       ? ALL_TASK_GROUPS
-      : raw && board.taskGroups.includes(raw)
+      : raw && board.taskGroups.some((g) => g.id === raw)
         ? raw
         : ALL_TASK_GROUPS;
 
@@ -45,10 +45,10 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
         All groups
       </button>
       {board.taskGroups.map((g) => {
-        const active = resolved === g;
+        const active = resolved === g.id;
         return (
           <button
-            key={g}
+            key={g.id}
             type="button"
             className={cn(
               "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
@@ -57,9 +57,9 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
                 : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
             )}
             aria-pressed={active}
-            onClick={() => pick(g)}
+            onClick={() => pick(g.id)}
           >
-            {g}
+            {g.label}
           </button>
         );
       })}

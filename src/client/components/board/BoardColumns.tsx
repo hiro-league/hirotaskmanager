@@ -47,7 +47,14 @@ const listCollision: CollisionDetection = (args) => {
   return closestCenter(args);
 };
 
-function AddListSlot({ boardId }: { boardId: string }) {
+export function AddListSlot({
+  boardId,
+  stacked = false,
+}: {
+  boardId: string;
+  /** Stacked layout: column-aligned, content height (no full-height lane). */
+  stacked?: boolean;
+}) {
   const createList = useCreateList();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -73,9 +80,13 @@ function AddListSlot({ boardId }: { boardId: string }) {
     );
   };
 
+  const shellClass = stacked
+    ? "flex w-72 shrink-0 flex-col self-start"
+    : "flex h-full min-h-0 w-72 shrink-0 flex-col self-start";
+
   if (!open) {
     return (
-      <div className="flex h-full min-h-0 w-72 shrink-0 flex-col self-start">
+      <div className={shellClass} data-board-no-pan>
         <button
           type="button"
           className="flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
@@ -89,7 +100,10 @@ function AddListSlot({ boardId }: { boardId: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-72 shrink-0 flex-col self-start rounded-lg border border-border bg-card p-2 shadow-sm">
+    <div
+      className={`${shellClass} rounded-lg border border-border bg-list-column p-2 shadow-sm`}
+      data-board-no-pan
+    >
       <input
         ref={inputRef}
         type="text"
@@ -276,37 +290,35 @@ export function BoardColumns({ board }: BoardColumnsProps) {
         onDragCancel={handleDragCancel}
       >
         <div
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          className="flex min-h-0 min-w-0 flex-1 flex-col items-start"
           role="list"
           aria-label="Board lists"
         >
-          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
-            <div className="flex h-full min-h-0 w-max min-w-full flex-row items-stretch gap-5 bg-transparent">
-              <StatusLabelColumn
-                visibleStatuses={visibleStatuses}
-                weights={weights}
-                adjustAt={adjustAt}
-                flushWeights={flushWeights}
-                splittersDisabled={reorder.isPending}
-              />
-              <SortableContext
-                items={localListIds}
-                strategy={horizontalListSortingStrategy}
-              >
-                <div className="flex min-h-0 flex-row gap-4">
-                  {localListIds.map((id) => (
-                    <BoardListColumn
-                      key={id}
-                      board={board}
-                      listId={id}
-                      visibleStatuses={visibleStatuses}
-                      weights={weights}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-              <AddListSlot boardId={board.id} />
-            </div>
+          <div className="flex h-full min-h-0 w-max min-w-full shrink-0 flex-row items-stretch gap-5 bg-transparent">
+            <StatusLabelColumn
+              visibleStatuses={visibleStatuses}
+              weights={weights}
+              adjustAt={adjustAt}
+              flushWeights={flushWeights}
+              splittersDisabled={reorder.isPending}
+            />
+            <SortableContext
+              items={localListIds}
+              strategy={horizontalListSortingStrategy}
+            >
+              <div className="flex min-h-0 flex-row gap-4">
+                {localListIds.map((id) => (
+                  <BoardListColumn
+                    key={id}
+                    board={board}
+                    listId={id}
+                    visibleStatuses={visibleStatuses}
+                    weights={weights}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            <AddListSlot boardId={board.id} />
           </div>
         </div>
         <DragOverlay dropAnimation={null} zIndex={60}>

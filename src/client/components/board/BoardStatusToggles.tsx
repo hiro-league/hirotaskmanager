@@ -1,5 +1,5 @@
 import { useUpdateBoard } from "@/api/mutations";
-import type { Board } from "../../../shared/models";
+import { TASK_STATUSES, type Board } from "../../../shared/models";
 import { cn } from "@/lib/utils";
 import {
   bandWeightsForBoard,
@@ -24,7 +24,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       if (current.length <= 1) return;
       nextVis = current.filter((s) => s !== status);
     } else {
-      nextVis = board.statusDefinitions.filter(
+      nextVis = TASK_STATUSES.filter(
         (s) => current.includes(s) || s === status,
       );
     }
@@ -50,7 +50,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       aria-label="Show or hide task statuses"
     >
       <span className="text-xs font-medium text-muted-foreground">Statuses</span>
-      {board.statusDefinitions.map((status) => {
+      {TASK_STATUSES.map((status) => {
         const active = visibleStatusesForBoard(board).includes(status);
         return (
           <button

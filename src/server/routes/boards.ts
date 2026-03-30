@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
+import { DEFAULT_BOARD_COLOR } from "../../shared/boardColor";
 import {
-  DEFAULT_STATUS_DEFINITIONS,
-  DEFAULT_TASK_GROUPS,
+  createDefaultTaskGroups,
+  TASK_STATUSES,
   normalizeBoardFromJson,
   type Board,
 } from "../../shared/models";
@@ -20,14 +21,14 @@ import {
 } from "../storage";
 
 function newBoardDocument(id: string, name: string, now: string): Board {
-  const taskGroups = [...DEFAULT_TASK_GROUPS];
-  const statusDefinitions = [...DEFAULT_STATUS_DEFINITIONS];
+  const taskGroups = createDefaultTaskGroups();
   return {
     id,
     name,
     taskGroups,
-    statusDefinitions,
-    visibleStatuses: [...statusDefinitions],
+    visibleStatuses: [...TASK_STATUSES],
+    boardLayout: "stacked",
+    boardColor: DEFAULT_BOARD_COLOR,
     showCounts: true,
     lists: [],
     tasks: [],

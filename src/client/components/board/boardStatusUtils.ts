@@ -1,31 +1,20 @@
-import type { Board } from "../../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  TASK_STATUSES,
+  type Board,
+  type Task,
+  type TaskStatus,
+} from "../../../shared/models";
 
-/** Stable light tint per status string — rail + matching list band (no borders needed). */
-export function statusBandSurfaceClass(status: string): string {
-  const palette = [
-    "bg-sky-500/[0.08] dark:bg-sky-400/[0.12]",
-    "bg-emerald-500/[0.08] dark:bg-emerald-400/[0.12]",
-    "bg-amber-500/[0.08] dark:bg-amber-400/[0.12]",
-    "bg-violet-500/[0.08] dark:bg-violet-400/[0.12]",
-    "bg-rose-500/[0.08] dark:bg-rose-400/[0.12]",
-    "bg-cyan-500/[0.08] dark:bg-cyan-400/[0.12]",
-  ];
-  let h = 0;
-  for (let i = 0; i < status.length; i++) {
-    h = (h + status.charCodeAt(i) * (i + 1)) % palette.length;
-  }
-  return palette[h] ?? palette[0]!;
-}
-
-/** Statuses shown on the board, in definition order. */
+/** Statuses shown on the board, in fixed workflow order. */
 export function visibleStatusesForBoard(board: Board): string[] {
   const vis = board.visibleStatuses.filter((s) =>
-    board.statusDefinitions.includes(s),
+    (TASK_STATUSES as readonly string[]).includes(s),
   );
   if (vis.length > 0) {
-    return board.statusDefinitions.filter((s) => vis.includes(s));
+    return TASK_STATUSES.filter((s) => vis.includes(s));
   }
-  return [...board.statusDefinitions];
+  return [...TASK_STATUSES];
 }
 
 export function bandWeightsForBoard(board: Board): number[] {
@@ -54,4 +43,34 @@ export function weightsAfterVisibilityChange(
   const sum = raw.reduce((a, b) => a + b, 0) || 1;
   const target = nextStatuses.length;
   return raw.map((w) => (w / sum) * target);
+}
+
+function statusOrderIndex(status: TaskStatus): number {
+  const i = TASK_STATUSES.indexOf(status);
+  return i >= 0 ? i : 0;
+}
+
+/**
+ * Tasks for a list in stacked view: filter by visible statuses and active group,
+ * then sort by workflow order then band order.
+ */
+export function listTasksMergedSorted(
+  board: Board,
+  listId: string,
+  visibleStatuses: string[],
+  activeGroup: string,
+): Task[] {
+  const vis = new Set(visibleStatuses);
+  let tasks = board.tasks.filter(
+    (t) => t.listId === listId && vis.has(t.status),
+  );
+  if (activeGroup !== ALL_TASK_GROUPS) {
+    tasks = tasks.filter((t) => t.group === activeGroup);
+  }
+  return [...tasks].sort((a, b) => {
+    const da = statusOrderIndex(a.status);
+    const db = statusOrderIndex(b.status);
+    if (da !== db) return da - db;
+    return a.order - b.order;
+  });
 }

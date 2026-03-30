@@ -16,7 +16,7 @@ export function AppHeader() {
   };
 
   return (
-    <header className="flex h-12 w-full shrink-0 items-center justify-between border-b border-border bg-background px-4">
+    <header className="flex h-12 w-full shrink-0 items-center justify-between border-b border-header-border bg-header px-4">
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
@@ -26,7 +26,7 @@ export function AppHeader() {
           className={cn(
             "inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/70 text-foreground shadow-sm",
             "transition-[color,background-color,box-shadow] hover:bg-muted hover:shadow",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
             "active:translate-y-px active:shadow-sm",
           )}
         >

@@ -7,8 +7,9 @@ import {
   useUpdateBoard,
 } from "@/api/mutations";
 import { cn } from "@/lib/utils";
+import { boardPath } from "@/lib/boardPath";
 import { usePreferencesStore } from "@/store/preferences";
-import { useSelectionStore } from "@/store/selection";
+import { useMatch, useNavigate } from "react-router-dom";
 
 function boardCollapsedLabel(name: string): string {
   const trimmed = name.trim();
@@ -25,8 +26,9 @@ function boardCollapsedLabel(name: string): string {
 export function Sidebar() {
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
   const { data: boards = [], isLoading, isError, error } = useBoards();
-  const selectedBoardId = useSelectionStore((s) => s.selectedBoardId);
-  const setSelectedBoardId = useSelectionStore((s) => s.setSelectedBoardId);
+  const navigate = useNavigate();
+  const boardMatch = useMatch({ path: "/board/:boardId", end: true });
+  const selectedBoardId = boardMatch?.params.boardId ?? null;
   const createBoard = useCreateBoard();
   const updateBoard = useUpdateBoard();
   const deleteBoard = useDeleteBoard();
@@ -138,7 +140,7 @@ export function Sidebar() {
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
-                  onClick={() => setSelectedBoardId(b.id)}
+                  onClick={() => navigate(boardPath(b.id))}
                 >
                   {label}
                 </button>
@@ -205,7 +207,7 @@ export function Sidebar() {
                         "min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm",
                         !active && "hover:bg-sidebar-accent/50",
                       )}
-                      onClick={() => setSelectedBoardId(b.id)}
+                      onClick={() => navigate(boardPath(b.id))}
                       onDoubleClick={() => startRename(b.id, b.name)}
                     >
                       {b.name}

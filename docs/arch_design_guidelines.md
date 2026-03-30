@@ -12,9 +12,8 @@ Reference for future development. Update this file when architecture or scope ch
 
 Until the app is explicitly versioned or released for external users:
 
-- **No backward-compatibility promise** for the SQLite schema or API payloads. Breaking changes are allowed; during development it is acceptable to **delete `data/taskmanager.db`** and re-run migrations (and optional one-time JSON import) — see **`docs/sqlite_migration.md`**.
+- **No backward-compatibility promise** for the SQLite schema or API payloads. Breaking changes are allowed; during development it is acceptable to **delete `data/taskmanager.db`** and re-run migrations — see **`docs/sqlite_migration.md`** (historical note: one-time JSON import existed during migration; it has been **removed** from the codebase).
 - **Primary store:** SQLite (`board`, `list`, `task`, `task_group`, `status`, `board_view_prefs`). **Integer primary keys** for boards, lists, tasks, and task groups. Workflow **status** ids are strings (`open`, `in-progress`, …) from the seeded **`status`** table; the client loads labels and order via **`GET /api/statuses`**.
-- **Legacy JSON:** A startup import can migrate from `data/_index.json` + `data/boards/*.json` once when the DB is empty; sources are then archived (e.g. `boards_imported/`). **`normalizeBoardFromJson`** still applies **light coercion** for API/PUT payloads (unknown `groupId` → first group, invalid `status` → coerced). It is **not** a full migration framework.
 
 ## Investigation (open decisions / partial implementation)
 
@@ -30,7 +29,7 @@ Planned or described in earlier specs but **absent or incomplete** in the codeba
 
 3. **`GET /api/boards/:id/export`** — Markdown/JSON export with optional type/status filters; server route module (e.g. `export.ts`) and any client export UI.
 
-4. **Board vs client prefs** — **`taskGroups`** (`{ id, label }[]`) and **`visibleStatuses`** (subset of fixed workflow statuses) live on the **board document** and update via **PUT** + TanStack Query. **Which task group is active for filtering** (`ALL_TASK_GROUPS` = all groups, or a specific **group id**) is stored in **`src/client/store/preferences.ts`** (persisted to `localStorage`, keyed by board id). **Filter strip collapsed** is a **global** app preference in the same store. There is **no** `activeTaskType` (or similar) field on the board.
+4. **Board vs client prefs** — **`taskGroups`** (`{ id, label }[]`) and **`visibleStatuses`** (subset of workflow statuses) are part of the **assembled board** from the API and update via **granular `PATCH` routes** + TanStack Query. **Which task group is active for filtering** (`ALL_TASK_GROUPS` = all groups, or a specific **group id**) is stored in **`src/client/store/preferences.ts`** (persisted to `localStorage`, keyed by board id). **Filter strip collapsed** is a **global** app preference in the same store. There is **no** `activeTaskType` (or similar) field on the board.
 
 - **Other plan gaps** — e.g. full board settings beyond task groups, shared `ExportDialog`, etc., may still be missing; treat the repo as source of truth and extend this list when you add features.
 
@@ -48,7 +47,7 @@ Browser-based, **local-only** task board: SQLite persistence with **list columns
 | Build | Vite (see `package.json` for current major version) |
 | Styling | Tailwind CSS 4 + shadcn/ui |
 | Client routing | React Router (`react-router-dom`) — **which board is open** is defined by the URL (see [Client routing](#client-routing)); not duplicated in a board-selection store |
-| Client UI state | Zustand: **`store/preferences.ts`** (theme, sidebar, **task group filter per board**, **board filter strip collapsed**); definitions on the board (`taskGroups`, `visibleStatuses`) via TanStack Query + PUT |
+| Client UI state | Zustand: **`store/preferences.ts`** (theme, sidebar, **task group filter per board**, **board filter strip collapsed**); board fields (`taskGroups`, `visibleStatuses`, etc.) via TanStack Query + granular board API |
 | Server / remote state | TanStack Query v5 (caching, optimistic updates) |
 | Drag & drop | @dnd-kit — patterns in [`docs/drag_drop.md`](drag_drop.md) |
 | Markdown | `@uiw/react-md-editor` (edit), `react-markdown` (preview) |
@@ -162,20 +161,16 @@ interface Task {
 }
 ```
 
-**Guideline:** The API still returns a **single assembled `Board`** document (lists + tasks + view prefs) for convenience. **`normalizeBoardFromJson`** coerces invalid `status` and unknown `groupId` when parsing PUT/GET payloads. Filtering by group/status uses a simple `.filter()` without deep nesting. Optional **tags** for finer labels are a possible future addition; they are not the same as workflow status.
+**Guideline:** The API returns a **single assembled `Board`** document (lists + tasks + view prefs) from **`GET /api/boards/:id`**. Mutations use **granular** routes (`PATCH` view-prefs, lists, tasks, etc.); the server validates workflow **status** ids against the `status` table. Filtering by group/status uses a simple `.filter()` without deep nesting. Optional **tags** for finer labels are a possible future addition; they are not the same as workflow status.
 
 ## Persistence (SQLite)
 
 ```
 data/
   taskmanager.db           # SQLite — boards, lists, tasks, groups, statuses, view prefs
-  _index.json              # Optional: present only before/during one-time JSON import
-  boards/                  # Optional: legacy JSON sources for import
-  boards_imported/         # Archived JSON after successful import (if used)
 ```
 
 - **`src/server/db.ts`** opens the DB file and enables foreign keys; **`src/server/migrations/`** applies schema versions.
-- **`src/server/import.ts`** runs **once** when `board` is empty and catalog JSON exists (see **`docs/sqlite_migration.md`**).
 - Data directory: `DATA_DIR` env var, else `./data` (dev) or `~/.taskmanager/data` (production).
 
 ## API Routes
@@ -200,7 +195,6 @@ Implemented today: list/create/read/update/delete boards. **Export is not implem
 | PATCH | `/api/boards/:id/tasks/:taskId` | Update task |
 | DELETE | `/api/boards/:id/tasks/:taskId` | Delete task |
 | PUT | `/api/boards/:id/tasks/reorder` | Reorder tasks within a list+status band |
-| PUT | `/api/boards/:id` | Monolithic update (optional; granular routes preferred) |
 | DELETE | `/api/boards/:id` | Delete board row (cascades) |
 
 Implement routes under `src/server/routes/`; keep I/O in `storage.ts`.
@@ -248,7 +242,6 @@ taskmanager/
     server/
       index.ts
       db.ts
-      import.ts
       migrations/
       routes/
         boards.ts
@@ -278,7 +271,7 @@ taskmanager/
     taskmanager.db
 ```
 
-See **`docs/sqlite_migration.md`** for schema, import, and Phase 2 API plans.
+See **`docs/sqlite_migration.md`** for schema history and API evolution notes.
 
 ## shadcn/ui primitives (`components/ui/`)
 

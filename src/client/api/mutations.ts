@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_BOARD_COLOR } from "../../shared/boardColor";
 import {
-  coerceTaskStatus,
   createDefaultTaskGroups,
   DEFAULT_STATUS_IDS,
   type Board,
@@ -108,49 +107,6 @@ export function useCreateBoard() {
       }
       qc.setQueryData<Board>(["boards", data.id], data);
       appNavigate(boardPath(data.id), { replace: true });
-    },
-  });
-}
-
-/** Monolithic board replace — prefer granular mutations; kept for compatibility. */
-export function useUpdateBoard() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (board: Board) => {
-      const res = await fetch(`/api/boards/${board.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(board),
-      });
-      return parseBoardResponse(res);
-    },
-    onMutate: async (board) => {
-      await qc.cancelQueries({ queryKey: ["boards"], exact: true });
-      const prevList = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
-      const prevDetail = qc.getQueryData<Board>(["boards", board.id]);
-      qc.setQueryData<BoardIndexEntry[]>(["boards"], (old) =>
-        (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === board.id ? { ...e, name: board.name } : e,
-        ),
-      );
-      qc.setQueryData<Board>(["boards", board.id], board);
-      return { prevList, prevDetail };
-    },
-    onError: (_err, board, ctx) => {
-      if (ctx?.prevList) {
-        qc.setQueryData<BoardIndexEntry[]>(["boards"], ctx.prevList);
-      }
-      if (ctx?.prevDetail !== undefined) {
-        qc.setQueryData<Board>(["boards", board.id], ctx.prevDetail);
-      }
-    },
-    onSuccess: (data) => {
-      qc.setQueryData<BoardIndexEntry[]>(["boards"], (old) =>
-        (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === data.id ? { ...e, name: data.name } : e,
-        ),
-      );
-      qc.setQueryData<Board>(["boards", data.id], data);
     },
   });
 }
@@ -461,7 +417,7 @@ export function useCreateTask() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           listId: input.listId,
-          status: coerceTaskStatus(input.status),
+          status: input.status,
           title: input.title,
           body: input.body,
           groupId: input.groupId,
@@ -483,7 +439,7 @@ export function useCreateTask() {
         title: input.title,
         body: input.body,
         groupId: input.groupId,
-        status: coerceTaskStatus(input.status),
+        status: input.status,
         order: maxOrder + 1,
         createdAt: now,
         updatedAt: now,

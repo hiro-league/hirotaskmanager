@@ -561,11 +561,10 @@ Added:
   src/server/migrations/                   -- Migration scripts directory
   src/server/migrations/001_initial.ts     -- Initial schema creation + seed
   src/server/migrations/runner.ts          -- Migration runner (reads _meta, applies pending)
-  src/server/import.ts                     -- One-time JSON → SQLite import with ID mapping
 
 Changed:
-  src/server/storage.ts                    -- Gutted and rewritten: SQL queries replace JSON I/O
-  src/server/index.ts                      -- Startup: openDb + runMigrations + importFromJson
+  src/server/storage.ts                    -- SQL queries + granular board operations
+  src/server/index.ts                      -- Startup: ensureDataDir + getDb + runMigrations
   src/server/routes/boards.ts              -- Route handlers use new storage functions
   src/shared/models.ts                     -- Remove normalization; add Status type;
                                               change id fields from string to number
@@ -580,9 +579,8 @@ Removed (after migration verified):
   data/boards/*.json                       -- Replaced by taskmanager.db
   nanoid (dependency)                      -- No longer needed
 
-Archived (by import routine):
-  data/boards/ → data/boards_imported/     -- Preserved for rollback
-  data/_index.json → data/_index.imported.json
+Removed (post-migration cleanup):
+  src/server/import.ts                     -- One-time JSON import (deleted; no longer shipped)
 
 No changes:
   src/client/store/preferences.ts          -- localStorage prefs unchanged (self-heals, see 5f)
@@ -611,12 +609,11 @@ Following the project's bottom-up discipline:
 12. **Test** — Verify existing UI works identically against the new backend. Confirm localStorage self-heals (section 5f).
 13. **Phase 2** — Granular endpoints + client mutation updates (can be done incrementally).
 
-**Progress (main branch):** Steps **1–11** are implemented (SQLite storage, import, integer IDs, `GET /api/statuses`, `useStatuses()` / workflow order, **`nanoid` removed** from `package.json`). **Step 13 (Phase 2)** — granular REST endpoints and client hooks are implemented: `PATCH` view-prefs / groups / board name, list and task CRUD + reorder routes, `usePatchBoardViewPrefs`, `usePatchBoardName`, `usePatchBoardTaskGroups`, and list/task mutations calling the new APIs. Monolithic **`PUT /api/boards/:id`** remains available; **`normalizeBoardFromJson`** / **`coerceTaskStatus`** still used for that path and for `GET` response parsing. Step **12** is ongoing manual QA.
+**Progress (main branch):** Steps **1–11** and **Phase 2 (step 13)** are done: SQLite, migrations, granular REST + client hooks, integer IDs, `GET /api/statuses` / `useStatuses()`. **Post-migration cleanup:** legacy **JSON import** (`src/server/import.ts`) and **monolithic `PUT /api/boards/:id`** are **removed**. **`normalizeBoardFromJson`** and related client parsing helpers are **removed**; `GET` responses are typed as **`Board`** directly. **`coerceTaskStatus`** remains **server-side** in `storage.ts` for validation. Step **12** (QA) is ongoing as needed.
 
 ---
 
 ## 12. Rollback / Safety
 
-- The JSON import is non-destructive: original files are renamed to `data/boards_imported/`, not deleted, until the migration is verified.
-- The `_meta` table tracks schema version; rolling back means restoring the DB file from backup (single file copy).
-- During early development the "no backward-compatibility promise" still applies — it's acceptable to delete the DB and re-import from JSON if the schema changes.
+- The `_meta` table tracks schema version; rolling back means restoring the **`taskmanager.db`** file from backup (single file copy).
+- During early development the "no backward-compatibility promise" still applies — it's acceptable to **delete `data/taskmanager.db`** and re-run migrations if the schema changes (there is no in-app JSON re-import).

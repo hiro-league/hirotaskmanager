@@ -2,19 +2,14 @@ import path from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { getDb, runMigrations } from "./db";
-import { importFromJsonIfNeeded } from "./import";
 import { boardsRoute } from "./routes/boards";
 import { statusesRoute } from "./routes/statuses";
 import { ensureDataDir } from "./storage";
 
-/**
- * Startup sequence (docs/sqlite_migration §5d):
- * ensure data dir → open/create SQLite → apply migrations → import legacy JSON if DB empty.
- */
+/** Startup: ensure data dir → open/create SQLite → apply migrations. */
 await ensureDataDir();
 getDb();
 runMigrations();
-await importFromJsonIfNeeded();
 
 const isProd = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT) || 3001;

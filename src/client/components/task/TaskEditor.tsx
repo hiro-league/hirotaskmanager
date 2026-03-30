@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { Board, Task } from "../../../shared/models";
-import { ALL_TASK_GROUPS, coerceTaskStatus } from "../../../shared/models";
+import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
@@ -80,10 +80,7 @@ export function TaskEditor({
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
-        status: coerceTaskStatus(
-          status.trim() || createContext.status,
-          workflowOrder,
-        ),
+        status: status.trim() || createContext.status,
         title: trimmedTitle,
         body,
         groupId: gid,
@@ -97,7 +94,7 @@ export function TaskEditor({
           title: trimmedTitle,
           body,
           groupId: gid,
-          status: coerceTaskStatus(status.trim() || task.status, workflowOrder),
+          status: status.trim() || task.status,
           updatedAt: now,
         },
       });
@@ -115,7 +112,6 @@ export function TaskEditor({
     createTask,
     updateTask,
     onClose,
-    workflowOrder,
   ]);
 
   const handleDelete = useCallback(async () => {

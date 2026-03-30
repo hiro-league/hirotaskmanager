@@ -1,7 +1,4 @@
-import {
-  type BoardColorPreset,
-  parseBoardColor,
-} from "./boardColor";
+import type { BoardColorPreset } from "./boardColor";
 
 /** Workflow status row from `GET /api/statuses` / `status` table. */
 export interface Status {
@@ -60,62 +57,12 @@ export function groupLabelForId(
   return groups.find((g) => g.id === groupId)?.label ?? String(groupId);
 }
 
-function parseId(raw: unknown): number {
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string" && raw.length > 0) {
-    const n = Number(raw);
-    if (Number.isFinite(n)) return n;
-  }
-  return 0;
-}
-
-/** When `taskGroups` is omitted (e.g. partial JSON), use defaults; when API sends `[]`, keep empty. */
-function parseTaskGroupsFromRaw(rawTaskGroups: unknown): GroupDefinition[] {
-  if (rawTaskGroups === undefined || rawTaskGroups === null) {
-    return createDefaultTaskGroups();
-  }
-  if (!Array.isArray(rawTaskGroups)) {
-    return createDefaultTaskGroups();
-  }
-  if (rawTaskGroups.length === 0) {
-    return [];
-  }
-
-  if (typeof rawTaskGroups[0] === "string") {
-    return (rawTaskGroups as string[]).map((rawLabel, index) => ({
-      id: index,
-      label: String(rawLabel).trim() || "group",
-    }));
-  }
-
-  const out: GroupDefinition[] = [];
-  for (let index = 0; index < rawTaskGroups.length; index++) {
-    const item = rawTaskGroups[index];
-    if (!item || typeof item !== "object") continue;
-    const rec = item as Record<string, unknown>;
-    const label = typeof rec.label === "string" ? rec.label.trim() : "";
-    if (!label) continue;
-    const id =
-      rec.id !== undefined && rec.id !== null
-        ? parseId(rec.id)
-        : index;
-    out.push({ id, label });
-  }
-  return out.length > 0 ? out : createDefaultTaskGroups();
-}
-
-/** Coerce to a valid status id; defaults to the first entry in `allowedIds`. */
+/** Coerce to a valid status id; defaults to the first entry in `allowedIds`. Used server-side. */
 export function coerceTaskStatus(
   raw: string,
   allowedIds: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): string {
   return allowedIds.includes(raw) ? raw : (allowedIds[0] ?? "open");
-}
-
-function resolveGroupId(raw: number, groups: GroupDefinition[]): number {
-  if (groups.length === 0) return raw;
-  if (groups.some((g) => g.id === raw)) return raw;
-  return groups[0]!.id;
 }
 
 export interface List {
@@ -179,94 +126,3 @@ export function resolvedBoardLayout(board: Board): BoardLayout {
 
 /** Persisted client preference: show tasks from every group. */
 export const ALL_TASK_GROUPS = "__all__" as const;
-
-/** Normalize a task from disk/API. */
-export function normalizeTask(
-  raw: Record<string, unknown>,
-  fallbackGroupId: number,
-): Omit<Task, "status"> & { status: string } {
-  const groupRaw = raw.groupId ?? raw.group;
-  const groupId =
-    typeof groupRaw === "number"
-      ? groupRaw
-      : parseId(groupRaw) || fallbackGroupId;
-  return {
-    id: parseId(raw.id),
-    listId: parseId(raw.listId),
-    title: typeof raw.title === "string" ? raw.title : "",
-    body: typeof raw.body === "string" ? raw.body : "",
-    groupId,
-    status: typeof raw.status === "string" ? raw.status : "",
-    order: typeof raw.order === "number" ? raw.order : 0,
-    color: typeof raw.color === "string" ? raw.color : undefined,
-    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
-    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
-  };
-}
-
-/** Normalize board JSON from disk/API into the current `Board` shape. */
-export function normalizeBoardFromJson(raw: Record<string, unknown>): Board {
-  const taskGroups = parseTaskGroupsFromRaw(raw.taskGroups);
-  const fallbackGroupId = taskGroups[0]?.id ?? 0;
-
-  const tasksRaw = Array.isArray(raw.tasks) ? raw.tasks : [];
-  const tasks: Task[] = tasksRaw.map((t) => {
-    const nt = normalizeTask(t as Record<string, unknown>, fallbackGroupId);
-    const status = coerceTaskStatus(nt.status);
-    const groupId = resolveGroupId(nt.groupId, taskGroups);
-    return {
-      ...nt,
-      status,
-      groupId,
-    };
-  });
-
-  const listsRaw = Array.isArray(raw.lists) ? raw.lists : [];
-  const lists: List[] = listsRaw.map((l) => {
-    const rec = l as Record<string, unknown>;
-    return {
-      id: parseId(rec.id),
-      name: typeof rec.name === "string" ? rec.name : "",
-      order: typeof rec.order === "number" ? rec.order : 0,
-      color: typeof rec.color === "string" ? rec.color : undefined,
-    };
-  });
-
-  const allowed = DEFAULT_STATUS_IDS as readonly string[];
-  const visibleStatusesRaw = Array.isArray(raw.visibleStatuses)
-    ? [...(raw.visibleStatuses as string[])]
-    : [...allowed];
-  const visibleStatuses = visibleStatusesRaw.filter((s) => allowed.includes(s));
-  const visibleStatusesFinal =
-    visibleStatuses.length > 0 ? visibleStatuses : [...allowed];
-
-  const layoutRaw = raw.boardLayout;
-  const boardLayout: BoardLayout | undefined =
-    layoutRaw === "stacked" || layoutRaw === "lanes"
-      ? layoutRaw
-      : undefined;
-
-  const boardColor = parseBoardColor(raw.boardColor);
-
-  return {
-    id: parseId(raw.id),
-    slug: typeof raw.slug === "string" ? raw.slug : undefined,
-    name: typeof raw.name === "string" ? raw.name : "",
-    backgroundImage:
-      typeof raw.backgroundImage === "string"
-        ? raw.backgroundImage
-        : undefined,
-    boardColor,
-    taskGroups,
-    visibleStatuses: visibleStatusesFinal,
-    statusBandWeights: Array.isArray(raw.statusBandWeights)
-      ? [...(raw.statusBandWeights as number[])]
-      : undefined,
-    boardLayout,
-    showCounts: Boolean(raw.showCounts),
-    lists,
-    tasks,
-    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
-    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
-  };
-}

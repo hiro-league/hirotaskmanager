@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DEFAULT_STATUS_IDS,
-  normalizeBoardFromJson,
   statusIdsInWorkflowOrder,
   type Board,
   type BoardIndexEntry,
@@ -19,8 +18,7 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 }
 
 export async function fetchBoard(id: string | number): Promise<Board> {
-  const raw = await fetchJson<Record<string, unknown>>(`/api/boards/${id}`);
-  return normalizeBoardFromJson(raw);
+  return fetchJson<Board>(`/api/boards/${id}`);
 }
 
 /**

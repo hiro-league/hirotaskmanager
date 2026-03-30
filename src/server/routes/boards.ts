@@ -1,9 +1,5 @@
 import { Hono } from "hono";
-import {
-  normalizeBoardFromJson,
-  type Board,
-  type GroupDefinition,
-} from "../../shared/models";
+import type { Board, GroupDefinition } from "../../shared/models";
 import {
   createBoardWithDefaults,
   createListOnBoard,
@@ -20,11 +16,8 @@ import {
   patchListOnBoard,
   patchTaskOnBoard,
   readBoardIndex,
-  renameBoardFile,
   reorderListsOnBoard,
   reorderTasksInBand,
-  slugForId,
-  writeBoardAtomic,
 } from "../storage";
 
 export const boardsRoute = new Hono();
@@ -313,50 +306,6 @@ boardsRoute.get("/:id", async (c) => {
   const board = loadBoard(entry.id);
   if (!board) return c.json({ error: "Board not found" }, 404);
   return c.json(board);
-});
-
-boardsRoute.put("/:id", async (c) => {
-  const param = c.req.param("id");
-  const entry = await entryByIdOrSlug(param);
-  if (!entry) return c.json({ error: "Board not found" }, 404);
-  const id = entry.id;
-  let board: Board;
-  try {
-    const raw = (await c.req.json()) as Record<string, unknown>;
-    board = normalizeBoardFromJson(raw);
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
-  if (board.id !== id) {
-    return c.json({ error: "Body id must match URL" }, 400);
-  }
-  const existing = loadBoard(id);
-  if (!existing) return c.json({ error: "Board not found" }, 404);
-
-  const oldSlug = await slugForId(String(id));
-  if (!oldSlug) return c.json({ error: "Board slug not found" }, 500);
-
-  const nameChanged = existing.name !== board.name;
-  const newSlug = nameChanged
-    ? await generateSlug(board.name, String(id))
-    : oldSlug;
-
-  if (nameChanged) {
-    await renameBoardFile(oldSlug, newSlug);
-  }
-
-  const now = new Date().toISOString();
-  const next: Board = {
-    ...board,
-    createdAt: existing.createdAt,
-    updatedAt: now,
-  };
-  await writeBoardAtomic(next, newSlug);
-  const saved = loadBoard(id);
-  if (!saved) {
-    return c.json({ error: "Board missing after write" }, 500);
-  }
-  return c.json(saved);
 });
 
 boardsRoute.delete("/:id", async (c) => {

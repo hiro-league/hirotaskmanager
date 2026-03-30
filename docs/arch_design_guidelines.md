@@ -19,7 +19,7 @@ Until the app is explicitly versioned or released for external users:
 
 These items remain open. (Numbering preserved from the original architecture review.)
 
-8. **Project layout vs. code** — Guidelines below list the **current** notable paths. Reconcile occasionally: e.g. board data hooks live in **`src/client/api/queries.ts`** (`useBoard`, `useBoards`), not a separate `hooks/useBoard.ts`; board drag-and-drop is implemented in **`BoardColumns.tsx`** (see [Drag & drop](#drag--drop)). New files should extend this structure rather than reintroducing obsolete plan names unless there is a deliberate refactor.
+8. **Project layout vs. code** — Guidelines below list the **current** notable paths. Reconcile occasionally: e.g. board data hooks live in **`src/client/api/queries.ts`** (`useBoard`, `useBoards`), not a separate `hooks/useBoard.ts`; mutation hooks are grouped by entity under **`src/client/api/mutations/`** (barrel **`index.ts`**); board drag-and-drop is implemented in **`BoardColumns.tsx`** (see [Drag & drop](#drag--drop)). New files should extend this structure rather than reintroducing obsolete plan names unless there is a deliberate refactor.
 
 9. **Dependencies** — Keep **`package.json`** aligned with what this doc claims (e.g. major versions). Periodically review upgrades (Vite, React, Hono, TanStack Query, @dnd-kit), security advisories, and whether dev-only tools (`concurrently`, `npx bun` in scripts) match how contributors run the repo.
 
@@ -67,7 +67,7 @@ graph LR
 
   subgraph server [Bun Process]
     Hono["Hono Server"]
-    Storage["storage.ts"]
+    Storage["storage/"]
     DBLayer["db.ts + migrations"]
     Hono --> Storage
     Storage --> DBLayer
@@ -87,7 +87,7 @@ graph LR
 
 **Data directory:** Configurable via `DATA_DIR` env var. Defaults to `./data` in development, `~/.taskmanager/data` in production.
 
-**Server role:** Thin API layer — routes delegate to **`storage.ts`** (SQLite queries + transactions). No heavy domain logic in route handlers.
+**Server role:** Thin API layer — routes delegate to **`src/server/storage/`** (SQLite queries + transactions). No heavy domain logic in route handlers.
 
 ## Client routing
 
@@ -197,7 +197,7 @@ Implemented today: list/create/read/update/delete boards. **Export is not implem
 | PUT | `/api/boards/:id/tasks/reorder` | Reorder tasks within a list+status band |
 | DELETE | `/api/boards/:id` | Delete board row (cascades) |
 
-Implement routes under `src/server/routes/`; keep I/O in `storage.ts`.
+Implement routes under `src/server/routes/`; keep I/O in `src/server/storage/`.
 
 ## UI: list columns and status bands
 
@@ -246,13 +246,18 @@ taskmanager/
       routes/
         boards.ts
         statuses.ts
-      storage.ts
+      storage/
     client/
       main.tsx
       App.tsx
       api/
-        queries.ts              # useBoards, useBoard, useStatuses, fetch helpers
-        mutations.ts
+        queries.ts              # useBoards, useBoard, useStatuses, fetchJson, boardKeys, boardDetailQueryKey
+        mutations/
+          index.ts              # re-exports mutation hooks
+          board.ts              # board CRUD, view prefs, task groups
+          lists.ts              # lists + list reorder
+          tasks.ts              # task CRUD
+          shared.ts             # tempNumericId (optimistic client ids)
       store/
         preferences.ts          # theme, sidebar, task group filter per board, filter strip collapsed
       components/
@@ -285,7 +290,7 @@ When adding large features, prefer:
 
 1. Shared types (`src/shared/models.ts`)
 2. Server storage + routes
-3. Client API layer (Query + mutations)
+3. Client API layer (`queries.ts` + `mutations/*` — add entity files under `mutations/` as the API grows)
 4. Core board UI (list columns + bands)
 5. Interaction (DnD per `docs/drag_drop.md`, inline edits)
 6. Settings, export, polish

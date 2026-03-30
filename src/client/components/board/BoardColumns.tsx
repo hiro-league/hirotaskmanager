@@ -1,52 +1,22 @@
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  MeasuringStrategy,
-  PointerSensor,
-  closestCenter,
-  pointerWithin,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
+import { DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Board } from "../../../shared/models";
-import { useCreateList, usePatchBoardViewPrefs, useReorderLists } from "@/api/mutations";
-import { useStatusWorkflowOrder } from "@/api/queries";
+import { useCreateList, usePatchBoardViewPrefs } from "@/api/mutations";
+import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import {
   bandWeightsForBoard,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import { BoardListColumn, BoardListColumnOverlay } from "./BoardListColumn";
 import { StatusLabelColumn } from "./StatusLabelColumn";
+import { useHorizontalListReorder } from "./useHorizontalListReorder";
 
 interface BoardColumnsProps {
   board: Board;
 }
-
-function sortedListIds(board: Board): number[] {
-  return [...board.lists]
-    .sort((a, b) => a.order - b.order)
-    .map((l) => l.id);
-}
-
-const listCollision: CollisionDetection = (args) => {
-  const hits = pointerWithin(args);
-  if (hits.length > 0) return hits;
-  return closestCenter(args);
-};
 
 export function AddListSlot({
   boardId,
@@ -147,28 +117,24 @@ export function AddListSlot({
 export function BoardColumns({ board }: BoardColumnsProps) {
   const qc = useQueryClient();
   const patchViewPrefs = usePatchBoardViewPrefs();
-  const reorder = useReorderLists();
   const workflowOrder = useStatusWorkflowOrder();
+
+  const {
+    localListIds,
+    activeId,
+    sensors,
+    listCollision,
+    onDragStart,
+    onDragOver,
+    onDragEnd,
+    onDragCancel,
+    reorderPending,
+  } = useHorizontalListReorder(board);
 
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
-
-  const serverListIds = useMemo(() => sortedListIds(board), [board]);
-
-  const [localListIds, setLocalListIds] = useState(serverListIds);
-  const localListIdsRef = useRef(localListIds);
-  localListIdsRef.current = localListIds;
-
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const isDraggingRef = useRef(false);
-
-  useEffect(() => {
-    if (!isDraggingRef.current) {
-      setLocalListIds(serverListIds);
-    }
-  }, [serverListIds]);
 
   const [weights, setWeights] = useState<number[]>(() =>
     bandWeightsForBoard(board, workflowOrder),
@@ -187,7 +153,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   }, [board.id, visKey, weightsSyncKey, workflowOrder]);
 
   const flushWeights = useCallback(() => {
-    const b = qc.getQueryData<Board>(["boards", board.id]);
+    const b = qc.getQueryData<Board>(boardKeys.detail(board.id));
     if (!b) return;
     const w = weightsRef.current;
     const vis = visibleStatusesForBoard(b, workflowOrder);
@@ -219,64 +185,6 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     });
   }, []);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-      disabled: reorder.isPending,
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-      disabled: reorder.isPending,
-    }),
-  );
-
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    isDraggingRef.current = true;
-    setActiveId(Number(event.active.id));
-  }, []);
-
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
-      const { active, over } = event;
-      if (over == null) return;
-      const aid = Number(active.id);
-      const oid = Number(over.id);
-      if (aid === oid) return;
-
-      setLocalListIds((prev) => {
-        const oldIndex = prev.indexOf(aid);
-        const newIndex = prev.indexOf(oid);
-        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev;
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    },
-    [],
-  );
-
-  const handleDragEnd = useCallback(
-    (_event: DragEndEvent) => {
-      isDraggingRef.current = false;
-      setActiveId(null);
-
-      const finalOrder = localListIdsRef.current;
-      const serverOrder = sortedListIds(boardRef.current);
-
-      if (finalOrder.join(",") === serverOrder.join(",")) return;
-
-      reorder.mutate({
-        boardId: boardRef.current.id,
-        orderedListIds: finalOrder,
-      });
-    },
-    [reorder],
-  );
-
-  const handleDragCancel = useCallback(() => {
-    isDraggingRef.current = false;
-    setActiveId(null);
-    setLocalListIds(sortedListIds(boardRef.current));
-  }, []);
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <DndContext
@@ -285,10 +193,10 @@ export function BoardColumns({ board }: BoardColumnsProps) {
         measuring={{
           droppable: { strategy: MeasuringStrategy.Always },
         }}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
       >
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col items-start"
@@ -301,7 +209,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               weights={weights}
               adjustAt={adjustAt}
               flushWeights={flushWeights}
-              splittersDisabled={reorder.isPending}
+              splittersDisabled={reorderPending}
             />
             <SortableContext
               items={localListIds}

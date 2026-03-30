@@ -22,6 +22,15 @@ export async function fetchBoard(id: string | number): Promise<Board> {
 }
 
 /**
+ * Stable TanStack Query keys for the board index and board detail (numeric id).
+ * Use for mutations, `getQueryData` / `setQueryData`, and list queries (`[...boardKeys.all, key]`).
+ */
+export const boardKeys = {
+  all: ["boards"] as const,
+  detail: (id: number) => ["boards", id] as const,
+};
+
+/**
  * React Query detail key must match board mutation cache writes (`board.id` is always a number).
  * URL params from `useParams` are numeric strings, which would otherwise key as `["boards","1"]`
  * while mutations use `["boards",1]` — updates never hit the subscribed query.
@@ -41,7 +50,7 @@ export async function fetchStatuses(): Promise<Status[]> {
 
 export function useBoards() {
   return useQuery({
-    queryKey: ["boards"],
+    queryKey: boardKeys.all,
     queryFn: () => fetchJson<BoardIndexEntry[]>("/api/boards"),
   });
 }
@@ -49,7 +58,7 @@ export function useBoards() {
 export function useBoard(id: string | number | null) {
   const key = boardDetailQueryKey(id);
   return useQuery({
-    queryKey: ["boards", key],
+    queryKey: [...boardKeys.all, key],
     queryFn: () => fetchBoard(id!),
     enabled: key != null,
   });

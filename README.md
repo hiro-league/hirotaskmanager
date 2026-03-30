@@ -28,6 +28,24 @@ Use **either** Bun **or** Node.js — you do not need both.
 
 Work in the **repository root** (`taskmanager/`).
 
+### Interactive script (Bun — Git Bash, WSL, macOS, Linux)
+
+If you use a Bash shell, the repo includes **`run-prod.sh`**, which:
+
+- Checks that **Bun** is on your `PATH` (install from [bun.sh](https://bun.sh) if not)
+- Optionally runs **`bun install`** and **`bun run build`**
+- Prompts for **port** (default **8080**) and **data folder** under the repo (default **`hirodata`**, i.e. `<repo>/hirodata`)
+- Sets `NODE_ENV=production`, `PORT`, and `DATA_DIR`, then runs **`bun src/server/index.ts`**
+
+```bash
+chmod +x run-prod.sh
+./run-prod.sh
+```
+
+On Windows Git Bash you can also run `bash run-prod.sh` without `chmod`.
+
+Open **http://localhost:8080** (or the port you entered). For manual commands without the script, see below.
+
 ### Option A — Bun only
 
 1. Install Bun: [bun.sh](https://bun.sh) (macOS, Linux, and Windows instructions are on that page).

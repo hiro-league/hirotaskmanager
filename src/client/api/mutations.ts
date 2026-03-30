@@ -48,24 +48,6 @@ export function useCreateBoard() {
       /** Only cancel the board index query — not `["boards", id]` detail queries. */
       await qc.cancelQueries({ queryKey: ["boards"], exact: true });
       const previous = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
-      // #region agent log
-      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "bfa499",
-        },
-        body: JSON.stringify({
-          sessionId: "bfa499",
-          runId: "post-fix",
-          hypothesisId: "H5",
-          location: "mutations.ts:useCreateBoard.onMutate",
-          message: "create board onMutate",
-          data: { prevListLen: previous?.length ?? -1 },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const previousPath = window.location.pathname;
       const optimisticId = nanoid();
       const name =
@@ -90,27 +72,6 @@ export function useCreateBoard() {
       return { previous, optimisticId, previousPath };
     },
     onError: (_err, _input, context) => {
-      // #region agent log
-      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "bfa499",
-        },
-        body: JSON.stringify({
-          sessionId: "bfa499",
-          runId: "post-fix",
-          hypothesisId: "H5",
-          location: "mutations.ts:useCreateBoard.onError",
-          message: "create board onError",
-          data: {
-            restoreTo: context?.previousPath ?? null,
-            hadOptimisticId: Boolean(context?.optimisticId),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (context?.previous) {
         qc.setQueryData<BoardIndexEntry[]>(["boards"], context.previous);
       }
@@ -140,24 +101,6 @@ export function useCreateBoard() {
       }
       qc.setQueryData<Board>(["boards", data.id], data);
       appNavigate(boardPath(data.id), { replace: true });
-      // #region agent log
-      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "bfa499",
-        },
-        body: JSON.stringify({
-          sessionId: "bfa499",
-          runId: "post-fix",
-          hypothesisId: "H5",
-          location: "mutations.ts:useCreateBoard.onSuccess",
-          message: "create board onSuccess",
-          data: { dataId: data.id, hadOptContext: Boolean(context?.optimisticId) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
     },
   });
 }
@@ -178,28 +121,6 @@ export function useUpdateBoard() {
       await qc.cancelQueries({ queryKey: ["boards"], exact: true });
       const prevList = qc.getQueryData<BoardIndexEntry[]>(["boards"]);
       const prevDetail = qc.getQueryData<Board>(["boards", board.id]);
-      // #region agent log
-      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "bfa499",
-        },
-        body: JSON.stringify({
-          sessionId: "bfa499",
-          runId: "post-fix",
-          hypothesisId: "H4",
-          location: "mutations.ts:useUpdateBoard.onMutate",
-          message: "update board onMutate",
-          data: {
-            boardId: board.id,
-            prevListLen: prevList?.length ?? -1,
-            hadPrevDetail: prevDetail !== undefined,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       qc.setQueryData<BoardIndexEntry[]>(["boards"], (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
           e.id === board.id ? { ...e, name: board.name } : e,
@@ -243,24 +164,6 @@ export function useDeleteBoard() {
       );
       qc.removeQueries({ queryKey: ["boards", id] });
       const selected = parseBoardIdFromPath(window.location.pathname);
-      // #region agent log
-      fetch("http://127.0.0.1:7317/ingest/4bca21ba-5670-416c-9bf6-209fed4aa1cb", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "bfa499",
-        },
-        body: JSON.stringify({
-          sessionId: "bfa499",
-          runId: "post-fix",
-          hypothesisId: "H1",
-          location: "mutations.ts:useDeleteBoard.onMutate",
-          message: "delete board onMutate",
-          data: { deleteId: id, selected, willClearSelection: selected === id },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (selected === id) {
         const remaining = (prevList ?? []).filter((e: BoardIndexEntry) => e.id !== id);
         if (remaining.length > 0) {

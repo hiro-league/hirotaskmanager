@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -7,19 +12,35 @@ import {
   type List,
   type Task,
 } from "../../../shared/models";
-import { useCreateTask } from "@/api/mutations";
+import { useCreateTask, useUpdateTask } from "@/api/mutations";
+import { useStatuses } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import { cn } from "@/lib/utils";
+import { parseTaskSortableId } from "./dndIds";
+import { SortableTaskRow } from "./SortableTaskRow";
 
 interface ListStatusBandProps {
   board: Board;
   list: List;
   status: string;
+  /** When set, this band is a droppable sortable container. */
+  containerId?: string;
+  /** Ordered sortable task IDs from the DnD state. */
+  sortableIds?: string[];
 }
 
-export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
+export function ListStatusBand({
+  board,
+  list,
+  status,
+  containerId,
+  sortableIds,
+}: ListStatusBandProps) {
   const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
 
   const tasks = useMemo(() => {
@@ -41,6 +62,25 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   createPendingRef.current = createTask.isPending;
+
+  const resolvedEditTask =
+    editingTask !== null
+      ? (board.tasks.find((t) => t.id === editingTask.id) ?? editingTask)
+      : null;
+
+  const completeFromList = (t: Task) => {
+    const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
+    const now = new Date().toISOString();
+    updateTask.mutate({
+      boardId: board.id,
+      task: {
+        ...t,
+        status: closedId,
+        updatedAt: now,
+        closedAt: t.closedAt ?? now,
+      },
+    });
+  };
 
   useEffect(() => {
     if (!adding) return;
@@ -95,16 +135,31 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-2">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-              onOpen={() => setEditingTask(task)}
-            />
-          ))}
-        </div>
+        {containerId != null && sortableIds != null ? (
+          <SortableBandContent
+            board={board}
+            containerId={containerId}
+            sortableIds={sortableIds}
+            completeFromList={completeFromList}
+            setEditingTask={setEditingTask}
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                onOpen={() => setEditingTask(task)}
+                onCompleteFromCircle={
+                  task.status === "open"
+                    ? () => completeFromList(task)
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
         {!adding && status === "open" ? (
           <button
             type="button"
@@ -169,8 +224,60 @@ export function ListStatusBand({ board, list, status }: ListStatusBandProps) {
         open={editingTask !== null}
         onClose={() => setEditingTask(null)}
         mode="edit"
-        task={editingTask ?? undefined}
+        task={resolvedEditTask ?? undefined}
       />
     </>
+  );
+}
+
+function SortableBandContent({
+  board,
+  containerId,
+  sortableIds,
+  completeFromList,
+  setEditingTask,
+}: {
+  board: Board;
+  containerId: string;
+  sortableIds: string[];
+  completeFromList: (t: Task) => void;
+  setEditingTask: (t: Task) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: containerId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-6 flex-col gap-2 rounded-md",
+        isOver && "bg-primary/[0.07] ring-1 ring-primary/15",
+      )}
+    >
+      <SortableContext
+        items={sortableIds}
+        strategy={verticalListSortingStrategy}
+      >
+        {sortableIds.map((sid) => {
+          const tid = parseTaskSortableId(sid);
+          const task =
+            tid != null ? board.tasks.find((t) => t.id === tid) : undefined;
+          if (!task) return null;
+          return (
+            <SortableTaskRow
+              key={sid}
+              sortableId={sid}
+              task={task}
+              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+              onOpen={() => setEditingTask(task)}
+              onCompleteFromCircle={
+                task.status === "open"
+                  ? () => completeFromList(task)
+                  : undefined
+              }
+            />
+          );
+        })}
+      </SortableContext>
+    </div>
   );
 }

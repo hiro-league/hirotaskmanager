@@ -8,6 +8,8 @@ import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { cn } from "@/lib/utils";
+import { boardListColumnOverlayShellClass } from "./boardDragOverlayShell";
+import { laneBandContainerId, sortableListId } from "./dndIds";
 
 interface ListColumnBodyProps {
   board: Board;
@@ -17,6 +19,7 @@ interface ListColumnBodyProps {
   weights: number[];
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
+  taskMap?: Record<string, string[]>;
 }
 
 function ListColumnBody({
@@ -27,6 +30,7 @@ function ListColumnBody({
   weights,
   dragAttributes,
   dragListeners,
+  taskMap,
 }: ListColumnBodyProps) {
   return (
     <>
@@ -37,27 +41,37 @@ function ListColumnBody({
         dragListeners={dragListeners}
       />
       <div className="flex min-h-0 flex-1 flex-col bg-transparent">
-        {visibleStatuses.map((status, i) => (
-          <div
-            key={status}
-            style={{
-              flexGrow: weights[i] ?? 1,
-              flexShrink: 1,
-              flexBasis: 0,
-              minHeight: 0,
-            }}
-            className={cn(
-              "flex min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
-              "bg-muted/20 dark:bg-muted/10",
-            )}
-            data-board-id={board.id}
-            data-list-id={listId}
-            data-status={status}
-            aria-label={`${list.name} — ${status}`}
-          >
-            <ListStatusBand board={board} list={list} status={status} />
-          </div>
-        ))}
+        {visibleStatuses.map((status, i) => {
+          const containerId = laneBandContainerId(listId, status);
+          const sortableIds = taskMap?.[containerId];
+          return (
+            <div
+              key={status}
+              style={{
+                flexGrow: weights[i] ?? 1,
+                flexShrink: 1,
+                flexBasis: 0,
+                minHeight: 0,
+              }}
+              className={cn(
+                "flex min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
+                "bg-muted/20 dark:bg-muted/10",
+              )}
+              data-board-id={board.id}
+              data-list-id={listId}
+              data-status={status}
+              aria-label={`${list.name} — ${status}`}
+            >
+              <ListStatusBand
+                board={board}
+                list={list}
+                status={status}
+                containerId={sortableIds != null ? containerId : undefined}
+                sortableIds={sortableIds}
+              />
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -70,7 +84,6 @@ export interface BoardListColumnOverlayProps {
   weights: number[];
 }
 
-/** Full-fidelity column clone for DragOverlay. */
 export function BoardListColumnOverlay({
   board,
   listId,
@@ -80,7 +93,7 @@ export function BoardListColumnOverlay({
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
   return (
-    <div className="pointer-events-none flex h-full min-h-0 w-72 shrink-0 cursor-grabbing flex-col overflow-hidden rounded-lg border border-border bg-list-column opacity-90 shadow-xl ring-2 ring-primary/25">
+    <div className={boardListColumnOverlayShellClass}>
       <ListColumnBody
         board={board}
         list={list}
@@ -97,6 +110,7 @@ interface BoardListColumnProps {
   listId: number;
   visibleStatuses: string[];
   weights: number[];
+  taskMap?: Record<string, string[]>;
 }
 
 export function BoardListColumn({
@@ -104,6 +118,7 @@ export function BoardListColumn({
   listId,
   visibleStatuses,
   weights,
+  taskMap,
 }: BoardListColumnProps) {
   const {
     attributes,
@@ -112,7 +127,7 @@ export function BoardListColumn({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: listId });
+  } = useSortable({ id: sortableListId(listId) });
 
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
@@ -147,6 +162,7 @@ export function BoardListColumn({
             weights={weights}
             dragAttributes={attributes}
             dragListeners={listeners}
+            taskMap={taskMap}
           />
         )}
       </div>

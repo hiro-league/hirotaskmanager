@@ -84,6 +84,8 @@ export interface Task {
   color?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set when the task is in a closed (`is_closed`) status; first close time is preserved. */
+  closedAt?: string | null;
 }
 
 /** Row in the board list API — lightweight sidebar entries. */

@@ -35,7 +35,6 @@ export function TaskEditor({
   const [body, setBody] = useState("");
   /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
-  const [status, setStatus] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +42,6 @@ export function TaskEditor({
       setTitle(task.title);
       setBody(task.body);
       setGroup(String(task.groupId));
-      setStatus(task.status);
     } else if (mode === "create" && createContext) {
       setTitle("");
       setBody("");
@@ -52,7 +50,6 @@ export function TaskEditor({
           ? activeGroup
           : String(board.taskGroups[0]?.id ?? "");
       setGroup(defaultGroup);
-      setStatus(createContext.status);
     }
   }, [
     open,
@@ -80,7 +77,7 @@ export function TaskEditor({
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
-        status: status.trim() || createContext.status,
+        status: createContext.status,
         title: trimmedTitle,
         body,
         groupId: gid,
@@ -94,7 +91,6 @@ export function TaskEditor({
           title: trimmedTitle,
           body,
           groupId: gid,
-          status: status.trim() || task.status,
           updatedAt: now,
         },
       });
@@ -108,11 +104,35 @@ export function TaskEditor({
     title,
     body,
     group,
-    status,
     createTask,
     updateTask,
     onClose,
   ]);
+
+  const closedStatusId =
+    statuses?.find((s) => s.isClosed)?.id ?? "closed";
+
+  const applyWorkflowStatus = useCallback(
+    async (nextStatusId: string) => {
+      if (mode !== "edit" || !task) return;
+      const target = statuses?.find((s) => s.id === nextStatusId);
+      const now = new Date().toISOString();
+      const isClosing =
+        target?.isClosed === true ||
+        (target === undefined && nextStatusId === closedStatusId);
+      const nextClosedAt = isClosing ? (task.closedAt ?? now) : null;
+      await updateTask.mutateAsync({
+        boardId: board.id,
+        task: {
+          ...task,
+          status: nextStatusId,
+          updatedAt: now,
+          closedAt: nextClosedAt,
+        },
+      });
+    },
+    [mode, task, statuses, board.id, updateTask, closedStatusId],
+  );
 
   const handleDelete = useCallback(async () => {
     if (mode !== "edit" || !task) return;
@@ -125,6 +145,18 @@ export function TaskEditor({
 
   const busy =
     createTask.isPending || updateTask.isPending || deleteTask.isPending;
+
+  const openStatusId =
+    workflowOrder.find((id) => id === "open") ?? workflowOrder[0] ?? "open";
+  const inProgressId =
+    workflowOrder.find((id) => id === "in-progress") ?? "in-progress";
+
+  const currentMeta = task
+    ? statuses?.find((s) => s.id === task.status)
+    : undefined;
+  const isDone =
+    currentMeta?.isClosed ?? (task?.status === closedStatusId);
+  const isInProgress = task?.status === inProgressId;
 
   return (
     <div
@@ -167,42 +199,66 @@ export function TaskEditor({
               onChange={(e) => setBody(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor={`${titleId}-group`} className="text-xs font-medium text-muted-foreground">
-                Group
-              </label>
-              <select
-                id={`${titleId}-group`}
-                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
-              >
-                {board.taskGroups.map((g) => (
-                  <option key={g.id} value={String(g.id)}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor={`${titleId}-status`} className="text-xs font-medium text-muted-foreground">
-                Status
-              </label>
-              <select
-                id={`${titleId}-status`}
-                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                {workflowOrder.map((sid: string) => (
-                  <option key={sid} value={sid}>
-                    {statuses?.find((st) => st.id === sid)?.label ?? sid}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label htmlFor={`${titleId}-group`} className="text-xs font-medium text-muted-foreground">
+              Group
+            </label>
+            <select
+              id={`${titleId}-group`}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+            >
+              {board.taskGroups.map((g) => (
+                <option key={g.id} value={String(g.id)}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {mode === "edit" && task ? (
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Workflow
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  disabled={busy || isDone}
+                  onClick={() => void applyWorkflowStatus(closedStatusId)}
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  disabled={busy || !isDone}
+                  onClick={() => void applyWorkflowStatus(openStatusId)}
+                >
+                  Re-open
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  disabled={busy || isInProgress}
+                  onClick={() => void applyWorkflowStatus(inProgressId)}
+                >
+                  Set In-Progress
+                </button>
+              </div>
+              {isDone && task.closedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  Completed{" "}
+                  {new Date(task.closedAt).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-end gap-2">

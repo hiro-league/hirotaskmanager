@@ -169,7 +169,7 @@ export function loadBoard(boardId: number): Board | null {
 
   const taskRows = db
     .query(
-      `SELECT id, list_id, group_id, status_id, title, body, sort_order, color, created_at, updated_at
+      `SELECT id, list_id, group_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
        FROM task WHERE board_id = ? ORDER BY list_id, status_id, sort_order, id`,
     )
     .all(boardId) as {
@@ -183,6 +183,7 @@ export function loadBoard(boardId: number): Board | null {
     color: string | null;
     created_at: string;
     updated_at: string;
+    closed_at: string | null;
   }[];
 
   const tasks: Task[] = taskRows.map((t) => ({
@@ -196,6 +197,7 @@ export function loadBoard(boardId: number): Board | null {
     color: t.color ?? undefined,
     createdAt: t.created_at,
     updatedAt: t.updated_at,
+    closedAt: t.closed_at ?? undefined,
   }));
 
   const rawVis = prefs?.visible_statuses

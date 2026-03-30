@@ -2,16 +2,15 @@ import type {
   DraggableAttributes,
   DraggableSyntheticListeners,
 } from "@dnd-kit/core";
-import { useSortable } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, X } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -19,17 +18,23 @@ import {
   type List,
   type Task,
 } from "../../../shared/models";
-import { useCreateTask } from "@/api/mutations";
-import { useStatusWorkflowOrder } from "@/api/queries";
+import { useCreateTask, useUpdateTask } from "@/api/mutations";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { ListHeader } from "@/components/list/ListHeader";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import {
+  boardListColumnOverlayShellClass,
+  stackedListColumnMinHeightClass,
+} from "./boardDragOverlayShell";
+import { parseTaskSortableId, sortableListId } from "./dndIds";
+import {
   listTasksMergedSorted,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
+import { SortableTaskRow } from "./SortableTaskRow";
 
 interface ListStackedBodyProps {
   board: Board;
@@ -39,6 +44,63 @@ interface ListStackedBodyProps {
   workflowOrder: readonly string[];
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
+  stackedTaskMap?: Record<string, string[]>;
+  /** Container id for this list's task droppable. */
+  taskContainerId?: string;
+  /** List-column DragOverlay clone: fill shell height like lanes (flex-1 body). */
+  forDragOverlay?: boolean;
+}
+
+function StackedSortableList({
+  board,
+  containerId,
+  sortableIds,
+  completeFromList,
+  setEditingTask,
+}: {
+  board: Board;
+  containerId: string;
+  sortableIds: string[];
+  completeFromList: (t: Task) => void;
+  setEditingTask: (t: Task) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: containerId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-8 flex-col gap-2 rounded-md",
+        isOver && "bg-primary/[0.07] ring-1 ring-primary/15",
+      )}
+    >
+      <SortableContext
+        items={sortableIds}
+        strategy={verticalListSortingStrategy}
+      >
+        {sortableIds.map((sid) => {
+          const tid = parseTaskSortableId(sid);
+          const task =
+            tid != null ? board.tasks.find((t) => t.id === tid) : undefined;
+          if (!task) return null;
+          return (
+            <SortableTaskRow
+              key={sid}
+              sortableId={sid}
+              task={task}
+              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+              onOpen={() => setEditingTask(task)}
+              onCompleteFromCircle={
+                task.status === "open"
+                  ? () => completeFromList(task)
+                  : undefined
+              }
+            />
+          );
+        })}
+      </SortableContext>
+    </div>
+  );
 }
 
 function ListStackedBody({
@@ -49,21 +111,14 @@ function ListStackedBody({
   workflowOrder,
   dragAttributes,
   dragListeners,
+  stackedTaskMap = {},
+  taskContainerId,
+  forDragOverlay = false,
 }: ListStackedBodyProps) {
   const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
-
-  const tasks = useMemo(
-    () =>
-      listTasksMergedSorted(
-        board,
-        listId,
-        visibleStatuses,
-        activeGroup,
-        workflowOrder,
-      ),
-    [board, listId, visibleStatuses, activeGroup, workflowOrder],
-  );
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -72,6 +127,25 @@ function ListStackedBody({
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   createPendingRef.current = createTask.isPending;
+
+  const resolvedEditTask =
+    editingTask !== null
+      ? (board.tasks.find((t) => t.id === editingTask.id) ?? editingTask)
+      : null;
+
+  const completeFromList = (t: Task) => {
+    const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
+    const now = new Date().toISOString();
+    updateTask.mutate({
+      boardId: board.id,
+      task: {
+        ...t,
+        status: closedId,
+        updatedAt: now,
+        closedAt: t.closedAt ?? now,
+      },
+    });
+  };
 
   useEffect(() => {
     if (!adding) return;
@@ -127,7 +201,24 @@ function ListStackedBody({
     workflowOrder.includes("open") ? "open" : (workflowOrder[0] ?? "open");
   const canAddOpen = visibleStatuses.includes(quickAddStatus);
 
-  return (
+  const sortableIds =
+    taskContainerId != null ? (stackedTaskMap[taskContainerId] ?? []) : [];
+
+  const staticTasks = useMemo(
+    () =>
+      taskContainerId != null
+        ? null
+        : listTasksMergedSorted(board, listId, visibleStatuses, activeGroup, workflowOrder),
+    [taskContainerId, board, listId, visibleStatuses, activeGroup, workflowOrder],
+  );
+
+  const scrollAreaClass = cn(
+    "flex min-h-0 flex-col bg-muted/20 dark:bg-muted/10",
+    "overflow-y-auto overscroll-y-contain p-2",
+    forDragOverlay ? "flex-1" : "max-h-[min(70vh,calc(100dvh-11rem))]",
+  );
+
+  const main = (
     <>
       <ListHeader
         boardId={board.id}
@@ -136,24 +227,31 @@ function ListStackedBody({
         dragListeners={dragListeners}
       />
       <div
-        className={cn(
-          "flex min-h-0 flex-col bg-muted/20 dark:bg-muted/10",
-          "max-h-[min(70vh,calc(100dvh-11rem))] overflow-y-auto overscroll-y-contain p-2",
-        )}
+        className={scrollAreaClass}
         data-board-id={board.id}
         data-list-id={listId}
         aria-label={`${list.name} — tasks`}
       >
-        <div className="flex flex-col gap-2">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-              onOpen={() => setEditingTask(task)}
-            />
-          ))}
-        </div>
+        {taskContainerId != null ? (
+          <StackedSortableList
+            board={board}
+            containerId={taskContainerId}
+            sortableIds={sortableIds}
+            completeFromList={completeFromList}
+            setEditingTask={setEditingTask}
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {staticTasks?.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                onOpen={() => setEditingTask(task)}
+              />
+            ))}
+          </div>
+        )}
         {canAddOpen ? (
           !adding ? (
             <button
@@ -213,13 +311,26 @@ function ListStackedBody({
           )
         ) : null}
       </div>
+    </>
+  );
 
+  if (forDragOverlay) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {main}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {main}
       <TaskEditor
         board={board}
         open={editingTask !== null}
         onClose={() => setEditingTask(null)}
         mode="edit"
-        task={editingTask ?? undefined}
+        task={resolvedEditTask ?? undefined}
       />
     </>
   );
@@ -230,7 +341,6 @@ export interface BoardListStackedColumnOverlayProps {
   listId: number;
 }
 
-/** Drag overlay clone for stacked list columns. */
 export function BoardListStackedColumnOverlay({
   board,
   listId,
@@ -240,13 +350,14 @@ export function BoardListStackedColumnOverlay({
   if (!list) return null;
   const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
   return (
-    <div className="pointer-events-none w-72 shrink-0 cursor-grabbing overflow-hidden rounded-lg border border-border bg-list-column opacity-90 shadow-xl ring-2 ring-primary/25">
+    <div className={boardListColumnOverlayShellClass}>
       <ListStackedBody
         board={board}
         list={list}
         listId={listId}
         visibleStatuses={visibleStatuses}
         workflowOrder={workflowOrder}
+        forDragOverlay
       />
     </div>
   );
@@ -255,11 +366,15 @@ export function BoardListStackedColumnOverlay({
 interface BoardListStackedColumnProps {
   board: Board;
   listId: number;
+  stackedTaskMap: Record<string, string[]>;
+  taskContainerId: string;
 }
 
 export function BoardListStackedColumn({
   board,
   listId,
+  stackedTaskMap,
+  taskContainerId,
 }: BoardListStackedColumnProps) {
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
@@ -274,7 +389,7 @@ export function BoardListStackedColumn({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: listId });
+  } = useSortable({ id: sortableListId(listId) });
 
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
@@ -288,7 +403,10 @@ export function BoardListStackedColumn({
     <div
       ref={setNodeRef}
       style={style}
-      className="relative flex w-72 shrink-0 flex-col self-start"
+      className={cn(
+        "relative flex w-72 shrink-0 flex-col self-start",
+        isDragging && stackedListColumnMinHeightClass,
+      )}
       data-list-column={list.id}
       data-board-no-pan
     >
@@ -296,7 +414,7 @@ export function BoardListStackedColumn({
         className={cn(
           "flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
-            ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
+            ? "min-h-0 flex-1 border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
         )}
       >
@@ -309,6 +427,8 @@ export function BoardListStackedColumn({
             workflowOrder={workflowOrder}
             dragAttributes={attributes}
             dragListeners={listeners}
+            stackedTaskMap={stackedTaskMap}
+            taskContainerId={taskContainerId}
           />
         )}
       </div>

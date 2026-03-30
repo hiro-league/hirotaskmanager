@@ -14,6 +14,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { Board } from "../../../shared/models";
 import { useReorderLists } from "@/api/mutations";
+import { parseListSortableId } from "./dndIds";
 
 export function sortedListIds(board: Board): number[] {
   return [...board.lists]
@@ -63,16 +64,18 @@ export function useHorizontalListReorder(board: Board) {
   );
 
   const onDragStart = useCallback((event: DragStartEvent) => {
+    const listId = parseListSortableId(event.active.id);
+    if (listId == null) return;
     isDraggingRef.current = true;
-    setActiveId(Number(event.active.id));
+    setActiveId(listId);
   }, []);
 
   const onDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (over == null) return;
-    const aid = Number(active.id);
-    const oid = Number(over.id);
-    if (aid === oid) return;
+    const aid = parseListSortableId(active.id);
+    const oid = parseListSortableId(over.id);
+    if (aid == null || oid == null || aid === oid) return;
 
     setLocalListIds((prev) => {
       const oldIndex = prev.indexOf(aid);

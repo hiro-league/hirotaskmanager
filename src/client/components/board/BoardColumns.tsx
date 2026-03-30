@@ -4,15 +4,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Board } from "../../../shared/models";
+import { sortableListId } from "./dndIds";
 import { useCreateList, usePatchBoardViewPrefs } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
+import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
 import {
   bandWeightsForBoard,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
-import { BoardListColumn, BoardListColumnOverlay } from "./BoardListColumn";
+import { BoardListColumn } from "./BoardListColumn";
 import { StatusLabelColumn } from "./StatusLabelColumn";
-import { useHorizontalListReorder } from "./useHorizontalListReorder";
+import { useLanesBoardDnd } from "./useLanesBoardDnd";
 
 interface BoardColumnsProps {
   board: Board;
@@ -123,17 +125,25 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     localListIds,
     activeId,
     sensors,
-    listCollision,
+    collisionDetection,
     onDragStart,
     onDragOver,
     onDragEnd,
     onDragCancel,
     reorderPending,
-  } = useHorizontalListReorder(board);
+    displayTaskMap,
+    activeTaskId,
+    visibleStatuses,
+  } = useLanesBoardDnd(board);
 
-  const visibleStatuses = useMemo(
-    () => visibleStatusesForBoard(board, workflowOrder),
-    [board, workflowOrder],
+  const overlayTask =
+    activeTaskId != null
+      ? board.tasks.find((t) => t.id === activeTaskId)
+      : undefined;
+
+  const sortableListItemIds = useMemo(
+    () => localListIds.map(sortableListId),
+    [localListIds],
   );
 
   const [weights, setWeights] = useState<number[]>(() =>
@@ -189,9 +199,9 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <DndContext
         sensors={sensors}
-        collisionDetection={listCollision}
+        collisionDetection={collisionDetection}
         measuring={{
-          droppable: { strategy: MeasuringStrategy.Always },
+          droppable: { strategy: MeasuringStrategy.WhileDragging },
         }}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
@@ -212,7 +222,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               splittersDisabled={reorderPending}
             />
             <SortableContext
-              items={localListIds}
+              items={sortableListItemIds}
               strategy={horizontalListSortingStrategy}
             >
               <div className="flex min-h-0 flex-row gap-4">
@@ -223,6 +233,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
                     listId={id}
                     visibleStatuses={visibleStatuses}
                     weights={weights}
+                    taskMap={displayTaskMap}
                   />
                 ))}
               </div>
@@ -231,14 +242,14 @@ export function BoardColumns({ board }: BoardColumnsProps) {
           </div>
         </div>
         <DragOverlay dropAnimation={null} zIndex={60}>
-          {activeId ? (
-            <BoardListColumnOverlay
-              board={board}
-              listId={activeId}
-              visibleStatuses={visibleStatuses}
-              weights={weights}
-            />
-          ) : null}
+          <BoardDragOverlayContent
+            board={board}
+            overlayTask={overlayTask}
+            activeListId={activeId}
+            layout="lanes"
+            visibleStatuses={visibleStatuses}
+            weights={weights}
+          />
         </DragOverlay>
       </DndContext>
     </div>

@@ -109,12 +109,68 @@ export function useUpdateTask() {
         ...input.task,
         order,
         updatedAt: new Date().toISOString(),
+        closedAt: input.task.closedAt,
       };
       const next: Board = {
         ...prev,
         tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)),
         updatedAt: task.updatedAt,
       };
+      qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
+      return { prev };
+    },
+    onError: (_err, input, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData<Board>(boardKeys.detail(input.boardId), ctx.prev);
+      }
+    },
+    onSuccess: (data) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+    },
+  });
+}
+
+export function useReorderTasksInBand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      boardId: number;
+      listId: number;
+      status: string;
+      orderedTaskIds: number[];
+    }) => {
+      return fetchJson<Board>(`/api/boards/${input.boardId}/tasks/reorder`, {
+        method: "PUT",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          listId: input.listId,
+          status: input.status,
+          orderedTaskIds: input.orderedTaskIds,
+        }),
+      });
+    },
+    onMutate: async (input) => {
+      const prev = qc.getQueryData<Board>(boardKeys.detail(input.boardId));
+      if (!prev) return { prev: undefined as Board | undefined };
+      const inBand = prev.tasks.filter(
+        (t) => t.listId === input.listId && t.status === input.status,
+      );
+      if (inBand.length !== input.orderedTaskIds.length) return { prev };
+      const bandIds = new Set(inBand.map((t) => t.id));
+      for (const id of input.orderedTaskIds) {
+        if (!bandIds.has(id)) return { prev };
+      }
+      const orderById = new Map(
+        input.orderedTaskIds.map((id, i) => [id, i] as const),
+      );
+      const now = new Date().toISOString();
+      const tasks = prev.tasks.map((t) => {
+        if (t.listId !== input.listId || t.status !== input.status) return t;
+        const o = orderById.get(t.id);
+        if (o === undefined) return t;
+        return { ...t, order: o, updatedAt: now };
+      });
+      const next: Board = { ...prev, tasks, updatedAt: now };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
       return { prev };
     },

@@ -14,5 +14,6 @@ export {
 export {
   useCreateTask,
   useDeleteTask,
+  useReorderTasksInBand,
   useUpdateTask,
 } from "./tasks";

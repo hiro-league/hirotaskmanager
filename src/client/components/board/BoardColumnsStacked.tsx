@@ -3,14 +3,17 @@ import {
   DragOverlay,
   MeasuringStrategy,
 } from "@dnd-kit/core";
-import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Board } from "../../../shared/models";
-import { AddListSlot } from "./BoardColumns";
 import {
-  BoardListStackedColumn,
-  BoardListStackedColumnOverlay,
-} from "./BoardListStackedColumn";
-import { useHorizontalListReorder } from "./useHorizontalListReorder";
+  SortableContext,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useMemo } from "react";
+import type { Board } from "../../../shared/models";
+import { sortableListId, stackedListContainerId } from "./dndIds";
+import { AddListSlot } from "./BoardColumns";
+import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
+import { BoardListStackedColumn } from "./BoardListStackedColumn";
+import { useStackedBoardDnd } from "./useStackedBoardDnd";
 
 interface BoardColumnsStackedProps {
   board: Board;
@@ -21,20 +24,32 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
     localListIds,
     activeId,
     sensors,
-    listCollision,
+    collisionDetection,
     onDragStart,
     onDragOver,
     onDragEnd,
     onDragCancel,
-  } = useHorizontalListReorder(board);
+    displayTaskMap,
+    activeTaskId,
+  } = useStackedBoardDnd(board);
+
+  const overlayTask =
+    activeTaskId != null
+      ? board.tasks.find((t) => t.id === activeTaskId)
+      : undefined;
+
+  const sortableListItemIds = useMemo(
+    () => localListIds.map(sortableListId),
+    [localListIds],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <DndContext
         sensors={sensors}
-        collisionDetection={listCollision}
+        collisionDetection={collisionDetection}
         measuring={{
-          droppable: { strategy: MeasuringStrategy.Always },
+          droppable: { strategy: MeasuringStrategy.WhileDragging },
         }}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
@@ -48,7 +63,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
         >
           <div className="flex w-max min-w-full flex-row items-start gap-5 bg-transparent pb-1">
             <SortableContext
-              items={localListIds}
+              items={sortableListItemIds}
               strategy={horizontalListSortingStrategy}
             >
               <div className="flex flex-row items-start gap-4">
@@ -57,6 +72,8 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
                     key={id}
                     board={board}
                     listId={id}
+                    stackedTaskMap={displayTaskMap}
+                    taskContainerId={stackedListContainerId(id)}
                   />
                 ))}
               </div>
@@ -65,12 +82,12 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
           </div>
         </div>
         <DragOverlay dropAnimation={null} zIndex={60}>
-          {activeId ? (
-            <BoardListStackedColumnOverlay
-              board={board}
-              listId={activeId}
-            />
-          ) : null}
+          <BoardDragOverlayContent
+            board={board}
+            overlayTask={overlayTask}
+            activeListId={activeId}
+            layout="stacked"
+          />
         </DragOverlay>
       </DndContext>
     </div>

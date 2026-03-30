@@ -1,7 +1,7 @@
 import { coerceTaskStatus } from "../../shared/models";
 import type { Board } from "../../shared/models";
 import { getDb, withTransaction } from "../db";
-import { boardExists } from "./helpers";
+import { boardExists, statusIsClosed } from "./helpers";
 import { loadBoard } from "./board";
 
 export function createTaskOnBoard(
@@ -45,11 +45,12 @@ export function createTaskOnBoard(
   );
 
   const now = new Date().toISOString();
+  const closedAt = statusIsClosed(db, statusId) ? now : null;
   withTransaction(db, () => {
     db.run(
       `INSERT INTO task (list_id, group_id, board_id, status_id,
-         title, body, sort_order, color, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         title, body, sort_order, color, created_at, updated_at, closed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.listId,
         input.groupId,
@@ -61,6 +62,7 @@ export function createTaskOnBoard(
         null,
         now,
         now,
+        closedAt,
       ],
     );
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
@@ -86,7 +88,7 @@ export function patchTaskOnBoard(
 
   const trow = db
     .query(
-      `SELECT id, list_id, group_id, status_id, title, body, sort_order, color, created_at, updated_at
+      `SELECT id, list_id, group_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
        FROM task WHERE id = ? AND board_id = ?`,
     )
     .get(taskId, boardId) as {
@@ -100,6 +102,7 @@ export function patchTaskOnBoard(
     color: string | null;
     created_at: string;
     updated_at: string;
+    closed_at: string | null;
   } | null;
   if (!trow) return null;
 
@@ -144,10 +147,17 @@ export function patchTaskOnBoard(
   const color = patch.color !== undefined ? patch.color : trow.color;
   const now = new Date().toISOString();
 
+  let nextClosedAt: string | null;
+  if (statusIsClosed(db, statusId)) {
+    nextClosedAt = trow.closed_at ?? now;
+  } else {
+    nextClosedAt = null;
+  }
+
   withTransaction(db, () => {
     db.run(
       `UPDATE task SET list_id = ?, group_id = ?, status_id = ?, title = ?, body = ?,
-         sort_order = ?, color = ?, updated_at = ? WHERE id = ?`,
+         sort_order = ?, color = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
       [
         listId,
         groupId,
@@ -157,6 +167,7 @@ export function patchTaskOnBoard(
         order,
         color,
         now,
+        nextClosedAt,
         taskId,
       ],
     );

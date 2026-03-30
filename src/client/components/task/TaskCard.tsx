@@ -21,6 +21,17 @@ function statusAriaLabel(status: TaskStatus): string {
   }
 }
 
+function OpenStatusCircle() {
+  return (
+    <span
+      className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center"
+      aria-hidden
+    >
+      <span className="size-3.5 rounded-full border-2 border-muted-foreground/55 bg-transparent" />
+    </span>
+  );
+}
+
 function TaskStatusIndicator({ status }: { status: TaskStatus }) {
   const label = statusAriaLabel(status);
   return (
@@ -65,37 +76,64 @@ interface TaskCardProps {
   /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
   onOpen: () => void;
+  /** When set, only for `open` tasks: click the empty circle to complete (does not open the editor). */
+  onCompleteFromCircle?: () => void;
+  /** When true, dim the card to indicate it's being dragged. */
+  isDragging?: boolean;
 }
 
-export function TaskCard({ task, groupLabel, onOpen }: TaskCardProps) {
+export function TaskCard({
+  task,
+  groupLabel,
+  onOpen,
+  onCompleteFromCircle,
+  isDragging,
+}: TaskCardProps) {
   const preview = previewBody(task.body);
+  const canCompleteFromCircle =
+    task.status === "open" && onCompleteFromCircle !== undefined;
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <div
       className={cn(
-        "w-full rounded-md border border-border bg-task-card px-2.5 py-2 text-left text-sm text-task-card-foreground shadow-sm transition-colors",
+        "flex w-full gap-2 rounded-md border border-border bg-task-card px-2.5 py-2 text-sm text-task-card-foreground shadow-sm transition-colors",
         "hover:bg-accent/40 dark:hover:bg-white/[0.06]",
         task.color && "border-l-4",
+        isDragging && "opacity-40",
       )}
       style={task.color ? { borderLeftColor: task.color } : undefined}
-      aria-label={`${statusAriaLabel(task.status)}: ${task.title || "Untitled"}`}
     >
-      <div className="flex gap-2">
+      {canCompleteFromCircle ? (
+        <button
+          type="button"
+          className="shrink-0 rounded-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Mark complete"
+          title="Mark complete"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompleteFromCircle();
+          }}
+        >
+          <OpenStatusCircle />
+        </button>
+      ) : (
         <TaskStatusIndicator status={task.status} />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{task.title || "Untitled"}</div>
-          {preview ? (
-            <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {preview}
-            </div>
-          ) : null}
-          <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-            {groupLabel}
+      )}
+      <div
+        className="min-w-0 flex-1 text-left"
+        onClick={onOpen}
+      >
+        <div className="font-medium">{task.title || "Untitled"}</div>
+        {preview ? (
+          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {preview}
           </div>
+        ) : null}
+        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
+          {groupLabel}
         </div>
       </div>
-    </button>
+    </div>
   );
 }

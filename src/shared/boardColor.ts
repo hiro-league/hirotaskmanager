@@ -1,5 +1,6 @@
 /** Preset keys for board column canvas background (persisted on `Board.boardColor`). */
 export const BOARD_COLOR_PRESETS = [
+  "stone",
   "cyan",
   "azure",
   "indigo",
@@ -7,14 +8,28 @@ export const BOARD_COLOR_PRESETS = [
   "rose",
   "amber",
   "emerald",
-  "stone",
   "coral",
   "sage",
 ] as const;
 
 export type BoardColorPreset = (typeof BOARD_COLOR_PRESETS)[number];
 
-export const DEFAULT_BOARD_COLOR: BoardColorPreset = "cyan";
+/** User-facing label for each preset (menu order follows `BOARD_COLOR_PRESETS`). */
+export const BOARD_COLOR_LABELS: Record<BoardColorPreset, string> = {
+  stone: "Neutral",
+  cyan: "Cyan",
+  azure: "Azure",
+  indigo: "Indigo",
+  violet: "Violet",
+  rose: "Rose",
+  amber: "Amber",
+  emerald: "Emerald",
+  coral: "Coral",
+  sage: "Sage",
+};
+
+// New boards and missing `board_color` rows resolve to neutral (stone) instead of a chroma-heavy preset.
+export const DEFAULT_BOARD_COLOR: BoardColorPreset = "stone";
 
 export function parseBoardColor(raw: unknown): BoardColorPreset | undefined {
   if (typeof raw !== "string") return undefined;

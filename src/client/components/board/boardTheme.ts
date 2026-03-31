@@ -22,6 +22,8 @@ const BOARD_THEME_SEEDS: Record<BoardColorPreset, BoardThemeSeed> = {
   rose: { hue: 20, surfaceChroma: 0.05 },
   amber: { hue: 75, surfaceChroma: 0.05 },
   emerald: { hue: 155, surfaceChroma: 0.045 },
+  // Keep the persisted key for backwards compatibility, but treat it as the
+  // neutral board option in the UI/theme layer.
   stone: { hue: 65, surfaceChroma: 0.02 },
   coral: { hue: 35, surfaceChroma: 0.055 },
   sage: { hue: 145, surfaceChroma: 0.03 },
@@ -68,6 +70,10 @@ function modeProfile(dark: boolean): BoardThemeModeProfile {
   return dark ? DARK_THEME_PROFILE : LIGHT_THEME_PROFILE;
 }
 
+function isNeutralPreset(preset: BoardColorPreset): boolean {
+  return preset === "stone";
+}
+
 function boardCanvasGradient(seed: BoardThemeSeed, dark: boolean): string {
   const profile = modeProfile(dark);
   const scale = chromaScale(seed);
@@ -96,6 +102,24 @@ export function getBoardThemeStyle(
   preset: BoardColorPreset,
   dark: boolean,
 ): BoardThemeStyle {
+  if (isNeutralPreset(preset)) {
+    return dark
+      ? {
+          "--board-canvas-image":
+            "linear-gradient(135deg, oklch(0.24 0.008 260) 0%, oklch(0.16 0.010 260) 100%)",
+          "--board-header-bg":
+            "linear-gradient(180deg, oklch(0.32 0.010 260 / 1) 0%, oklch(0.25 0.008 260 / 1) 100%)",
+          "--board-header-border": oklch(0.38, 0.012, 260, 0.62),
+        }
+      : {
+          "--board-canvas-image":
+            "linear-gradient(135deg, oklch(0.92 0.006 260) 0%, oklch(0.84 0.008 260) 100%)",
+          "--board-header-bg":
+            "linear-gradient(180deg, oklch(0.86 0.010 260 / 1) 0%, oklch(0.79 0.012 260 / 1) 100%)",
+          "--board-header-border": oklch(0.72, 0.012, 260, 0.72),
+        };
+  }
+
   const seed = BOARD_THEME_SEEDS[preset];
 
   // Keep board theming intentionally narrow: only the canvas and top header
@@ -110,5 +134,9 @@ export function getBoardThemeStyle(
 export function getBoardThemePreviewBackground(
   preset: BoardColorPreset,
 ): string {
+  // Match `getBoardThemeStyle` neutral branch (light canvas) so swatches match the board.
+  if (isNeutralPreset(preset)) {
+    return "linear-gradient(135deg, oklch(0.92 0.006 260) 0%, oklch(0.84 0.008 260) 100%)";
+  }
   return boardCanvasGradient(BOARD_THEME_SEEDS[preset], false);
 }

@@ -1,6 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Palette } from "lucide-react";
+import { useState } from "react";
 import {
+  BOARD_COLOR_LABELS,
   BOARD_COLOR_PRESETS,
   type BoardColorPreset,
   resolvedBoardColor,
@@ -20,6 +22,10 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
   const patchViewPrefs = usePatchBoardViewPrefs();
   const current = resolvedBoardColor(board);
   const busy = patchViewPrefs.isPending;
+  // Palette grid stays compact; names appear in the footer only while hovering (or focusing) a swatch.
+  const [hoveredPreset, setHoveredPreset] = useState<BoardColorPreset | null>(
+    null,
+  );
 
   const pick = (preset: BoardColorPreset) => {
     patchViewPrefs.mutate({
@@ -29,7 +35,11 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
   };
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      onOpenChange={(open) => {
+        if (!open) setHoveredPreset(null);
+      }}
+    >
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
@@ -55,30 +65,51 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
           sideOffset={6}
           align="start"
         >
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Board seed color
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Board background
           </p>
-          <div className="grid grid-cols-5 gap-2">
-            {BOARD_COLOR_PRESETS.map((preset) => (
-              <DropdownMenu.Item
-                key={preset}
-                className="cursor-pointer rounded-md p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onSelect={() => pick(preset)}
-              >
-                <span className="sr-only">{preset}</span>
-                <span
-                  className={
-                    current === preset
-                      ? "block h-8 w-full rounded border-2 border-border/60 shadow-sm ring-2 ring-ring ring-offset-2 ring-offset-popover"
-                      : "block h-8 w-full rounded border-2 border-border/60 shadow-sm"
-                  }
-                  style={{
-                    background: getBoardThemePreviewBackground(preset),
-                  }}
-                  aria-hidden
-                />
-              </DropdownMenu.Item>
-            ))}
+          <div
+            className="grid grid-cols-5 gap-2"
+            onMouseLeave={() => setHoveredPreset(null)}
+          >
+            {BOARD_COLOR_PRESETS.map((preset) => {
+              const label = BOARD_COLOR_LABELS[preset];
+              const selected = current === preset;
+              return (
+                <DropdownMenu.Item
+                  key={preset}
+                  className="cursor-pointer rounded-md p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={label}
+                  onSelect={() => pick(preset)}
+                  onMouseEnter={() => setHoveredPreset(preset)}
+                  onFocus={() => setHoveredPreset(preset)}
+                >
+                  <span
+                    className={cn(
+                      "block h-8 w-full rounded border-2 border-border/60 shadow-sm transition-[box-shadow]",
+                      selected
+                        ? "ring-2 ring-ring ring-offset-2 ring-offset-popover"
+                        : "hover:ring-1 hover:ring-border/80",
+                    )}
+                    style={{
+                      background: getBoardThemePreviewBackground(preset),
+                    }}
+                  />
+                </DropdownMenu.Item>
+              );
+            })}
+          </div>
+          <div
+            className="mt-3 flex min-h-[1.25rem] items-center justify-center border-t border-border/50 pt-2 text-center text-sm font-medium text-foreground"
+            aria-live="polite"
+          >
+            {hoveredPreset != null ? (
+              BOARD_COLOR_LABELS[hoveredPreset]
+            ) : (
+              <span className="text-muted-foreground/25 select-none" aria-hidden>
+                ·
+              </span>
+            )}
           </div>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

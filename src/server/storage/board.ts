@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import type { Database } from "bun:sqlite";
-import { parseBoardColor } from "../../shared/boardColor";
+import { DEFAULT_BOARD_COLOR, parseBoardColor } from "../../shared/boardColor";
 import {
   DEFAULT_STATUS_IDS,
   createDefaultTaskGroups,
@@ -293,7 +293,8 @@ export async function createBoardWithDefaults(
         JSON.stringify([...DEFAULT_STATUS_IDS]),
         JSON.stringify([1, 1, 1]),
         "stacked",
-        null,
+        // Persist explicit default so DB matches client `DEFAULT_BOARD_COLOR` (neutral stone).
+        DEFAULT_BOARD_COLOR,
         null,
         1,
       ],

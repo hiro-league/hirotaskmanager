@@ -14,6 +14,7 @@ import {
 } from "./boardStatusUtils";
 import { BoardListColumn } from "./BoardListColumn";
 import { StatusLabelColumn } from "./StatusLabelColumn";
+import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useLanesBoardDnd } from "./useLanesBoardDnd";
 
 interface BoardColumnsProps {
@@ -77,10 +78,11 @@ export function AddListSlot({
       className={`${shellClass} rounded-lg border border-border bg-list-column p-2 shadow-sm`}
       data-board-no-pan
     >
+      {/* The add-list editor restores selection inside the board's non-selectable drag surface. */}
       <input
         ref={inputRef}
         type="text"
-        className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+        className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground select-text"
         placeholder="Enter list name…"
         value={name}
         disabled={createList.isPending}
@@ -135,6 +137,11 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     activeTaskId,
     visibleStatuses,
   } = useLanesBoardDnd(board);
+
+  const boardKeyboardNav = useBoardKeyboardNavOptional();
+  useEffect(() => {
+    boardKeyboardNav?.setListColumnOrder(localListIds);
+  }, [boardKeyboardNav, localListIds]);
 
   const overlayTask =
     activeTaskId != null
@@ -203,7 +210,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
         sensors={sensors}
         collisionDetection={collisionDetection}
         measuring={{
-          droppable: { strategy: MeasuringStrategy.WhileDragging },
+          droppable: { strategy: MeasuringStrategy.BeforeDragging },
         }}
         onDragStart={onDragStart}
         onDragOver={onDragOver}

@@ -11,6 +11,8 @@ import type {
 } from "@dnd-kit/core";
 import { MoreVertical } from "lucide-react";
 import { useDeleteList, useRenameList } from "@/api/mutations";
+import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
+import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { cn } from "@/lib/utils";
 import type { List } from "../../../shared/models";
 
@@ -78,6 +80,7 @@ export function ListHeader({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(list.name);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const tapRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
@@ -120,33 +123,39 @@ export function ListHeader({
         setMenuOpen(false);
       }
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
     document.addEventListener("pointerdown", onDocPointerDown);
-    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("pointerdown", onDocPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
     };
   }, [menuOpen]);
 
+  // Phase 4: Esc for list menu goes through scoped shortcut stack (board shortcuts stay suppressed).
+  useShortcutOverlay(
+    menuOpen,
+    "list-header-menu",
+    useCallback((e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setMenuOpen(false);
+    }, []),
+  );
+
   const handleDelete = useCallback(() => {
-    if (
-      !window.confirm(
-        `Delete list “${list.name}”? Tasks in this list will be removed.`,
-      )
-    ) {
-      return;
-    }
+    setMenuOpen(false);
+    setListDeleteConfirmOpen(true);
+  }, []);
+
+  const confirmListDelete = useCallback(() => {
     deleteList.mutate({ boardId, listId: list.id });
-  }, [boardId, deleteList, list.id, list.name]);
+    setListDeleteConfirmOpen(false);
+  }, [boardId, deleteList, list.id]);
 
   const mergedListeners = boardDrag
     ? mergeTapAwareListeners(dragListeners, tapRef, startRename, editing)
     : dragListeners;
 
   return (
+    <>
     <div
       className={cn(
         "group relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
@@ -154,9 +163,10 @@ export function ListHeader({
       )}
     >
       {editing ? (
+        // Inline rename restores selection so the board's drag surface does not swallow text editing behavior.
         <input
           autoFocus
-          className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-sm text-foreground"
+          className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-sm text-foreground select-text"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
@@ -228,7 +238,6 @@ export function ListHeader({
                 role="menuitem"
                 className="flex w-full rounded px-2 py-1.5 text-left text-destructive hover:bg-destructive/10"
                 onClick={() => {
-                  setMenuOpen(false);
                   handleDelete();
                 }}
               >
@@ -239,5 +248,18 @@ export function ListHeader({
         </div>
       )}
     </div>
+
+      <ConfirmDialog
+        open={listDeleteConfirmOpen}
+        scope="list-delete-confirmation"
+        title="Delete this list?"
+        message={`Delete list “${list.name}”? Tasks in this list will be removed. This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onCancel={() => setListDeleteConfirmOpen(false)}
+        onConfirm={confirmListDelete}
+      />
+  </>
   );
 }

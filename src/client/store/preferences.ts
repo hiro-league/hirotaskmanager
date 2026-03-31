@@ -13,6 +13,8 @@ interface PersistedShape {
     sidebarCollapsed?: boolean;
     boardFilterStripCollapsed?: boolean;
     activeTaskGroupByBoardId?: Record<string, string>;
+    /** User checked "don't show again" on board keyboard help — disables auto-open on board selection. */
+    boardShortcutHelpDismissed?: boolean;
   };
 }
 
@@ -21,6 +23,7 @@ function readPersistedSlice(): {
   sidebarCollapsed: boolean;
   boardFilterStripCollapsed: boolean;
   activeTaskGroupByBoardId: Record<string, string>;
+  boardShortcutHelpDismissed: boolean;
 } {
   if (typeof localStorage === "undefined") {
     return {
@@ -28,6 +31,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
+      boardShortcutHelpDismissed: false,
     };
   }
   try {
@@ -38,6 +42,7 @@ function readPersistedSlice(): {
         sidebarCollapsed: false,
         boardFilterStripCollapsed: false,
         activeTaskGroupByBoardId: {},
+        boardShortcutHelpDismissed: false,
       };
     }
     const parsed = JSON.parse(raw) as PersistedShape;
@@ -57,6 +62,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: Boolean(s?.sidebarCollapsed),
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
       activeTaskGroupByBoardId,
+      boardShortcutHelpDismissed: Boolean(s?.boardShortcutHelpDismissed),
     };
   } catch {
     return {
@@ -64,6 +70,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
+      boardShortcutHelpDismissed: false,
     };
   }
 }
@@ -81,6 +88,8 @@ interface PreferencesState {
   toggleBoardFilterStripCollapsed: () => void;
   activeTaskGroupByBoardId: Record<string, string>;
   setActiveTaskGroupForBoard: (boardId: string | number, group: string) => void;
+  boardShortcutHelpDismissed: boolean;
+  setBoardShortcutHelpDismissed: (v: boolean) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -107,6 +116,9 @@ export const usePreferencesStore = create<PreferencesState>()(
             [String(boardId)]: group,
           },
         })),
+      boardShortcutHelpDismissed: initial.boardShortcutHelpDismissed,
+      setBoardShortcutHelpDismissed: (boardShortcutHelpDismissed) =>
+        set({ boardShortcutHelpDismissed }),
     }),
     {
       name: PREFERENCES_STORAGE_KEY,
@@ -115,6 +127,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
         activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
+        boardShortcutHelpDismissed: state.boardShortcutHelpDismissed,
       }),
     },
   ),

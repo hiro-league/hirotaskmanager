@@ -7,12 +7,13 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { Board } from "../../../shared/models";
 import { sortableListId, stackedListContainerId } from "./dndIds";
 import { AddListSlot } from "./BoardColumns";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
 import { BoardListStackedColumn } from "./BoardListStackedColumn";
+import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useStackedBoardDnd } from "./useStackedBoardDnd";
 
 interface BoardColumnsStackedProps {
@@ -33,6 +34,11 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
     activeTaskId,
   } = useStackedBoardDnd(board);
 
+  const boardKeyboardNav = useBoardKeyboardNavOptional();
+  useEffect(() => {
+    boardKeyboardNav?.setListColumnOrder(localListIds);
+  }, [boardKeyboardNav, localListIds]);
+
   const overlayTask =
     activeTaskId != null
       ? board.tasks.find((t) => t.id === activeTaskId)
@@ -49,7 +55,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
         sensors={sensors}
         collisionDetection={collisionDetection}
         measuring={{
-          droppable: { strategy: MeasuringStrategy.WhileDragging },
+          droppable: { strategy: MeasuringStrategy.BeforeDragging },
         }}
         onDragStart={onDragStart}
         onDragOver={onDragOver}

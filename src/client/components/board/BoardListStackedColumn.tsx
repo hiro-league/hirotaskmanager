@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -22,6 +22,7 @@ import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
+import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { ListHeader } from "@/components/list/ListHeader";
 import { usePreferencesStore, useResolvedActiveTaskGroup } from "@/store/preferences";
 import { cn } from "@/lib/utils";
@@ -52,18 +53,51 @@ interface ListStackedBodyProps {
   forDragOverlay?: boolean;
 }
 
-function StackedSortableList({
-  board,
+/** Per-row component that derives stable callbacks from task id */
+const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
+  sid,
+  task,
+  taskGroups,
+  onComplete,
+  onEdit,
+}: {
+  sid: string;
+  task: Task;
+  taskGroups: Board["taskGroups"];
+  onComplete: (taskId: number) => void;
+  onEdit: (taskId: number) => void;
+}) {
+  const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
+  const handleComplete = useCallback(
+    () => onComplete(task.id),
+    [onComplete, task.id],
+  );
+  return (
+    <SortableTaskRow
+      sortableId={sid}
+      task={task}
+      groupLabel={groupLabelForId(taskGroups, task.groupId)}
+      onOpen={handleOpen}
+      onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
+    />
+  );
+});
+
+// Memoized to prevent re-rendering the entire list on unrelated drag-over events
+const StackedSortableList = memo(function StackedSortableList({
+  taskMap,
+  taskGroups,
   containerId,
   sortableIds,
-  completeFromList,
-  setEditingTask,
+  onComplete,
+  onEdit,
 }: {
-  board: Board;
+  taskMap: Map<number, Task>;
+  taskGroups: Board["taskGroups"];
   containerId: string;
   sortableIds: string[];
-  completeFromList: (t: Task) => void;
-  setEditingTask: (t: Task) => void;
+  onComplete: (taskId: number) => void;
+  onEdit: (taskId: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
 
@@ -76,36 +110,29 @@ function StackedSortableList({
       )}
     >
       <SortableContext
-        // Pin the sortable container id to the list so dnd-kit does not
-        // recycle container identity during cross-list task moves.
         id={containerId}
         items={sortableIds}
         strategy={verticalListSortingStrategy}
       >
         {sortableIds.map((sid) => {
           const tid = parseTaskSortableId(sid);
-          const task =
-            tid != null ? board.tasks.find((t) => t.id === tid) : undefined;
+          const task = tid != null ? taskMap.get(tid) : undefined;
           if (!task) return null;
           return (
-            <SortableTaskRow
+            <StackedSortableTaskRowById
               key={sid}
-              sortableId={sid}
+              sid={sid}
               task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-              onOpen={() => setEditingTask(task)}
-              onCompleteFromCircle={
-                task.status === "open"
-                  ? () => completeFromList(task)
-                  : undefined
-              }
+              taskGroups={taskGroups}
+              onComplete={onComplete}
+              onEdit={onEdit}
             />
           );
         })}
       </SortableContext>
     </div>
   );
-}
+});
 
 function ListStackedBody({
   board,
@@ -125,6 +152,13 @@ function ListStackedBody({
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
 
+  // O(1) task lookup map
+  const taskMap = useMemo(() => {
+    const m = new Map<number, Task>();
+    for (const t of board.tasks) m.set(t.id, t);
+    return m;
+  }, [board.tasks]);
+
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -134,27 +168,55 @@ function ListStackedBody({
   const scrollRef = useRef<HTMLDivElement>(null);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [bodyMaxHeight, setBodyMaxHeight] = useState<number | null>(null);
   createPendingRef.current = createTask.isPending;
 
   const resolvedEditTask =
     editingTask !== null
-      ? (board.tasks.find((t) => t.id === editingTask.id) ?? editingTask)
+      ? (taskMap.get(editingTask.id) ?? editingTask)
       : null;
+  const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
 
-  const completeFromList = (t: Task) => {
-    const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
-    const now = new Date().toISOString();
-    updateTask.mutate({
-      boardId: board.id,
-      task: {
-        ...t,
-        status: closedId,
-        updatedAt: now,
-        closedAt: t.closedAt ?? now,
-      },
+  // Stable callback refs for use inside memoized children
+  const boardRef = useRef(board);
+  boardRef.current = board;
+  const statusesRef = useRef(statuses);
+  statusesRef.current = statuses;
+
+  const handleComplete = useCallback(
+    (taskId: number) => {
+      const t = boardRef.current.tasks.find((x) => x.id === taskId);
+      if (!t) return;
+      const closedId =
+        statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
+      const now = new Date().toISOString();
+      updateTask.mutate({
+        boardId: boardRef.current.id,
+        task: {
+          ...t,
+          status: closedId,
+          updatedAt: now,
+          closedAt: t.closedAt ?? now,
+        },
+      });
+    },
+    [updateTask],
+  );
+
+  const handleEdit = useCallback((taskId: number) => {
+    setEditingTaskId(taskId);
+  }, []);
+
+  const { registerOpenTaskEditor } = useBoardTaskKeyboardBridge();
+  useEffect(() => {
+    return registerOpenTaskEditor((taskId) => {
+      const t = board.tasks.find((x) => x.id === taskId);
+      if (!t || t.listId !== list.id) return false;
+      setEditingTaskId(taskId);
+      return true;
     });
-  };
+  }, [board.tasks, list.id, registerOpenTaskEditor]);
 
   useEffect(() => {
     if (!adding) return;
@@ -164,6 +226,31 @@ function ListStackedBody({
   const cancelAdd = () => {
     setAdding(false);
     setTitle("");
+  };
+
+  const openComposerAtBottom = () => {
+    // The composer adds extra height after mount, so do a second bottom snap
+    // once the textarea + actions exist to avoid landing midway down the list.
+    scrollElementToBottomThen(scrollRef.current, () => {
+      setAdding(true);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const scrollEl = scrollRef.current;
+          if (!scrollEl) return;
+          scrollEl.scrollTop = scrollEl.scrollHeight;
+          inputRef.current?.focus();
+        });
+      });
+    });
+  };
+
+  const focusComposerAtBottom = () => {
+    // After creating another task, snap back to the list bottom before refocusing.
+    window.requestAnimationFrame(() => {
+      scrollElementToBottomThen(scrollRef.current, () => {
+        window.setTimeout(() => inputRef.current?.focus(), 0);
+      });
+    });
   };
 
   const submitTask = () => {
@@ -185,7 +272,7 @@ function ListStackedBody({
       {
         onSuccess: () => {
           setTitle("");
-          window.setTimeout(() => inputRef.current?.focus(), 0);
+          focusComposerAtBottom();
         },
       },
     );
@@ -299,11 +386,12 @@ function ListStackedBody({
           <div className="flex flex-col gap-2">
             {taskContainerId != null ? (
               <StackedSortableList
-                board={board}
+                taskMap={taskMap}
+                taskGroups={board.taskGroups}
                 containerId={taskContainerId}
                 sortableIds={sortableIds}
-                completeFromList={completeFromList}
-                setEditingTask={setEditingTask}
+                onComplete={handleComplete}
+                onEdit={handleEdit}
               />
             ) : (
               <>
@@ -326,7 +414,7 @@ function ListStackedBody({
                 className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setAdding(true);
+                  openComposerAtBottom();
                 }}
               >
                 <Plus className="size-3.5" aria-hidden />
@@ -341,10 +429,11 @@ function ListStackedBody({
                 className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
                 onClick={(e) => e.stopPropagation()}
               >
+                {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
                 <textarea
                   ref={inputRef}
                   rows={3}
-                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
+                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
                   placeholder="Enter a title or paste a link"
                   value={title}
                   disabled={createTask.isPending}
@@ -387,10 +476,19 @@ function ListStackedBody({
           <button
             type="button"
             aria-label="Add task"
-            className="absolute bottom-3 right-3 z-10 flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-1 ring-border/60 hover:opacity-90"
+            className={cn(
+              "absolute bottom-3 right-3 z-10",
+              "flex size-11 shrink-0 items-center justify-center rounded-full",
+              "bg-primary text-primary-foreground shadow-md ring-1 ring-border/60",
+              // Match lanes: keep the FAB hidden until this stacked list is hovered.
+              "opacity-0 pointer-events-none transition-opacity duration-150",
+              "group-hover/list-col:opacity-100 group-hover/list-col:pointer-events-auto",
+              "hover:opacity-90",
+              "focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            )}
             onClick={(e) => {
               e.stopPropagation();
-              scrollElementToBottomThen(scrollRef.current, () => setAdding(true));
+              openComposerAtBottom();
             }}
           >
             <Plus className="size-6" strokeWidth={2.5} aria-hidden />
@@ -413,10 +511,10 @@ function ListStackedBody({
       {main}
       <TaskEditor
         board={board}
-        open={editingTask !== null}
-        onClose={() => setEditingTask(null)}
+        open={editingTask !== null || editingTaskId !== null}
+        onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
         mode="edit"
-        task={resolvedEditTask ?? undefined}
+        task={resolvedEditTask ?? editTaskResolved ?? undefined}
       />
     </>
   );
@@ -456,7 +554,8 @@ interface BoardListStackedColumnProps {
   taskContainerId: string;
 }
 
-export function BoardListStackedColumn({
+// Memoized: only re-renders when this column's props actually change
+export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   board,
   listId,
   stackedTaskMap,
@@ -498,7 +597,8 @@ export function BoardListStackedColumn({
     >
       <div
         className={cn(
-          "flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
+          // Mirror lane columns so hover-only controls stay scoped to the active list.
+          "group/list-col flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "min-h-0 flex-1 border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
@@ -520,4 +620,4 @@ export function BoardListStackedColumn({
       </div>
     </div>
   );
-}
+});

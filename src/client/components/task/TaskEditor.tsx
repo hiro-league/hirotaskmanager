@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Board, Task } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
+import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
+import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
+import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
 
 interface TaskEditorProps {
   board: Board;
@@ -13,6 +17,12 @@ interface TaskEditorProps {
   /** Required when mode is create */
   createContext?: { listId: number; status: string };
   task?: Task | null;
+}
+
+interface Baseline {
+  title: string;
+  body: string;
+  group: string;
 }
 
 export function TaskEditor({
@@ -35,6 +45,9 @@ export function TaskEditor({
   const [body, setBody] = useState("");
   /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
+  const baselineRef = useRef<Baseline>({ title: "", body: "", group: "" });
+  const [showDiscard, setShowDiscard] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +55,11 @@ export function TaskEditor({
       setTitle(task.title);
       setBody(task.body);
       setGroup(String(task.groupId));
+      baselineRef.current = {
+        title: task.title,
+        body: task.body,
+        group: String(task.groupId),
+      };
     } else if (mode === "create" && createContext) {
       setTitle("");
       setBody("");
@@ -50,6 +68,7 @@ export function TaskEditor({
           ? activeGroup
           : String(board.taskGroups[0]?.id ?? "");
       setGroup(defaultGroup);
+      baselineRef.current = { title: "", body: "", group: defaultGroup };
     }
   }, [
     open,
@@ -60,14 +79,41 @@ export function TaskEditor({
     activeGroup,
   ]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useMemo(() => {
+    if (!open) return false;
+    if (mode === "edit" && task) {
+      return (
+        title.trim() !== baselineRef.current.title.trim() ||
+        body !== baselineRef.current.body ||
+        group !== baselineRef.current.group
+      );
+    }
+    if (mode === "create" && createContext) {
+      return title.trim() !== "" || body.trim() !== "";
+    }
+    return false;
+  }, [open, mode, task, createContext, title, body, group]);
+
+  const busy =
+    createTask.isPending || updateTask.isPending || deleteTask.isPending;
+
+  const requestClose = useDialogCloseRequest({
+    busy,
+    isDirty,
+    onClose,
+    onDirtyClose: () => setShowDiscard(true),
+  });
+
+  const taskEditorKeyHandler = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      requestClose();
+    },
+    [requestClose],
+  );
+
+  useShortcutOverlay(open && !showDiscard && !showDeleteConfirm, "task-editor", taskEditorKeyHandler);
 
   const handleSave = useCallback(async () => {
     const trimmedTitle = title.trim() || "Untitled";
@@ -134,17 +180,13 @@ export function TaskEditor({
     [mode, task, statuses, board.id, updateTask, closedStatusId],
   );
 
-  const handleDelete = useCallback(async () => {
+  const runDelete = useCallback(async () => {
     if (mode !== "edit" || !task) return;
-    if (!window.confirm("Delete this task?")) return;
     await deleteTask.mutateAsync({ boardId: board.id, taskId: task.id });
     onClose();
   }, [mode, task, board.id, deleteTask, onClose]);
 
   if (!open) return null;
-
-  const busy =
-    createTask.isPending || updateTask.isPending || deleteTask.isPending;
 
   const openStatusId =
     workflowOrder.find((id) => id === "open") ?? workflowOrder[0] ?? "open";
@@ -159,137 +201,167 @@ export function TaskEditor({
   const isInProgress = task?.status === inProgressId;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="presentation"
-      onClick={onClose}
-    >
+    <>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        role="presentation"
+        onClick={busy ? undefined : requestClose}
       >
-        <h2 id={titleId} className="text-lg font-semibold text-foreground">
-          {mode === "create" ? "New task" : "Edit task"}
-        </h2>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          // Dialogs opt back into selection so text fields work normally above the board's select-none surface.
+          className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 id={titleId} className="text-lg font-semibold text-foreground">
+            {mode === "create" ? "New task" : "Edit task"}
+          </h2>
 
-        <div className="mt-4 space-y-3">
-          <div>
-            <label htmlFor={`${titleId}-title`} className="text-xs font-medium text-muted-foreground">
-              Title
-            </label>
-            <input
-              id={`${titleId}-title`}
-              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor={`${titleId}-body`} className="text-xs font-medium text-muted-foreground">
-              Body
-            </label>
-            <textarea
-              id={`${titleId}-body`}
-              rows={6}
-              className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor={`${titleId}-group`} className="text-xs font-medium text-muted-foreground">
-              Group
-            </label>
-            <select
-              id={`${titleId}-group`}
-              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
-            >
-              {board.taskGroups.map((g) => (
-                <option key={g.id} value={String(g.id)}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {mode === "edit" && task ? (
-            <div className="space-y-2">
-              <span className="text-xs font-medium text-muted-foreground">
-                Workflow
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                  disabled={busy || isDone}
-                  onClick={() => void applyWorkflowStatus(closedStatusId)}
-                >
-                  Complete
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                  disabled={busy || !isDone}
-                  onClick={() => void applyWorkflowStatus(openStatusId)}
-                >
-                  Re-open
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                  disabled={busy || isInProgress}
-                  onClick={() => void applyWorkflowStatus(inProgressId)}
-                >
-                  Set In-Progress
-                </button>
-              </div>
-              {isDone && task.closedAt ? (
-                <p className="text-xs text-muted-foreground">
-                  Completed{" "}
-                  {new Date(task.closedAt).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </p>
-              ) : null}
+          <div className="mt-4 space-y-3">
+            <div>
+              <label htmlFor={`${titleId}-title`} className="text-xs font-medium text-muted-foreground">
+                Title
+              </label>
+              <input
+                id={`${titleId}-title`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                value={title}
+                disabled={busy}
+                onChange={(e) => setTitle(e.target.value)}
+              />
             </div>
-          ) : null}
-        </div>
+            <div>
+              <label htmlFor={`${titleId}-body`} className="text-xs font-medium text-muted-foreground">
+                Body
+              </label>
+              <textarea
+                id={`${titleId}-body`}
+                rows={6}
+                className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                value={body}
+                disabled={busy}
+                onChange={(e) => setBody(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${titleId}-group`} className="text-xs font-medium text-muted-foreground">
+                Group
+              </label>
+              <select
+                id={`${titleId}-group`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                value={group}
+                disabled={busy}
+                onChange={(e) => setGroup(e.target.value)}
+              >
+                {board.taskGroups.map((g) => (
+                  <option key={g.id} value={String(g.id)}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
-          {mode === "edit" && (
+            {mode === "edit" && task ? (
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Workflow
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    disabled={busy || isDone}
+                    onClick={() => void applyWorkflowStatus(closedStatusId)}
+                  >
+                    Complete
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    disabled={busy || !isDone}
+                    onClick={() => void applyWorkflowStatus(openStatusId)}
+                  >
+                    Re-open
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    disabled={busy || isInProgress}
+                    onClick={() => void applyWorkflowStatus(inProgressId)}
+                  >
+                    Set In-Progress
+                  </button>
+                </div>
+                {isDone && task.closedAt ? (
+                  <p className="text-xs text-muted-foreground">
+                    Completed{" "}
+                    {new Date(task.closedAt).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+            {mode === "edit" && (
+              <button
+                type="button"
+                className="mr-auto rounded-md border border-destructive/50 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete
+              </button>
+            )}
             <button
               type="button"
-              className="mr-auto rounded-md border border-destructive/50 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
               disabled={busy}
-              onClick={() => void handleDelete()}
+              onClick={requestClose}
             >
-              Delete
+              Cancel
             </button>
-          )}
-          <button
-            type="button"
-            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
-            disabled={busy}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            disabled={busy}
-            onClick={() => void handleSave()}
-          >
-            Save
-          </button>
+            <button
+              type="button"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              disabled={busy}
+              onClick={() => void handleSave()}
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      <DiscardChangesDialog
+        open={showDiscard}
+        onCancel={() => setShowDiscard(false)}
+        onDiscard={() => {
+          setShowDiscard(false);
+          onClose();
+        }}
+      />
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        scope="task-delete-confirmation"
+        title="Delete this task?"
+        message="This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          void runDelete();
+        }}
+      />
+    </>
   );
 }

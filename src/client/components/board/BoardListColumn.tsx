@@ -4,7 +4,7 @@ import type {
 } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
@@ -149,7 +149,8 @@ interface BoardListColumnProps {
   isTaskDragActive?: boolean;
 }
 
-export function BoardListColumn({
+// Memoized: only re-renders when this column's props actually change
+export const BoardListColumn = memo(function BoardListColumn({
   board,
   listId,
   visibleStatuses,
@@ -208,4 +209,4 @@ export function BoardListColumn({
       </div>
     </div>
   );
-}
+});

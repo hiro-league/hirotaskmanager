@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import {
@@ -16,6 +16,7 @@ import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
+import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import { parseTaskSortableId } from "./dndIds";
@@ -44,6 +45,13 @@ export function ListStatusBand({
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
 
+  // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
+  const taskMap = useMemo(() => {
+    const m = new Map<number, Task>();
+    for (const t of board.tasks) m.set(t.id, t);
+    return m;
+  }, [board.tasks]);
+
   const tasks = useMemo(() => {
     let listTasks = board.tasks.filter(
       (t) => t.listId === list.id && t.status === status,
@@ -68,21 +76,57 @@ export function ListStatusBand({
 
   const resolvedEditTask =
     editingTask !== null
-      ? (board.tasks.find((t) => t.id === editingTask.id) ?? editingTask)
+      ? (taskMap.get(editingTask.id) ?? editingTask)
       : null;
 
-  const completeFromList = (t: Task) => {
-    const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
-    const now = new Date().toISOString();
-    updateTask.mutate({
-      boardId: board.id,
-      task: {
-        ...t,
-        status: closedId,
-        updatedAt: now,
-        closedAt: t.closedAt ?? now,
-      },
+  // Stable callback: takes task id, resolves from ref to avoid stale closures
+  const boardRef = useRef(board);
+  boardRef.current = board;
+  const statusesRef = useRef(statuses);
+  statusesRef.current = statuses;
+
+  const handleComplete = useCallback(
+    (taskId: number) => {
+      const t = boardRef.current.tasks.find((x) => x.id === taskId);
+      if (!t) return;
+      const closedId =
+        statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
+      const now = new Date().toISOString();
+      updateTask.mutate({
+        boardId: boardRef.current.id,
+        task: {
+          ...t,
+          status: closedId,
+          updatedAt: now,
+          closedAt: t.closedAt ?? now,
+        },
+      });
+    },
+    [updateTask],
+  );
+
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const handleEdit = useCallback((taskId: number) => {
+    setEditingTaskId(taskId);
+  }, []);
+
+  const { registerOpenTaskEditor } = useBoardTaskKeyboardBridge();
+  // Enter on highlighted task: open editor in this list column if the task belongs here.
+  useEffect(() => {
+    return registerOpenTaskEditor((taskId) => {
+      const t = board.tasks.find((x) => x.id === taskId);
+      if (!t || t.listId !== list.id) return false;
+      setEditingTaskId(taskId);
+      return true;
     });
+  }, [board.tasks, list.id, registerOpenTaskEditor]);
+
+  // Keep editingTask in sync for the TaskEditor
+  const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
+
+  // Legacy completeFromList for static (non-sortable) task cards
+  const completeFromList = (t: Task) => {
+    handleComplete(t.id);
   };
 
   useEffect(() => {
@@ -93,6 +137,31 @@ export function ListStatusBand({
   const cancelAdd = () => {
     setAdding(false);
     setTitle("");
+  };
+
+  const openComposerAtBottom = () => {
+    // The composer adds extra height after mount, so do a second bottom snap
+    // once the textarea + actions exist to avoid landing midway down the list.
+    scrollElementToBottomThen(scrollRef.current, () => {
+      setAdding(true);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const scrollEl = scrollRef.current;
+          if (!scrollEl) return;
+          scrollEl.scrollTop = scrollEl.scrollHeight;
+          inputRef.current?.focus();
+        });
+      });
+    });
+  };
+
+  const focusComposerAtBottom = () => {
+    // After creating another task, snap back to the list bottom before refocusing.
+    window.requestAnimationFrame(() => {
+      scrollElementToBottomThen(scrollRef.current, () => {
+        window.setTimeout(() => inputRef.current?.focus(), 0);
+      });
+    });
   };
 
   const submitCard = () => {
@@ -114,7 +183,7 @@ export function ListStatusBand({
       {
         onSuccess: () => {
           setTitle("");
-          window.setTimeout(() => inputRef.current?.focus(), 0);
+          focusComposerAtBottom();
         },
       },
     );
@@ -171,11 +240,12 @@ export function ListStatusBand({
           <div className="flex flex-col gap-2">
             {containerId != null && sortableIds != null ? (
               <SortableBandContent
-                board={board}
+                taskMap={taskMap}
+                taskGroups={board.taskGroups}
                 containerId={containerId}
                 sortableIds={sortableIds}
-                completeFromList={completeFromList}
-                setEditingTask={setEditingTask}
+                onComplete={handleComplete}
+                onEdit={handleEdit}
               />
             ) : (
               <div className="flex flex-col gap-2">
@@ -199,7 +269,7 @@ export function ListStatusBand({
                 className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setAdding(true);
+                  openComposerAtBottom();
                 }}
               >
                 <Plus className="size-3.5" aria-hidden />
@@ -214,10 +284,11 @@ export function ListStatusBand({
                 className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
                 onClick={(e) => e.stopPropagation()}
               >
+                {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
                 <textarea
                   ref={inputRef}
                   rows={3}
-                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
+                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
                   placeholder="Enter a title or paste a link"
                   value={title}
                   disabled={createTask.isPending}
@@ -272,7 +343,7 @@ export function ListStatusBand({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              scrollElementToBottomThen(scrollRef.current, () => setAdding(true));
+              openComposerAtBottom();
             }}
           >
             <Plus className="size-6" strokeWidth={2.5} aria-hidden />
@@ -281,10 +352,10 @@ export function ListStatusBand({
 
         <TaskEditor
           board={board}
-          open={editingTask !== null}
-          onClose={() => setEditingTask(null)}
+          open={editingTask !== null || editingTaskId !== null}
+          onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
           mode="edit"
-          task={resolvedEditTask ?? undefined}
+          task={resolvedEditTask ?? editTaskResolved ?? undefined}
         />
       </>
     );
@@ -296,11 +367,12 @@ export function ListStatusBand({
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         {containerId != null && sortableIds != null ? (
           <SortableBandContent
-            board={board}
+            taskMap={taskMap}
+            taskGroups={board.taskGroups}
             containerId={containerId}
             sortableIds={sortableIds}
-            completeFromList={completeFromList}
-            setEditingTask={setEditingTask}
+            onComplete={handleComplete}
+            onEdit={handleEdit}
           />
         ) : (
           <div className="flex flex-col gap-2">
@@ -318,27 +390,60 @@ export function ListStatusBand({
 
       <TaskEditor
         board={board}
-        open={editingTask !== null}
-        onClose={() => setEditingTask(null)}
+        open={editingTask !== null || editingTaskId !== null}
+        onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
         mode="edit"
-        task={resolvedEditTask ?? undefined}
+        task={resolvedEditTask ?? editTaskResolved ?? undefined}
       />
     </>
   );
 }
 
-function SortableBandContent({
-  board,
+/** Per-row component that derives stable callbacks from task id, avoiding inline closures */
+const SortableTaskRowById = memo(function SortableTaskRowById({
+  sid,
+  task,
+  taskGroups,
+  onComplete,
+  onEdit,
+}: {
+  sid: string;
+  task: Task;
+  taskGroups: Board["taskGroups"];
+  onComplete: (taskId: number) => void;
+  onEdit: (taskId: number) => void;
+}) {
+  const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
+  const handleComplete = useCallback(
+    () => onComplete(task.id),
+    [onComplete, task.id],
+  );
+  return (
+    <SortableTaskRow
+      sortableId={sid}
+      task={task}
+      groupLabel={groupLabelForId(taskGroups, task.groupId)}
+      onOpen={handleOpen}
+      onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
+    />
+  );
+});
+
+// Memoized to prevent re-rendering the entire band on unrelated drag-over events
+const SortableBandContent = memo(function SortableBandContent({
+  taskMap,
+  taskGroups,
   containerId,
   sortableIds,
-  completeFromList,
-  setEditingTask,
+  onComplete,
+  onEdit,
 }: {
-  board: Board;
+  taskMap: Map<number, Task>;
+  taskGroups: Board["taskGroups"];
   containerId: string;
   sortableIds: string[];
-  completeFromList: (t: Task) => void;
-  setEditingTask: (t: Task) => void;
+  onComplete: (taskId: number) => void;
+  onEdit: (taskId: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
 
@@ -351,33 +456,26 @@ function SortableBandContent({
       )}
     >
       <SortableContext
-        // Keep each lane band's sortable container identity stable while tasks
-        // move across statuses, which avoids dnd-kit re-registration loops.
         id={containerId}
         items={sortableIds}
         strategy={verticalListSortingStrategy}
       >
         {sortableIds.map((sid) => {
           const tid = parseTaskSortableId(sid);
-          const task =
-            tid != null ? board.tasks.find((t) => t.id === tid) : undefined;
+          const task = tid != null ? taskMap.get(tid) : undefined;
           if (!task) return null;
           return (
-            <SortableTaskRow
+            <SortableTaskRowById
               key={sid}
-              sortableId={sid}
+              sid={sid}
               task={task}
-              groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-              onOpen={() => setEditingTask(task)}
-              onCompleteFromCircle={
-                task.status === "open"
-                  ? () => completeFromList(task)
-                  : undefined
-              }
+              taskGroups={taskGroups}
+              onComplete={onComplete}
+              onEdit={onEdit}
             />
           );
         })}
       </SortableContext>
     </div>
   );
-}
+});

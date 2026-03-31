@@ -1,5 +1,7 @@
+import { memo, useLayoutEffect, useRef } from "react";
 import { Check } from "lucide-react";
 import type { Task, TaskStatus } from "../../../shared/models";
+import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { cn } from "@/lib/utils";
 
 function previewBody(body: string, max = 100): string {
@@ -80,26 +82,58 @@ interface TaskCardProps {
   onCompleteFromCircle?: () => void;
   /** When true, dim the card to indicate it's being dragged. */
   isDragging?: boolean;
+  /**
+   * When false (default), this card registers its root for keyboard scroll targeting.
+   * SortableTaskRow sets true so only the row wrapper registers once per task.
+   */
+  skipNavRegistration?: boolean;
 }
 
-export function TaskCard({
+// Memoized to avoid re-rendering every card on each drag-over event
+export const TaskCard = memo(function TaskCard({
   task,
   groupLabel,
   onOpen,
   onCompleteFromCircle,
   isDragging,
+  skipNavRegistration = false,
 }: TaskCardProps) {
+  const nav = useBoardKeyboardNavOptional();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const highlighted = nav?.highlightedTaskId === task.id;
+
+  useLayoutEffect(() => {
+    if (skipNavRegistration || !nav) return;
+    const el = rootRef.current;
+    if (el) nav.registerTaskElement(task.id, el);
+    return () => {
+      nav.registerTaskElement(task.id, null);
+    };
+  }, [nav, skipNavRegistration, task.id]);
+
   const preview = previewBody(task.body);
   const canCompleteFromCircle =
     task.status === "open" && onCompleteFromCircle !== undefined;
 
   return (
     <div
+      ref={rootRef}
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
+        nav.setHoveredTaskId(task.id);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
+        nav.setHoveredTaskId(null);
+      }}
       className={cn(
-        "flex w-full gap-2 rounded-md border border-border bg-task-card px-2.5 py-2 text-sm text-task-card-foreground shadow-sm transition-colors",
+        // Task cards live inside the board's drag surface, so they should not participate in native text selection.
+        "flex w-full gap-2 rounded-md border border-border bg-task-card px-2.5 py-2 text-sm text-task-card-foreground shadow-sm transition-colors select-none",
         "hover:bg-accent/40 dark:hover:bg-white/[0.06]",
         task.color && "border-l-4",
         isDragging && "opacity-40",
+        highlighted &&
+          "ring-2 ring-ring ring-offset-2 ring-offset-background shadow-md",
       )}
       style={task.color ? { borderLeftColor: task.color } : undefined}
     >
@@ -136,4 +170,4 @@ export function TaskCard({
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,11 @@
-import { useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -10,7 +17,11 @@ import {
   boardCanvasBackground,
   resolvedBoardColor,
 } from "../../../shared/boardColor";
-import { resolvedBoardLayout } from "../../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  resolvedBoardLayout,
+  type Board,
+} from "../../../shared/models";
 import { usePreferencesStore } from "@/store/preferences";
 import { BoardColorMenu } from "./BoardColorMenu";
 import { BoardColumns } from "./BoardColumns";
@@ -19,11 +30,124 @@ import { BoardLayoutToggle } from "./BoardLayoutToggle";
 import { BoardStatusToggles } from "./BoardStatusToggles";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
+import {
+  BoardKeyboardNavProvider,
+  useBoardKeyboardNav,
+} from "./shortcuts/BoardKeyboardNavContext";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
+import { useUpdateTask } from "@/api/mutations";
+import { BoardTaskKeyboardBridgeProvider } from "./shortcuts/BoardTaskKeyboardBridge";
+import { BoardTaskDeleteConfirm } from "./shortcuts/BoardTaskDeleteConfirm";
+import { cycleTaskGroupForBoard } from "./shortcuts/boardShortcutRegistry";
+import { ShortcutHelpDialog } from "./shortcuts/ShortcutHelpDialog";
+import { ShortcutScopeProvider } from "./shortcuts/ShortcutScopeContext";
+import { useBoardShortcutKeydown } from "./shortcuts/useBoardShortcutKeydown";
+import { useBoardTaskKeyboardBridge } from "./shortcuts/BoardTaskKeyboardBridge";
+import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
 import { cn } from "@/lib/utils";
 
 interface BoardViewProps {
   boardId: string | null;
+}
+
+/** Lives inside BoardKeyboardNavProvider — merges board shortcuts with highlight navigation and task actions. */
+function BoardShortcutBindings({
+  board,
+  openHelp,
+  toggleFilters,
+  setTaskDeleteConfirmId,
+}: {
+  board: Board;
+  openHelp: () => void;
+  toggleFilters: () => void;
+  setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
+}) {
+  const setActiveTaskGroupForBoard = usePreferencesStore(
+    (s) => s.setActiveTaskGroupForBoard,
+  );
+  const nav = useBoardKeyboardNav();
+  const bridge = useBoardTaskKeyboardBridge();
+  const { data: statuses } = useStatuses();
+  const workflowOrder = useStatusWorkflowOrder();
+  const updateTask = useUpdateTask();
+
+  const actions = useMemo<BoardShortcutActions>(
+    () => ({
+      openHelp,
+      toggleFilters,
+      cycleTaskGroup: (b) =>
+        cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
+      allTaskGroups: (b) =>
+        setActiveTaskGroupForBoard(b.id, ALL_TASK_GROUPS),
+      focusOrScrollHighlight: nav.focusOrScrollHighlight,
+      moveHighlight: nav.moveHighlight,
+      highlightHome: nav.highlightHome,
+      highlightEnd: nav.highlightEnd,
+      highlightPage: nav.highlightPage,
+      openHighlightedTask: () => {
+        const id = nav.highlightedTaskId;
+        if (id != null) bridge.requestOpenTaskEditor(id);
+      },
+      requestDeleteHighlightedTask: () => {
+        const id = nav.highlightedTaskId;
+        if (id != null) setTaskDeleteConfirmId(id);
+      },
+      completeHighlightedTask: (b) => {
+        const id = nav.highlightedTaskId;
+        if (id == null) return;
+        const task = b.tasks.find((t) => t.id === id);
+        if (!task) return;
+        const meta = statuses?.find((s) => s.id === task.status);
+        if (meta?.isClosed) return;
+        const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
+        const now = new Date().toISOString();
+        updateTask.mutate({
+          boardId: b.id,
+          task: {
+            ...task,
+            status: closedId,
+            updatedAt: now,
+            closedAt: task.closedAt ?? now,
+          },
+        });
+      },
+      reopenHighlightedTask: (b) => {
+        const id = nav.highlightedTaskId;
+        if (id == null) return;
+        const task = b.tasks.find((t) => t.id === id);
+        if (!task) return;
+        const meta = statuses?.find((s) => s.id === task.status);
+        if (!meta?.isClosed) return;
+        const openId =
+          workflowOrder.find((x) => x === "open") ?? workflowOrder[0] ?? "open";
+        const now = new Date().toISOString();
+        updateTask.mutate({
+          boardId: b.id,
+          task: {
+            ...task,
+            status: openId,
+            updatedAt: now,
+            closedAt: null,
+          },
+        });
+      },
+    }),
+    [
+      openHelp,
+      toggleFilters,
+      setActiveTaskGroupForBoard,
+      nav,
+      bridge,
+      setTaskDeleteConfirmId,
+      statuses,
+      workflowOrder,
+      updateTask,
+    ],
+  );
+
+  useBoardShortcutKeydown({ board, actions });
+  return null;
 }
 
 export function BoardView({ boardId }: BoardViewProps) {
@@ -35,11 +159,50 @@ export function BoardView({ boardId }: BoardViewProps) {
   const toggleFilterStrip = usePreferencesStore(
     (s) => s.toggleBoardFilterStripCollapsed,
   );
+  const boardShortcutHelpDismissed = usePreferencesStore(
+    (s) => s.boardShortcutHelpDismissed,
+  );
+  const setBoardShortcutHelpDismissed = usePreferencesStore(
+    (s) => s.setBoardShortcutHelpDismissed,
+  );
 
   const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  /** Whether the help dialog was opened automatically (on board open) vs via H. */
+  const [helpOpenReason, setHelpOpenReason] = useState<
+    "none" | "auto" | "manual"
+  >("none");
+
+  const openHelp = useCallback(() => {
+    setHelpOpenReason("manual");
+    setShortcutHelpOpen(true);
+  }, []);
 
   const { scrollRef, panning, boardCanvasPanHandlers } =
     useBoardCanvasPanScroll();
+
+  // Auto-open keyboard help whenever a board is selected from the sidebar, until the user
+  // checks "Don't show again" (`boardShortcutHelpDismissed`). Closing without the checkbox
+  // does not persist — the dialog shows again on the next board open.
+  useEffect(() => {
+    if (!data || !boardId) return;
+    if (boardShortcutHelpDismissed) return;
+    setHelpOpenReason("auto");
+    setShortcutHelpOpen(true);
+  }, [boardId, data?.id, boardShortcutHelpDismissed]);
+
+  const handleShortcutHelpClose = useCallback(
+    (result?: { dontShowAgain: boolean }) => {
+      setShortcutHelpOpen(false);
+      setHelpOpenReason("none");
+      if (result?.dontShowAgain) setBoardShortcutHelpDismissed(true);
+    },
+    [setBoardShortcutHelpDismissed],
+  );
+
+  const [taskDeleteConfirmId, setTaskDeleteConfirmId] = useState<number | null>(
+    null,
+  );
 
   if (!boardId) {
     return (
@@ -75,10 +238,22 @@ export function BoardView({ boardId }: BoardViewProps) {
   const stackedLayout = resolvedBoardLayout(data) === "stacked";
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
-      style={{ background: boardBg }}
+    <ShortcutScopeProvider>
+    <BoardTaskKeyboardBridgeProvider>
+    <BoardKeyboardNavProvider
+      board={data}
+      layout={stackedLayout ? "stacked" : "lanes"}
     >
+      <BoardShortcutBindings
+        board={data}
+        openHelp={openHelp}
+        toggleFilters={toggleFilterStrip}
+        setTaskDeleteConfirmId={setTaskDeleteConfirmId}
+      />
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
+        style={{ background: boardBg }}
+      >
       <div className="relative shrink-0 border-b border-black/25">
         <div
           className="pointer-events-none absolute inset-0 rounded-t-lg backdrop-brightness-[0.72]"
@@ -189,10 +364,11 @@ export function BoardView({ boardId }: BoardViewProps) {
         </div>
       </div>
 
+      {/* Prevent native selection on the board surface so drag gestures do not highlight task text. */}
       <div
         ref={scrollRef}
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-3 pb-4 pt-3",
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-3 pb-4 pt-3 select-none",
           stackedLayout ? "overflow-y-auto" : "overflow-y-hidden",
           "cursor-grab",
           panning && "cursor-grabbing select-none",
@@ -208,11 +384,26 @@ export function BoardView({ boardId }: BoardViewProps) {
         </div>
       </div>
 
+      <ShortcutHelpDialog
+        open={shortcutHelpOpen}
+        onClose={handleShortcutHelpClose}
+        showOnboardingExtras={helpOpenReason === "auto"}
+      />
+
       <TaskGroupsEditorDialog
         board={data}
         open={groupsEditorOpen}
         onClose={() => setGroupsEditorOpen(false)}
       />
+
+      <BoardTaskDeleteConfirm
+        board={data}
+        taskId={taskDeleteConfirmId}
+        onClose={() => setTaskDeleteConfirmId(null)}
+      />
     </div>
+    </BoardKeyboardNavProvider>
+    </BoardTaskKeyboardBridgeProvider>
+    </ShortcutScopeProvider>
   );
 }

@@ -1,0 +1,13 @@
+/**
+ * Keyboard shortcut scopes for board-related UI (Phase 4).
+ * Topmost scope on the stack wins; empty stack means `board`.
+ */
+export type ShortcutScope =
+  | "board"
+  | "shortcut-help-dialog"
+  | "task-editor"
+  | "task-groups-editor"
+  | "discard-dialog"
+  | "task-delete-confirmation"
+  | "list-delete-confirmation"
+  | "list-header-menu";

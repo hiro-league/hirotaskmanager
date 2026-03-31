@@ -284,6 +284,15 @@ All reusable UI primitives (Button, Dialog, Input, Select, DropdownMenu, etc.) b
 
 **Do not** build ad-hoc form controls, modals, or menus from raw HTML — always check if a shadcn/ui primitive exists first. Skipping this leads to styling that bypasses the theme system and won't respond to dark mode or palette changes.
 
+## Drag-and-drop render performance
+
+Board DnD fires `onDragOver` many times per second, each call updating container state via `setTaskContainers`. Without care this re-renders the entire board tree. Key rules:
+
+- **Memoize leaf components** — `TaskCard`, `SortableTaskRow`, `SortableBandContent`, and list-column components must be wrapped in `React.memo`.
+- **Stabilize callbacks** — Never pass inline arrow closures (`() => doThing(task)`) as props to memoized children during drag. Use `useCallback` with id-based signatures (e.g. `onEdit(taskId: number)`) so references stay stable across renders.
+- **Use a task lookup Map** — Build `Map<number, Task>` via `useMemo` over `board.tasks` instead of calling `board.tasks.find()` inside render loops (O(1) vs O(n) per row).
+- **Prefer `MeasuringStrategy.BeforeDragging`** — `WhileDragging` forces continuous DOM rect measurement on every frame; `BeforeDragging` measures once at drag start.
+
 ## Implementation discipline (bottom-up)
 
 When adding large features, prefer:

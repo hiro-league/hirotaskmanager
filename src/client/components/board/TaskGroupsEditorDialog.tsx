@@ -1,11 +1,14 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   nextGroupId,
   type Board,
   type GroupDefinition,
 } from "../../../shared/models";
 import { usePatchBoardTaskGroups } from "@/api/mutations";
+import { DiscardChangesDialog } from "./shortcuts/DiscardChangesDialog";
+import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
+import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
 
 interface TaskGroupsEditorDialogProps {
   board: Board;
@@ -21,24 +24,45 @@ export function TaskGroupsEditorDialog({
   const titleId = useId();
   const patchGroups = usePatchBoardTaskGroups();
   const [rows, setRows] = useState<GroupDefinition[]>([]);
+  /** Snapshot when dialog opens — used for dirty detection (Phase 4 close-request path). */
+  const [baseline, setBaseline] = useState("");
+  const [showDiscard, setShowDiscard] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setRows(
+    setShowDiscard(false);
+    const initial: GroupDefinition[] =
       board.taskGroups.length > 0
         ? board.taskGroups.map((g) => ({ ...g }))
-        : [{ id: 0, label: "" }],
-    );
+        : [{ id: 0, label: "" }];
+    setRows(initial);
+    setBaseline(JSON.stringify(initial));
   }, [open, board.taskGroups]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useMemo(
+    () => open && JSON.stringify(rows) !== baseline,
+    [open, rows, baseline],
+  );
+
+  const busy = patchGroups.isPending;
+
+  const requestClose = useDialogCloseRequest({
+    busy,
+    isDirty,
+    onClose,
+    onDirtyClose: () => setShowDiscard(true),
+  });
+
+  const keyHandler = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      requestClose();
+    },
+    [requestClose],
+  );
+
+  useShortcutOverlay(open && !showDiscard, "task-groups-editor", keyHandler);
 
   const { nextGroups, remapCount } = useMemo(() => {
     const trimmed = rows
@@ -58,8 +82,6 @@ export function TaskGroupsEditorDialog({
 
   if (!open) return null;
 
-  const busy = patchGroups.isPending;
-
   const save = () => {
     if (nextGroups.length === 0) return;
     patchGroups.mutate(
@@ -71,16 +93,18 @@ export function TaskGroupsEditorDialog({
   const firstLabel = nextGroups[0]?.label ?? "";
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="presentation"
-      onClick={onClose}
+      onClick={busy ? undefined : requestClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg"
+        // Dialogs opt back into selection so board-wide drag suppression does not block editing text.
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-foreground">
@@ -101,7 +125,7 @@ export function TaskGroupsEditorDialog({
             <li key={row.id} className="flex items-center gap-2">
               <input
                 type="text"
-                className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+                className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
                 value={row.label}
                 disabled={busy}
                 placeholder="Group name"
@@ -148,7 +172,7 @@ export function TaskGroupsEditorDialog({
             type="button"
             className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
             disabled={busy}
-            onClick={onClose}
+            onClick={requestClose}
           >
             Cancel
           </button>
@@ -163,5 +187,15 @@ export function TaskGroupsEditorDialog({
         </div>
       </div>
     </div>
+
+    <DiscardChangesDialog
+      open={showDiscard}
+      onCancel={() => setShowDiscard(false)}
+      onDiscard={() => {
+        setShowDiscard(false);
+        onClose();
+      }}
+    />
+    </>
   );
 }

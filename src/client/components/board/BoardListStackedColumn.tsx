@@ -357,7 +357,7 @@ function ListStackedBody({
   }, [forDragOverlay, headerCollapsed]);
 
   const outerClass = cn(
-    "relative flex flex-col overflow-hidden bg-muted/20 dark:bg-muted/10",
+    "relative flex flex-col overflow-hidden bg-muted/20",
     forDragOverlay && "min-h-0 flex-1",
   );
 

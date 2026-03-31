@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type CSSProperties,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -13,16 +14,14 @@ import {
   Settings2,
 } from "lucide-react";
 import { useBoard } from "@/api/queries";
-import {
-  boardCanvasBackground,
-  resolvedBoardColor,
-} from "../../../shared/boardColor";
+import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
   ALL_TASK_GROUPS,
   resolvedBoardLayout,
   type Board,
 } from "../../../shared/models";
 import { usePreferencesStore } from "@/store/preferences";
+import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { BoardColorMenu } from "./BoardColorMenu";
 import { BoardColumns } from "./BoardColumns";
 import { BoardColumnsStacked } from "./BoardColumnsStacked";
@@ -45,6 +44,7 @@ import { useBoardShortcutKeydown } from "./shortcuts/useBoardShortcutKeydown";
 import { useBoardTaskKeyboardBridge } from "./shortcuts/BoardTaskKeyboardBridge";
 import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
+import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
 
 interface BoardViewProps {
@@ -152,6 +152,9 @@ function BoardShortcutBindings({
 
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
+  const themePreference = usePreferencesStore((s) => s.themePreference);
+  const systemDark = useSystemDark();
+  const dark = resolveDark(themePreference, systemDark);
 
   const filterCollapsed = usePreferencesStore(
     (s) => s.boardFilterStripCollapsed,
@@ -204,6 +207,13 @@ export function BoardView({ boardId }: BoardViewProps) {
     null,
   );
 
+  // Compute this without a hook so BoardView keeps the same hook order while it
+  // moves between empty/loading/error/success states.
+  const boardThemeStyle: CSSProperties = {
+    ...getBoardThemeStyle(resolvedBoardColor(data ?? {}), dark),
+    background: "var(--board-canvas-image)",
+  };
+
   if (!boardId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
@@ -233,8 +243,6 @@ export function BoardView({ boardId }: BoardViewProps) {
       </div>
     );
   }
-
-  const boardBg = boardCanvasBackground(resolvedBoardColor(data));
   const stackedLayout = resolvedBoardLayout(data) === "stacked";
 
   return (
@@ -252,11 +260,19 @@ export function BoardView({ boardId }: BoardViewProps) {
       />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
-        style={{ background: boardBg }}
+        style={boardThemeStyle}
       >
-      <div className="relative shrink-0 border-b border-black/25">
+      <div
+        className="relative shrink-0 border-b"
+        // Keep board identity on the top strip only; the controls inside it
+        // still use the shared app theme so the rest of the UI stays familiar.
+        style={{
+          background: "var(--board-header-bg)",
+          borderBottomColor: "var(--board-header-border)",
+        }}
+      >
         <div
-          className="pointer-events-none absolute inset-0 rounded-t-lg backdrop-brightness-[0.72]"
+          className="pointer-events-none absolute inset-0 rounded-t-lg "
           aria-hidden
         />
         {/* Tap zone: same 8px as pt-2 below — no extra strip height */}

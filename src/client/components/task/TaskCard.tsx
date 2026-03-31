@@ -129,7 +129,8 @@ export const TaskCard = memo(function TaskCard({
       className={cn(
         // Task cards live inside the board's drag surface, so they should not participate in native text selection.
         "flex w-full gap-2 rounded-md border border-border bg-task-card px-2.5 py-2 text-sm text-task-card-foreground shadow-sm transition-colors select-none",
-        "hover:bg-accent/40 dark:hover:bg-white/[0.06]",
+        // Keep hover tied to the scoped board accent so the board-local theme reads in both modes.
+        "hover:bg-accent/45",
         task.color && "border-l-4",
         isDragging && "opacity-40",
         highlighted &&

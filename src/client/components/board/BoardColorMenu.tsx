@@ -1,13 +1,13 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Palette } from "lucide-react";
 import {
-  BOARD_CANVAS_BACKGROUND,
   BOARD_COLOR_PRESETS,
   type BoardColorPreset,
   resolvedBoardColor,
 } from "../../../shared/boardColor";
 import type { Board } from "../../../shared/models";
 import { usePatchBoardViewPrefs } from "@/api/mutations";
+import { getBoardThemePreviewBackground } from "./boardTheme";
 import { cn } from "@/lib/utils";
 
 interface BoardColorMenuProps {
@@ -40,13 +40,13 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
               ? "gap-1 px-1.5 py-0.5 text-[11px]"
               : "gap-1.5 px-2 py-1 text-xs",
           )}
-          title="Board appearance"
+          title="Board theme"
         >
           <Palette
             className={cn("shrink-0", compact ? "size-3" : "size-3.5")}
             aria-hidden
           />
-          Board color
+          Board theme
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -56,7 +56,7 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
           align="start"
         >
           <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Column area
+            Board seed color
           </p>
           <div className="grid grid-cols-5 gap-2">
             {BOARD_COLOR_PRESETS.map((preset) => (
@@ -73,7 +73,7 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
                       : "block h-8 w-full rounded border-2 border-border/60 shadow-sm"
                   }
                   style={{
-                    background: BOARD_CANVAS_BACKGROUND[preset],
+                    background: getBoardThemePreviewBackground(preset),
                   }}
                   aria-hidden
                 />

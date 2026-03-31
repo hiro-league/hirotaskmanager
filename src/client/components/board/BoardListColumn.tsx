@@ -4,12 +4,14 @@ import type {
 } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useLayoutEffect, useRef } from "react";
 import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { cn } from "@/lib/utils";
 import { boardListColumnOverlayShellClass } from "./boardDragOverlayShell";
 import { laneBandContainerId, sortableListId } from "./dndIds";
+import { laneStatusDividerClass } from "./laneStatusTheme";
 
 interface ListColumnBodyProps {
   board: Board;
@@ -20,6 +22,7 @@ interface ListColumnBodyProps {
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
   taskMap?: Record<string, string[]>;
+  isTaskDragActive?: boolean;
 }
 
 function ListColumnBody({
@@ -31,7 +34,22 @@ function ListColumnBody({
   dragAttributes,
   dragListeners,
   taskMap,
+  isTaskDragActive = false,
 }: ListColumnBodyProps) {
+  const bandsRef = useRef<HTMLDivElement>(null);
+  const bandHeightsRef = useRef<number[]>([]);
+
+  // Snapshot band heights after every non-dragging paint so we can freeze
+  // them the moment a task drag begins, preventing flex-grow reflow from
+  // triggering dnd-kit measureRect → setState infinite loops.
+  useLayoutEffect(() => {
+    if (!isTaskDragActive && bandsRef.current) {
+      bandHeightsRef.current = Array.from(bandsRef.current.children).map(
+        (el) => (el as HTMLElement).getBoundingClientRect().height,
+      );
+    }
+  });
+
   return (
     <>
       <ListHeader
@@ -40,22 +58,39 @@ function ListColumnBody({
         dragAttributes={dragAttributes}
         dragListeners={dragListeners}
       />
-      <div className="flex min-h-0 flex-1 flex-col bg-transparent">
+      <div ref={bandsRef} className="flex min-h-0 flex-1 flex-col bg-transparent">
         {visibleStatuses.map((status, i) => {
           const containerId = laneBandContainerId(listId, status);
           const sortableIds = taskMap?.[containerId];
+          const isOpenBand = status === "open";
+          const frozenH = isTaskDragActive ? bandHeightsRef.current[i] : undefined;
           return (
             <div
               key={status}
-              style={{
-                flexGrow: weights[i] ?? 1,
-                flexShrink: 1,
-                flexBasis: 0,
-                minHeight: 0,
-              }}
+              style={
+                frozenH != null
+                  ? { height: frozenH, minHeight: 0 }
+                  : {
+                      flexGrow: weights[i] ?? 1,
+                      flexShrink: 1,
+                      flexBasis: 0,
+                      minHeight: 0,
+                    }
+              }
               className={cn(
-                "flex min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
-                "bg-muted/20 dark:bg-muted/10",
+                "flex min-h-0 flex-col",
+                // Keep list bodies neutral; only the left status rail carries the accent color.
+                i > 0 &&
+                  cn(
+                    "border-t-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]",
+                    laneStatusDividerClass(status),
+                  ),
+                // Open band: relative + overflow-hidden so the FAB (absolute sibling
+                // of the inner scroll div) is clipped to this band's visible area.
+                // Non-open bands: scroll is handled here directly.
+                isOpenBand
+                  ? "relative overflow-hidden"
+                  : "overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
               )}
               data-board-id={board.id}
               data-list-id={listId}
@@ -111,6 +146,7 @@ interface BoardListColumnProps {
   visibleStatuses: string[];
   weights: number[];
   taskMap?: Record<string, string[]>;
+  isTaskDragActive?: boolean;
 }
 
 export function BoardListColumn({
@@ -119,6 +155,7 @@ export function BoardListColumn({
   visibleStatuses,
   weights,
   taskMap,
+  isTaskDragActive,
 }: BoardListColumnProps) {
   const {
     attributes,
@@ -145,9 +182,11 @@ export function BoardListColumn({
       data-list-column={list.id}
       data-board-no-pan
     >
+      {/* group/list-col: FAB in the open band uses group-hover/list-col to
+          appear only when the pointer is anywhere over this list column. */}
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
+          "group/list-col flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
@@ -163,6 +202,7 @@ export function BoardListColumn({
             dragAttributes={attributes}
             dragListeners={listeners}
             taskMap={taskMap}
+            isTaskDragActive={isTaskDragActive}
           />
         )}
       </div>

@@ -8,12 +8,15 @@ import {
 } from "../../../shared/boardColor";
 import type { Board } from "../../../shared/models";
 import { usePatchBoardViewPrefs } from "@/api/mutations";
+import { cn } from "@/lib/utils";
 
 interface BoardColorMenuProps {
   board: Board;
+  /** Smaller trigger when board header is compact. */
+  compact?: boolean;
 }
 
-export function BoardColorMenu({ board }: BoardColorMenuProps) {
+export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) {
   const patchViewPrefs = usePatchBoardViewPrefs();
   const current = resolvedBoardColor(board);
   const busy = patchViewPrefs.isPending;
@@ -31,10 +34,18 @@ export function BoardColorMenu({ board }: BoardColorMenuProps) {
         <button
           type="button"
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          className={cn(
+            "inline-flex items-center rounded-md border border-border bg-muted/50 font-medium text-foreground hover:bg-muted disabled:opacity-50",
+            compact
+              ? "gap-1 px-1.5 py-0.5 text-[11px]"
+              : "gap-1.5 px-2 py-1 text-xs",
+          )}
           title="Board appearance"
         >
-          <Palette className="size-3.5 shrink-0" aria-hidden />
+          <Palette
+            className={cn("shrink-0", compact ? "size-3" : "size-3.5")}
+            aria-hidden
+          />
           Board color
         </button>
       </DropdownMenu.Trigger>

@@ -23,7 +23,7 @@ import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { ListHeader } from "@/components/list/ListHeader";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import { usePreferencesStore, useResolvedActiveTaskGroup } from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import {
   boardListColumnOverlayShellClass,
@@ -35,6 +35,7 @@ import {
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import { SortableTaskRow } from "./SortableTaskRow";
+import { scrollElementToBottomThen } from "./useVerticalScrollOverflow";
 
 interface ListStackedBodyProps {
   board: Board;
@@ -75,6 +76,9 @@ function StackedSortableList({
       )}
     >
       <SortableContext
+        // Pin the sortable container id to the list so dnd-kit does not
+        // recycle container identity during cross-list task moves.
+        id={containerId}
         items={sortableIds}
         strategy={verticalListSortingStrategy}
       >
@@ -119,13 +123,18 @@ function ListStackedBody({
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const addCardRef = useRef<HTMLDivElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [bodyMaxHeight, setBodyMaxHeight] = useState<number | null>(null);
   createPendingRef.current = createTask.isPending;
 
   const resolvedEditTask =
@@ -212,11 +221,63 @@ function ListStackedBody({
     [taskContainerId, board, listId, visibleStatuses, activeGroup, workflowOrder],
   );
 
-  const scrollAreaClass = cn(
-    "flex min-h-0 flex-col bg-muted/20 dark:bg-muted/10",
-    "overflow-y-auto overscroll-y-contain p-2",
-    forDragOverlay ? "flex-1" : "max-h-[min(70vh,calc(100dvh-11rem))]",
+  // Show FAB whenever the add-task button is scrolled out of view.
+  // IntersectionObserver fires on every scroll/resize; no layout mutation needed.
+  const [addBtnVisible, setAddBtnVisible] = useState(true);
+
+  useEffect(() => {
+    if (!canAddOpen || adding || forDragOverlay) {
+      setAddBtnVisible(true);
+      return;
+    }
+    const target = addBtnRef.current;
+    const root = scrollRef.current;
+    if (!target || !root) return;
+
+    const io = new IntersectionObserver(
+      ([entry]) => setAddBtnVisible(entry.isIntersecting),
+      { root, threshold: 1.0 },
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [canAddOpen, adding, forDragOverlay]);
+
+  const showFab = canAddOpen && !adding && !addBtnVisible && !forDragOverlay;
+
+  useEffect(() => {
+    if (forDragOverlay) {
+      setBodyMaxHeight(null);
+      return;
+    }
+
+    const updateBodyMaxHeight = () => {
+      if (typeof window === "undefined") return;
+      const el = outerRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const bottomGap = 32;
+      const next = Math.max(240, Math.floor(window.innerHeight - top - bottomGap));
+      setBodyMaxHeight(next);
+    };
+
+    updateBodyMaxHeight();
+    const rafId = window.requestAnimationFrame(updateBodyMaxHeight);
+    window.addEventListener("resize", updateBodyMaxHeight);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", updateBodyMaxHeight);
+    };
+  }, [forDragOverlay, headerCollapsed]);
+
+  const outerClass = cn(
+    "relative flex flex-col overflow-hidden bg-muted/20 dark:bg-muted/10",
+    forDragOverlay && "min-h-0 flex-1",
   );
+
+  const outerStyle =
+    !forDragOverlay && bodyMaxHeight != null
+      ? { maxHeight: `${bodyMaxHeight}px` }
+      : undefined;
 
   const main = (
     <>
@@ -226,90 +287,115 @@ function ListStackedBody({
         dragAttributes={dragAttributes}
         dragListeners={dragListeners}
       />
-      <div
-        className={scrollAreaClass}
-        data-board-id={board.id}
-        data-list-id={listId}
-        aria-label={`${list.name} — tasks`}
-      >
-        {taskContainerId != null ? (
-          <StackedSortableList
-            board={board}
-            containerId={taskContainerId}
-            sortableIds={sortableIds}
-            completeFromList={completeFromList}
-            setEditingTask={setEditingTask}
-          />
-        ) : (
+      <div ref={outerRef} className={outerClass} style={outerStyle}>
+        {/* Scroll container — FAB lives outside this div so it never scrolls */}
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 pb-4 pt-2"
+          data-board-id={board.id}
+          data-list-id={listId}
+          aria-label={`${list.name} — tasks`}
+        >
           <div className="flex flex-col gap-2">
-            {staticTasks?.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-                onOpen={() => setEditingTask(task)}
+            {taskContainerId != null ? (
+              <StackedSortableList
+                board={board}
+                containerId={taskContainerId}
+                sortableIds={sortableIds}
+                completeFromList={completeFromList}
+                setEditingTask={setEditingTask}
               />
-            ))}
-          </div>
-        )}
-        {canAddOpen ? (
-          !adding ? (
-            <button
-              type="button"
-              className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                setAdding(true);
-              }}
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Add task
-            </button>
-          ) : (
-            <div
-              ref={addCardRef}
-              className="mt-2 shrink-0 rounded-md border border-border bg-background/80 p-2"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <textarea
-                ref={inputRef}
-                rows={3}
-                className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
-                placeholder="Enter a title or paste a link"
-                value={title}
-                disabled={createTask.isPending}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleTextareaBlur}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    submitTask();
-                  }
-                  if (e.key === "Escape") cancelAdd();
+            ) : (
+              <>
+                {staticTasks?.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                    onOpen={() => setEditingTask(task)}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* Add-task button — always rendered so IntersectionObserver can watch it */}
+            {canAddOpen && !adding && (
+              <button
+                ref={addBtnRef}
+                type="button"
+                className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAdding(true);
                 }}
-              />
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                  disabled={createTask.isPending || !title.trim()}
-                  onClick={() => submitTask()}
-                >
-                  Add task
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Cancel"
+              >
+                <Plus className="size-3.5" aria-hidden />
+                Add task
+              </button>
+            )}
+
+            {/* Composer */}
+            {canAddOpen && adding && (
+              <div
+                ref={addCardRef}
+                className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <textarea
+                  ref={inputRef}
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
+                  placeholder="Enter a title or paste a link"
+                  value={title}
                   disabled={createTask.isPending}
-                  onClick={cancelAdd}
-                >
-                  <X className="size-4" aria-hidden />
-                </button>
+                  onChange={(e) => setTitle(e.target.value)}
+                  onBlur={handleTextareaBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submitTask();
+                    }
+                    if (e.key === "Escape") cancelAdd();
+                  }}
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    disabled={createTask.isPending || !title.trim()}
+                    onClick={() => submitTask()}
+                  >
+                    Add task
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Cancel"
+                    disabled={createTask.isPending}
+                    onClick={cancelAdd}
+                  >
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </div>
               </div>
-            </div>
-          )
-        ) : null}
+            )}
+          </div>
+        </div>
+
+        {/* FAB — sibling of scroll div, anchored to outer shell, never scrolls */}
+        {showFab && (
+          <button
+            type="button"
+            aria-label="Add task"
+            className="absolute bottom-3 right-3 z-10 flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-1 ring-border/60 hover:opacity-90"
+            onClick={(e) => {
+              e.stopPropagation();
+              scrollElementToBottomThen(scrollRef.current, () => setAdding(true));
+            }}
+          >
+            <Plus className="size-6" strokeWidth={2.5} aria-hidden />
+          </button>
+        )}
       </div>
     </>
   );

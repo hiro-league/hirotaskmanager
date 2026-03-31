@@ -6,12 +6,16 @@ interface StatusBandSplitterProps {
   onDrag: (deltaY: number) => void;
   onCommit: () => void;
   disabled?: boolean;
+  className?: string;
+  lineClassName?: string;
 }
 
 export function StatusBandSplitter({
   onDrag,
   onCommit,
   disabled,
+  className,
+  lineClassName,
 }: StatusBandSplitterProps) {
   const lastY = useRef<number | null>(null);
   const dragging = useRef(false);
@@ -57,13 +61,19 @@ export function StatusBandSplitter({
       className={cn(
         "group relative flex h-3 shrink-0 cursor-row-resize items-center justify-center bg-transparent",
         disabled && "pointer-events-none opacity-40",
+        className,
       )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
     >
-      <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-border/50 group-hover:bg-border group-hover:h-0.5" />
+      <div
+        className={cn(
+          "absolute inset-x-1 top-1/2 h-0.5 -translate-y-1/2 border-t-2 opacity-70 transition-opacity group-hover:opacity-100",
+          lineClassName,
+        )}
+      />
       <ChevronsUpDown
         className="relative z-10 size-4 text-muted-foreground group-hover:text-foreground"
         aria-hidden

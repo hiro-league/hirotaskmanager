@@ -187,8 +187,10 @@ export function BoardColumns({ board }: BoardColumnsProps) {
       if (i < 0 || i >= w.length - 1) return w;
       const next = [...w];
       const k = 0.004;
-      const top = Math.max(0.12, (next[i] ?? 1) - deltaY * k);
-      const bot = Math.max(0.12, (next[i + 1] ?? 1) + deltaY * k);
+      // Follow the pointer direction: dragging down grows the band above,
+      // dragging up grows the band below.
+      const top = Math.max(0.12, (next[i] ?? 1) + deltaY * k);
+      const bot = Math.max(0.12, (next[i + 1] ?? 1) - deltaY * k);
       next[i] = top;
       next[i + 1] = bot;
       return next;
@@ -234,6 +236,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
                     visibleStatuses={visibleStatuses}
                     weights={weights}
                     taskMap={displayTaskMap}
+                    isTaskDragActive={activeTaskId != null}
                   />
                 ))}
               </div>

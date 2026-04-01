@@ -9,6 +9,7 @@ import {
   weightsAfterVisibilityChange,
 } from "./boardStatusUtils";
 import { statusDotClass } from "./laneStatusTheme";
+import { boardHeaderToggleButtonClass } from "./boardHeaderButtonStyles";
 
 interface BoardStatusTogglesProps {
   board: Board;
@@ -70,12 +71,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
           <button
             key={statusId}
             type="button"
-            className={cn(
-              "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-              active
-                ? "border-primary/40 bg-primary/15 text-foreground"
-                : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
-            )}
+            className={boardHeaderToggleButtonClass(active)}
             aria-pressed={active}
             onPointerDown={stopPan}
             onClick={() => toggle(statusId)}

@@ -1,7 +1,7 @@
 import type { Board } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
-import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/store/preferences";
+import { boardHeaderToggleButtonClass } from "./boardHeaderButtonStyles";
 
 interface TaskGroupSwitcherProps {
   board: Board;
@@ -33,12 +33,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
       <span className="text-xs font-medium text-muted-foreground">Groups</span>
       <button
         type="button"
-        className={cn(
-          "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-          resolved === ALL_TASK_GROUPS
-            ? "border-primary/40 bg-primary/15 text-foreground"
-            : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
-        )}
+        className={boardHeaderToggleButtonClass(resolved === ALL_TASK_GROUPS)}
         aria-pressed={resolved === ALL_TASK_GROUPS}
         onClick={() => pick(ALL_TASK_GROUPS)}
       >
@@ -50,12 +45,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
           <button
             key={g.id}
             type="button"
-            className={cn(
-              "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-              active
-                ? "border-primary/40 bg-primary/15 text-foreground"
-                : "border-border bg-muted/40 text-muted-foreground hover:bg-muted",
-            )}
+            className={boardHeaderToggleButtonClass(active)}
             aria-pressed={active}
             onClick={() => pick(String(g.id))}
           >

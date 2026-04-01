@@ -6,6 +6,7 @@ import {
   usePreferencesStore,
   useResolvedTaskCardViewMode,
 } from "@/store/preferences";
+import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
 
 interface BoardTaskCardSizeToggleProps {
   board: Board;
@@ -26,7 +27,7 @@ export function BoardTaskCardSizeToggle({
   return (
     <button
       type="button"
-      className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+      className={boardHeaderActionButtonClass()}
       title={`Task card view: ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}. Click or press S to switch to ${TASK_CARD_VIEW_MODE_LABELS[nextSize]}.`}
       aria-label={`Task card view: ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}`}
       // Keep the board-local mode in one place so the button and shortcut stay in sync.

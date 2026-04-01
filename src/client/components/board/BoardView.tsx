@@ -51,6 +51,7 @@ import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
 import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
+import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
 
 interface BoardViewProps {
   boardId: string | null;
@@ -416,7 +417,7 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <BoardTaskCardSizeToggle board={data} />
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                  className={boardHeaderActionButtonClass()}
                   title="Edit task groups for this board"
                   onClick={() => setGroupsEditorOpen(true)}
                 >

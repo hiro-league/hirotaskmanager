@@ -1,6 +1,7 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useCallback, useEffect, useState } from "react";
-import { LayoutGrid, Plus, Trash2, X } from "lucide-react";
-import { useBoards } from "@/api/queries";
+import { LayoutGrid, MoreVertical, Plus, X } from "lucide-react";
+import { useBoard, useBoards } from "@/api/queries";
 import {
   useCreateBoard,
   useDeleteBoard,
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
 import { usePreferencesStore } from "@/store/preferences";
 import { useMatch, useNavigate } from "react-router-dom";
+import type { ReactNode } from "react";
 
 function boardCollapsedLabel(name: string): string {
   const trimmed = name.trim();
@@ -23,8 +25,101 @@ function boardCollapsedLabel(name: string): string {
   return (a + b).toUpperCase() || "?";
 }
 
+interface SidebarConfirmDialogProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  busy?: boolean;
+  confirmDisabled?: boolean;
+  children?: ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function SidebarConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = "OK",
+  cancelLabel = "Cancel",
+  busy = false,
+  confirmDisabled = false,
+  children,
+  onConfirm,
+  onCancel,
+}: SidebarConfirmDialogProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!confirmDisabled && !busy) onConfirm();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [busy, confirmDisabled, onCancel, onConfirm, open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onClick={() => {
+        if (!busy) onCancel();
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="sidebar-delete-board-title"
+        className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="sidebar-delete-board-title"
+          className="text-lg font-semibold text-foreground"
+        >
+          {title}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        {children ? <div className="mt-3">{children}</div> : null}
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            disabled={busy || confirmDisabled}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Sidebar() {
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
+  const pruneBoardScopedPreferences = usePreferencesStore(
+    (s) => s.pruneBoardScopedPreferences,
+  );
   const { data: boards = [], isLoading, isError, error } = useBoards();
   const navigate = useNavigate();
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
@@ -37,11 +132,28 @@ export function Sidebar() {
   const [editValue, setEditValue] = useState("");
   const [addingBoard, setAddingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [boardDeleteCandidate, setBoardDeleteCandidate] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [deleteTaskCountInput, setDeleteTaskCountInput] = useState("");
+  const {
+    data: deleteBoardDetails,
+    isLoading: deleteBoardDetailsLoading,
+  } = useBoard(boardDeleteCandidate?.id ?? null);
 
   useEffect(() => {
     setAddingBoard(false);
     setNewBoardName("");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (isLoading || isError) return;
+    // Keep persisted board-local UI prefs aligned with the real board list so deleted boards
+    // cannot leak their filter state onto a later board that reuses the same SQLite id.
+    pruneBoardScopedPreferences(boards.map((board) => board.id));
+  }, [boards, isError, isLoading, pruneBoardScopedPreferences]);
 
   const startRename = useCallback((id: number, name: string) => {
     setEditingId(String(id));
@@ -71,15 +183,21 @@ export function Sidebar() {
     }
   }, [boards, cancelRename, editValue, editingId, patchBoardName]);
 
-  const handleDelete = useCallback(
-    (id: number, name: string) => {
-      if (!window.confirm(`Delete board “${name}”? This cannot be undone.`)) {
-        return;
-      }
-      deleteBoard.mutate(id);
-    },
-    [deleteBoard],
-  );
+  const requestDelete = useCallback((id: number, name: string) => {
+    setOpenMenuId(null);
+    setDeleteTaskCountInput("");
+    setBoardDeleteCandidate({ id, name });
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!boardDeleteCandidate) return;
+    deleteBoard.mutate(boardDeleteCandidate.id, {
+      onSuccess: () => {
+        setBoardDeleteCandidate(null);
+        setDeleteTaskCountInput("");
+      },
+    });
+  }, [boardDeleteCandidate, deleteBoard]);
 
   const cancelAddBoard = useCallback(() => {
     setAddingBoard(false);
@@ -98,6 +216,16 @@ export function Sidebar() {
       },
     );
   }, [cancelAddBoard, createBoard, newBoardName]);
+
+  const deleteTaskCountKnown =
+    boardDeleteCandidate == null || (!deleteBoardDetailsLoading && !!deleteBoardDetails);
+  const deleteTaskCount = deleteBoardDetails?.tasks.length ?? 0;
+  const requiresTypedDeleteConfirmation = deleteTaskCountKnown && deleteTaskCount > 0;
+  const deleteTaskCountMatches =
+    Number(deleteTaskCountInput.trim()) === deleteTaskCount;
+  const deleteConfirmDisabled =
+    !deleteTaskCountKnown ||
+    (requiresTypedDeleteConfirmation && !deleteTaskCountMatches);
 
   if (sidebarCollapsed) {
     return (
@@ -178,6 +306,7 @@ export function Sidebar() {
           {boards.map((b) => {
             const active = String(b.id) === selectedBoardId;
             const editing = String(b.id) === editingId;
+            const menuOpen = String(b.id) === openMenuId;
             return (
               <li key={b.id}>
                 <div
@@ -216,17 +345,47 @@ export function Sidebar() {
                     </button>
                   )}
                   {!editing && (
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                      aria-label={`Delete ${b.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(b.id, b.name);
-                      }}
+                    <DropdownMenu.Root
+                      open={menuOpen}
+                      onOpenChange={(open) =>
+                        setOpenMenuId(open ? String(b.id) : null)
+                      }
                     >
-                      <Trash2 className="size-4" />
-                    </button>
+                      <DropdownMenu.Trigger asChild>
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-muted-foreground opacity-0 hover:bg-sidebar-accent/70 hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
+                          aria-label={`Actions for ${b.name}`}
+                        >
+                          <MoreVertical className="size-4" />
+                        </button>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content
+                          align="end"
+                          sideOffset={4}
+                          className="z-50 min-w-[9.5rem] rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+                        >
+                          <DropdownMenu.Item
+                            className="flex cursor-default rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                            onSelect={() => {
+                              setOpenMenuId(null);
+                              startRename(b.id, b.name);
+                            }}
+                          >
+                            Edit
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            className="flex cursor-default rounded px-2 py-1.5 text-destructive outline-none hover:bg-destructive/10 focus:bg-destructive/10"
+                            onSelect={() => {
+                              requestDelete(b.id, b.name);
+                            }}
+                          >
+                            Delete
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
                   )}
                 </div>
               </li>
@@ -283,6 +442,63 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Sidebar sits outside the board shortcut scope, so board deletion uses a local app dialog instead of `window.confirm`. */}
+      <SidebarConfirmDialog
+        open={boardDeleteCandidate !== null}
+        title="Delete this board?"
+        message={
+          boardDeleteCandidate
+            ? `Delete board “${boardDeleteCandidate.name}”? Lists and tasks in this board will be removed. This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        busy={deleteBoard.isPending}
+        confirmDisabled={deleteConfirmDisabled}
+        onCancel={() => {
+          if (!deleteBoard.isPending) {
+            setBoardDeleteCandidate(null);
+            setDeleteTaskCountInput("");
+          }
+        }}
+        onConfirm={confirmDelete}
+      >
+        {!deleteTaskCountKnown ? (
+          <p className="text-sm text-muted-foreground">Loading task count…</p>
+        ) : requiresTypedDeleteConfirmation ? (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-destructive">
+              This board has {deleteTaskCount} tasks. Are you sure you want to
+              delete it?
+            </p>
+            {/* Require the exact task count before destructive board deletion so boards with tasks get a stronger confirmation than empty boards. */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="sidebar-delete-board-task-count"
+                className="text-sm text-foreground"
+              >
+                To delete, please type below the number of tasks.
+              </label>
+              <input
+                id="sidebar-delete-board-task-count"
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                value={deleteTaskCountInput}
+                disabled={deleteBoard.isPending}
+                onChange={(e) => setDeleteTaskCountInput(e.target.value)}
+              />
+              {!deleteTaskCountMatches && deleteTaskCountInput.trim() ? (
+                <p className="text-xs text-muted-foreground">
+                  Enter `{deleteTaskCount}` to enable deletion.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </SidebarConfirmDialog>
     </div>
   );
 }

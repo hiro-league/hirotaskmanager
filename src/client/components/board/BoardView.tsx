@@ -2,31 +2,33 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type Dispatch,
   type SetStateAction,
 } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  PanelTop,
-  Settings2,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
 import { useBoard } from "@/api/queries";
+import { usePatchBoardName } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
   ALL_TASK_GROUPS,
+  groupLabelForId,
   resolvedBoardLayout,
   type Board,
 } from "../../../shared/models";
-import { usePreferencesStore } from "@/store/preferences";
+import {
+  usePreferencesStore,
+  useResolvedActiveTaskGroup,
+} from "@/store/preferences";
 import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { BoardColorMenu } from "./BoardColorMenu";
 import { BoardColumns } from "./BoardColumns";
 import { BoardColumnsStacked } from "./BoardColumnsStacked";
 import { BoardLayoutToggle } from "./BoardLayoutToggle";
 import { BoardStatusToggles } from "./BoardStatusToggles";
+import { BoardTaskCardSizeToggle } from "./BoardTaskCardSizeToggle";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
 import {
@@ -152,6 +154,7 @@ function BoardShortcutBindings({
 
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
+  const patchBoardName = usePatchBoardName();
   const themePreference = usePreferencesStore((s) => s.themePreference);
   const systemDark = useSystemDark();
   const dark = resolveDark(themePreference, systemDark);
@@ -171,10 +174,14 @@ export function BoardView({ boardId }: BoardViewProps) {
 
   const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [editingBoardName, setEditingBoardName] = useState(false);
+  const [boardNameDraft, setBoardNameDraft] = useState("");
   /** Whether the help dialog was opened automatically (on board open) vs via H. */
   const [helpOpenReason, setHelpOpenReason] = useState<
     "none" | "auto" | "manual"
   >("none");
+  const boardNameInputRef = useRef<HTMLInputElement>(null);
+  const boardNameBlurModeRef = useRef<"commit" | "cancel">("commit");
 
   const openHelp = useCallback(() => {
     setHelpOpenReason("manual");
@@ -194,6 +201,23 @@ export function BoardView({ boardId }: BoardViewProps) {
     setShortcutHelpOpen(true);
   }, [boardId, data?.id, boardShortcutHelpDismissed]);
 
+  useEffect(() => {
+    setEditingBoardName(false);
+    setBoardNameDraft(data?.name ?? "");
+  }, [data?.id]);
+
+  useEffect(() => {
+    if (!editingBoardName) {
+      setBoardNameDraft(data?.name ?? "");
+    }
+  }, [data?.name, editingBoardName]);
+
+  useEffect(() => {
+    if (!editingBoardName) return;
+    boardNameInputRef.current?.focus();
+    boardNameInputRef.current?.select();
+  }, [editingBoardName]);
+
   const handleShortcutHelpClose = useCallback(
     (result?: { dontShowAgain: boolean }) => {
       setShortcutHelpOpen(false);
@@ -206,6 +230,35 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [taskDeleteConfirmId, setTaskDeleteConfirmId] = useState<number | null>(
     null,
   );
+  const activeTaskGroup = useResolvedActiveTaskGroup(
+    data?.id ?? boardId ?? "",
+    data?.taskGroups ?? [],
+  );
+
+  const cancelBoardRename = useCallback(() => {
+    boardNameBlurModeRef.current = "cancel";
+    setEditingBoardName(false);
+    setBoardNameDraft(data?.name ?? "");
+  }, [data?.name]);
+
+  const commitBoardRename = useCallback(async () => {
+    if (!data) return;
+    boardNameBlurModeRef.current = "commit";
+    setEditingBoardName(false);
+    const trimmed = boardNameDraft.trim();
+    if (!trimmed || trimmed === data.name) {
+      setBoardNameDraft(data.name);
+      return;
+    }
+    try {
+      await patchBoardName.mutateAsync({
+        boardId: data.id,
+        name: trimmed,
+      });
+    } catch {
+      setBoardNameDraft(data.name);
+    }
+  }, [boardNameDraft, data, patchBoardName]);
 
   // Compute this without a hook so BoardView keeps the same hook order while it
   // moves between empty/loading/error/success states.
@@ -244,6 +297,10 @@ export function BoardView({ boardId }: BoardViewProps) {
     );
   }
   const stackedLayout = resolvedBoardLayout(data) === "stacked";
+  const activeGroupLabel =
+    activeTaskGroup !== ALL_TASK_GROUPS
+      ? groupLabelForId(data.taskGroups, Number(activeTaskGroup))
+      : null;
 
   return (
     <ShortcutScopeProvider>
@@ -275,106 +332,120 @@ export function BoardView({ boardId }: BoardViewProps) {
           className="pointer-events-none absolute inset-0 rounded-t-lg "
           aria-hidden
         />
-        {/* Tap zone: same 8px as pt-2 below — no extra strip height */}
-        <button
-          type="button"
-          className={cn(
-            "absolute inset-x-0 top-0 z-20 h-2 cursor-pointer border-0 bg-transparent p-0",
-            "hover:bg-black/[0.06] dark:hover:bg-white/[0.06]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
-          )}
-          title={
-            filterCollapsed
-              ? "Show filters (statuses & groups)"
-              : "Hide filters & compact header"
-          }
-          aria-label={
-            filterCollapsed
-              ? "Expand board header and show filters"
-              : "Collapse board header and hide filters"
-          }
-          onClick={() => toggleFilterStrip()}
-        />
         <div
           className={cn(
             "relative z-10 flex flex-col px-6 pt-2",
             filterCollapsed ? "gap-1 pb-2" : "gap-2 pb-3",
           )}
         >
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-            <h1
-              className={cn(
-                "min-w-0 flex-1 truncate tracking-tight text-foreground",
-                filterCollapsed
-                  ? "text-base font-semibold leading-tight"
-                  : "text-2xl font-semibold leading-tight",
+          <div className="grid min-w-0 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <div className="flex min-w-0 items-center gap-2">
+              {editingBoardName ? (
+                <input
+                  ref={boardNameInputRef}
+                  type="text"
+                  className={cn(
+                    "w-full min-w-[12rem] max-w-[28rem] rounded-md border border-input bg-background px-2.5 py-1 text-left text-foreground shadow-sm",
+                    filterCollapsed
+                      ? "text-base font-semibold leading-tight"
+                      : "text-2xl font-semibold leading-tight",
+                  )}
+                  value={boardNameDraft}
+                  disabled={patchBoardName.isPending}
+                  onChange={(e) => setBoardNameDraft(e.target.value)}
+                  onBlur={() => {
+                    if (boardNameBlurModeRef.current === "cancel") {
+                      boardNameBlurModeRef.current = "commit";
+                      return;
+                    }
+                    void commitBoardRename();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void commitBoardRename();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelBoardRename();
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={cn(
+                    "block max-w-[28rem] truncate rounded-md px-2 py-1 text-left tracking-tight text-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.05]",
+                    filterCollapsed
+                      ? "text-base font-semibold leading-tight"
+                      : "text-2xl font-semibold leading-tight",
+                  )}
+                  title="Rename board"
+                  onClick={() => {
+                    boardNameBlurModeRef.current = "commit";
+                    setBoardNameDraft(data.name);
+                    setEditingBoardName(true);
+                  }}
+                >
+                  {data.name}
+                </button>
               )}
-            >
-              {data.name}
-            </h1>
-            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 font-medium text-foreground hover:bg-muted",
-                  filterCollapsed
-                    ? "gap-1 px-1.5 py-0.5 text-[11px]"
-                    : "px-2 py-1 text-xs",
-                )}
-                title="Edit task groups for this board"
-                onClick={() => setGroupsEditorOpen(true)}
-              >
-                <Settings2
-                  className={cn(
-                    "shrink-0",
-                    filterCollapsed ? "size-3" : "size-3.5",
-                  )}
-                  aria-hidden
-                />
-                Task groups
-              </button>
-              <BoardColorMenu board={data} compact={filterCollapsed} />
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 font-medium text-foreground hover:bg-muted",
-                  filterCollapsed
-                    ? "px-1.5 py-0.5 text-[11px]"
-                    : "px-2 py-1 text-xs",
-                )}
-                title={
-                  filterCollapsed
-                    ? "Show filters (statuses & groups)"
-                    : "Hide filters & compact header"
-                }
-                aria-expanded={!filterCollapsed}
-                onClick={() => toggleFilterStrip()}
-              >
-                <PanelTop
-                  className={cn(
-                    "shrink-0",
-                    filterCollapsed ? "size-3" : "size-3.5",
-                  )}
-                  aria-hidden
-                />
-                Filters
-                {filterCollapsed ? (
-                  <ChevronDown className="size-3 shrink-0" aria-hidden />
-                ) : (
-                  <ChevronUp className="size-3.5 shrink-0" aria-hidden />
-                )}
-              </button>
+              {activeGroupLabel ? (
+                // Surface the active group near the title so expanded filters read at a glance.
+                <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                  <span className="uppercase tracking-wide">Group</span>
+                  <span className="truncate font-medium text-foreground">
+                    {activeGroupLabel}
+                  </span>
+                </div>
+              ) : null}
             </div>
+            {!filterCollapsed ? (
+              <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 justify-self-center">
+                <BoardColorMenu board={data} compact swatchOnly />
+                <BoardLayoutToggle board={data} iconsOnly />
+                <BoardTaskCardSizeToggle board={data} />
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                  title="Edit task groups for this board"
+                  onClick={() => setGroupsEditorOpen(true)}
+                >
+                  <Settings2 className="size-3.5 shrink-0" aria-hidden />
+                  Task groups
+                </button>
+              </div>
+            ) : (
+              <div />
+            )}
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center justify-self-end rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
+              title={filterCollapsed ? "Expand header" : "Collapse header"}
+              aria-label={filterCollapsed ? "Expand header" : "Collapse header"}
+              aria-expanded={!filterCollapsed}
+              onClick={() => toggleFilterStrip()}
+            >
+              {filterCollapsed ? (
+                <ChevronDown className="size-4 shrink-0" aria-hidden />
+              ) : (
+                <ChevronUp className="size-4 shrink-0" aria-hidden />
+              )}
+            </button>
           </div>
 
           {!filterCollapsed ? (
             <div
-              className="pointer-events-auto flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-start"
+              className="pointer-events-auto flex flex-col gap-2 pt-1"
               data-board-no-pan
             >
-              <BoardLayoutToggle board={data} />
-              <TaskGroupSwitcher board={data} />
-              <BoardStatusToggles board={data} />
+              {/* Keep groups and statuses on distinct rows so scanning the active filters is easier. */}
+              <div className="flex min-w-0 flex-wrap items-start">
+                <TaskGroupSwitcher board={data} />
+              </div>
+              <div className="flex min-w-0 flex-wrap items-start">
+                <BoardStatusToggles board={data} />
+              </div>
             </div>
           ) : null}
         </div>

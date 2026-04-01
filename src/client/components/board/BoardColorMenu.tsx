@@ -16,9 +16,15 @@ interface BoardColorMenuProps {
   board: Board;
   /** Smaller trigger when board header is compact. */
   compact?: boolean;
+  /** Swatch-only trigger for tight board-header settings layouts. */
+  swatchOnly?: boolean;
 }
 
-export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) {
+export function BoardColorMenu({
+  board,
+  compact = false,
+  swatchOnly = false,
+}: BoardColorMenuProps) {
   const patchViewPrefs = usePatchBoardViewPrefs();
   const current = resolvedBoardColor(board);
   const busy = patchViewPrefs.isPending;
@@ -45,18 +51,36 @@ export function BoardColorMenu({ board, compact = false }: BoardColorMenuProps) 
           type="button"
           disabled={busy}
           className={cn(
-            "inline-flex items-center rounded-md border border-border bg-muted/50 font-medium text-foreground hover:bg-muted disabled:opacity-50",
-            compact
-              ? "gap-1 px-1.5 py-0.5 text-[11px]"
-              : "gap-1.5 px-2 py-1 text-xs",
+            swatchOnly
+              ? "inline-flex rounded-md border border-border/70 bg-transparent p-0.5 shadow-sm hover:border-border hover:bg-transparent disabled:opacity-50"
+              : "inline-flex items-center rounded-md border border-border bg-muted/50 font-medium text-foreground hover:bg-muted disabled:opacity-50",
+            !swatchOnly &&
+              (compact
+                ? "gap-1 px-1.5 py-0.5 text-[11px]"
+                : "gap-1.5 px-2 py-1 text-xs"),
           )}
           title="Board theme"
+          aria-label="Board theme"
         >
-          <Palette
-            className={cn("shrink-0", compact ? "size-3" : "size-3.5")}
-            aria-hidden
-          />
-          Board theme
+          {swatchOnly ? (
+            // Mirror the dropdown swatches so the selected theme reads as the control itself.
+            <span
+              className={cn(
+                "block rounded border-2 border-border/60",
+                compact ? "h-6 w-6" : "h-7 w-7",
+              )}
+              style={{ background: getBoardThemePreviewBackground(current) }}
+              aria-hidden
+            />
+          ) : (
+            <>
+              <Palette
+                className={cn("shrink-0", compact ? "size-3" : "size-3.5")}
+                aria-hidden
+              />
+              Board theme
+            </>
+          )}
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

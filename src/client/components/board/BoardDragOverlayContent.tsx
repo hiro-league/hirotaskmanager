@@ -1,5 +1,6 @@
 import { groupLabelForId, type Board, type Task } from "../../../shared/models";
 import { TaskCard } from "@/components/task/TaskCard";
+import { useResolvedTaskCardViewMode } from "@/store/preferences";
 import { boardTaskDragOverlayClass } from "./boardDragOverlayShell";
 import { BoardListColumnOverlay } from "./BoardListColumn";
 import { BoardListStackedColumnOverlay } from "./BoardListStackedColumn";
@@ -11,10 +12,12 @@ export function BoardTaskDragOverlay({
   board: Board;
   task: Task;
 }) {
+  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   return (
     <div className={boardTaskDragOverlayClass}>
       <TaskCard
         task={task}
+        viewMode={taskCardViewMode}
         groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
         onOpen={() => {}}
       />

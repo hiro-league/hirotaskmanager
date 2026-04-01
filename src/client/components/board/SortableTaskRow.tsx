@@ -5,10 +5,12 @@ import type { CSSProperties } from "react";
 import type { Task } from "../../../shared/models";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { TaskCard } from "@/components/task/TaskCard";
+import type { TaskCardViewMode } from "@/store/preferences";
 
 interface SortableTaskRowProps {
   sortableId: string;
   task: Task;
+  viewMode: TaskCardViewMode;
   groupLabel: string;
   onOpen: () => void;
   onCompleteFromCircle?: () => void;
@@ -18,6 +20,7 @@ interface SortableTaskRowProps {
 export const SortableTaskRow = memo(function SortableTaskRow({
   sortableId,
   task,
+  viewMode,
   groupLabel,
   onOpen,
   onCompleteFromCircle,
@@ -60,6 +63,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
     >
       <TaskCard
         task={task}
+        viewMode={viewMode}
         groupLabel={groupLabel}
         onOpen={onOpen}
         onCompleteFromCircle={onCompleteFromCircle}

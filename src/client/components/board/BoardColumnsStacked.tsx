@@ -20,6 +20,8 @@ interface BoardColumnsStackedProps {
   board: Board;
 }
 
+const EMPTY_SORTABLE_IDS: string[] = [];
+
 export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
   const {
     localListIds,
@@ -73,15 +75,22 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
               strategy={horizontalListSortingStrategy}
             >
               <div className="flex flex-row items-start gap-4">
-                {localListIds.map((id) => (
-                  <BoardListStackedColumn
-                    key={id}
-                    board={board}
-                    listId={id}
-                    stackedTaskMap={displayTaskMap}
-                    taskContainerId={stackedListContainerId(id)}
-                  />
-                ))}
+                {localListIds.map((id) => {
+                  const taskContainerId = stackedListContainerId(id);
+                  // Pass each column only its own sortable ids so unrelated lists
+                  // keep stable props during task drag-over updates.
+                  const sortableIds =
+                    displayTaskMap[taskContainerId] ?? EMPTY_SORTABLE_IDS;
+                  return (
+                    <BoardListStackedColumn
+                      key={id}
+                      board={board}
+                      listId={id}
+                      taskContainerId={taskContainerId}
+                      sortableIds={sortableIds}
+                    />
+                  );
+                })}
               </div>
             </SortableContext>
             <AddListSlot boardId={board.id} stacked />

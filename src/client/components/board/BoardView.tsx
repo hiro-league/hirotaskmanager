@@ -39,7 +39,10 @@ import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useUpdateTask } from "@/api/mutations";
 import { BoardTaskKeyboardBridgeProvider } from "./shortcuts/BoardTaskKeyboardBridge";
 import { BoardTaskDeleteConfirm } from "./shortcuts/BoardTaskDeleteConfirm";
-import { cycleTaskGroupForBoard } from "./shortcuts/boardShortcutRegistry";
+import {
+  cycleTaskCardViewModeForBoard,
+  cycleTaskGroupForBoard,
+} from "./shortcuts/boardShortcutRegistry";
 import { ShortcutHelpDialog } from "./shortcuts/ShortcutHelpDialog";
 import { ShortcutScopeProvider } from "./shortcuts/ShortcutScopeContext";
 import { useBoardShortcutKeydown } from "./shortcuts/useBoardShortcutKeydown";
@@ -68,6 +71,9 @@ function BoardShortcutBindings({
   const setActiveTaskGroupForBoard = usePreferencesStore(
     (s) => s.setActiveTaskGroupForBoard,
   );
+  const setTaskCardViewModeForBoard = usePreferencesStore(
+    (s) => s.setTaskCardViewModeForBoard,
+  );
   const nav = useBoardKeyboardNav();
   const bridge = useBoardTaskKeyboardBridge();
   const { data: statuses } = useStatuses();
@@ -78,6 +84,8 @@ function BoardShortcutBindings({
     () => ({
       openHelp,
       toggleFilters,
+      cycleTaskCardViewMode: (b) =>
+        cycleTaskCardViewModeForBoard(b, setTaskCardViewModeForBoard),
       cycleTaskGroup: (b) =>
         cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
       allTaskGroups: (b) =>
@@ -138,6 +146,7 @@ function BoardShortcutBindings({
     [
       openHelp,
       toggleFilters,
+      setTaskCardViewModeForBoard,
       setActiveTaskGroupForBoard,
       nav,
       bridge,
@@ -455,14 +464,14 @@ export function BoardView({ boardId }: BoardViewProps) {
       <div
         ref={scrollRef}
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-3 pb-4 pt-3 select-none",
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-4 pb-4 pt-4 select-none",
           stackedLayout ? "overflow-y-auto" : "overflow-y-hidden",
           "cursor-grab",
           panning && "cursor-grabbing select-none",
         )}
         {...boardCanvasPanHandlers}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-0">
           {stackedLayout ? (
             <BoardColumnsStacked board={data} />
           ) : (

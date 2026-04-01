@@ -1,24 +1,11 @@
 import { useMemo } from "react";
 import type { Board } from "../../../shared/models";
 import {
+  getNextTaskCardViewMode,
+  TASK_CARD_VIEW_MODE_LABELS,
   usePreferencesStore,
-  useResolvedTaskCardSize,
-  type TaskCardSizePreference,
+  useResolvedTaskCardViewMode,
 } from "@/store/preferences";
-
-const TASK_CARD_SIZE_ORDER: TaskCardSizePreference[] = [
-  "normal",
-  "large",
-  "larger",
-  "small",
-];
-
-const TASK_CARD_SIZE_LABELS: Record<TaskCardSizePreference, string> = {
-  normal: "Normal",
-  large: "Large",
-  larger: "Larger",
-  small: "Small",
-};
 
 interface BoardTaskCardSizeToggleProps {
   board: Board;
@@ -27,26 +14,25 @@ interface BoardTaskCardSizeToggleProps {
 export function BoardTaskCardSizeToggle({
   board,
 }: BoardTaskCardSizeToggleProps) {
-  const size = useResolvedTaskCardSize(board.id);
-  const setTaskCardSizeForBoard = usePreferencesStore(
-    (s) => s.setTaskCardSizeForBoard,
+  const viewMode = useResolvedTaskCardViewMode(board.id);
+  const setTaskCardViewModeForBoard = usePreferencesStore(
+    (s) => s.setTaskCardViewModeForBoard,
   );
 
   const nextSize = useMemo(() => {
-    const index = TASK_CARD_SIZE_ORDER.indexOf(size);
-    return TASK_CARD_SIZE_ORDER[(index + 1) % TASK_CARD_SIZE_ORDER.length] ?? "normal";
-  }, [size]);
+    return getNextTaskCardViewMode(viewMode);
+  }, [viewMode]);
 
   return (
     <button
       type="button"
       className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
-      title={`Task card size: ${TASK_CARD_SIZE_LABELS[size]}. Click to switch to ${TASK_CARD_SIZE_LABELS[nextSize]}.`}
-      aria-label={`Task card size: ${TASK_CARD_SIZE_LABELS[size]}`}
-      // Persist the cycle now so the future visual sizing can read the same board-local preference.
-      onClick={() => setTaskCardSizeForBoard(board.id, nextSize)}
+      title={`Task card view: ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}. Click or press S to switch to ${TASK_CARD_VIEW_MODE_LABELS[nextSize]}.`}
+      aria-label={`Task card view: ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}`}
+      // Keep the board-local mode in one place so the button and shortcut stay in sync.
+      onClick={() => setTaskCardViewModeForBoard(board.id, nextSize)}
     >
-      {`Card: ${TASK_CARD_SIZE_LABELS[size]}`}
+      {`Card: ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}`}
     </button>
   );
 }

@@ -1,8 +1,16 @@
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { Check } from "lucide-react";
 import type { Task, TaskStatus } from "../../../shared/models";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
+import {
+  getTaskCardViewSpec,
+  type TaskCardViewMode,
+} from "@/store/preferences";
 import { cn } from "@/lib/utils";
+
+function taskCardBodyPaddingClass(viewMode: TaskCardViewMode): string {
+  return viewMode === "small" ? "px-2 py-2" : "px-2.5 py-2";
+}
 
 function previewBody(body: string, max = 100): string {
   const plain = body.replace(/\s+/g, " ").trim();
@@ -75,6 +83,7 @@ function TaskStatusIndicator({ status }: { status: TaskStatus }) {
 
 interface TaskCardProps {
   task: Task;
+  viewMode: TaskCardViewMode;
   /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
   onOpen: () => void;
@@ -89,9 +98,71 @@ interface TaskCardProps {
   skipNavRegistration?: boolean;
 }
 
+/**
+ * Content section shared by both open and non-open card layouts.
+ * Extracted so the two branches render identical markup for the text area.
+ */
+function TaskCardContent({
+  task,
+  viewMode,
+  groupLabel,
+  preview,
+  onOpen,
+}: {
+  task: Task;
+  viewMode: TaskCardViewMode;
+  groupLabel: string;
+  preview: string;
+  onOpen: () => void;
+}) {
+  const viewSpec = getTaskCardViewSpec(viewMode);
+  return (
+    <div className="min-w-0 flex-1 text-left" onClick={onOpen}>
+      <div className={cn("font-medium", viewSpec.titleClassName)}>
+        {task.title || "Untitled"}
+      </div>
+      {preview ? (
+        <div
+          className={cn(
+            "mt-1 text-xs text-muted-foreground",
+            viewSpec.previewClassName,
+          )}
+        >
+          {preview}
+        </div>
+      ) : null}
+      {viewSpec.showGroupLabel ? (
+        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
+          {groupLabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const TASK_CARD_INLINE_PADDING_REM = 0.625;
+const TASK_CARD_STATUS_SLOT_REM = 1.375;
+const TASK_CARD_RIGHT_SLOT_REM = 1.75;
+
+function openTaskContentRailStyle(viewMode: TaskCardViewMode): CSSProperties {
+  const inlinePaddingRem = viewMode === "small" ? 0.5 : TASK_CARD_INLINE_PADDING_REM;
+  const blockPaddingRem = viewMode === "small" ? 0.375 : 0.5;
+  return {
+    // Keep the movement distance and content width derived from the same slots
+    // so view-mode changes do not expose part of the hidden open circle or shift it vertically.
+    ["--task-card-inline-padding" as string]: `${inlinePaddingRem}rem`,
+    ["--task-card-block-padding" as string]: `${blockPaddingRem}rem`,
+    ["--task-card-status-slot" as string]: `${TASK_CARD_STATUS_SLOT_REM}rem`,
+    ["--task-card-right-slot" as string]: `${TASK_CARD_RIGHT_SLOT_REM}rem`,
+    width:
+      "calc(100% - var(--task-card-status-slot) - var(--task-card-right-slot))",
+  };
+}
+
 // Memoized to avoid re-rendering every card on each drag-over event
 export const TaskCard = memo(function TaskCard({
   task,
+  viewMode,
   groupLabel,
   onOpen,
   onCompleteFromCircle,
@@ -101,6 +172,7 @@ export const TaskCard = memo(function TaskCard({
   const nav = useBoardKeyboardNavOptional();
   const rootRef = useRef<HTMLDivElement>(null);
   const highlighted = nav?.highlightedTaskId === task.id;
+  const viewSpec = getTaskCardViewSpec(viewMode);
 
   useLayoutEffect(() => {
     if (skipNavRegistration || !nav) return;
@@ -111,9 +183,14 @@ export const TaskCard = memo(function TaskCard({
     };
   }, [nav, skipNavRegistration, task.id]);
 
-  const preview = previewBody(task.body);
+  const preview = viewSpec.showDescriptionPreview
+    ? previewBody(task.body, viewSpec.previewMaxLength)
+    : "";
   const canCompleteFromCircle =
     task.status === "open" && onCompleteFromCircle !== undefined;
+  const isOpenTask = task.status === "open";
+  const openTaskRailStyle = openTaskContentRailStyle(viewMode);
+  const bodyPaddingClass = taskCardBodyPaddingClass(viewMode);
 
   return (
     <div
@@ -127,9 +204,7 @@ export const TaskCard = memo(function TaskCard({
         nav.setHoveredTaskId(null);
       }}
       className={cn(
-        // Task cards live inside the board's drag surface, so they should not participate in native text selection.
-        "flex w-full gap-2 rounded-md border border-border bg-task-card px-2.5 py-2 text-sm text-task-card-foreground shadow-sm transition-colors select-none",
-        // Keep hover tied to the scoped board accent so the board-local theme reads in both modes.
+        "group/task-card relative w-full overflow-hidden rounded-md border border-border bg-task-card text-sm text-task-card-foreground shadow-sm transition-colors select-none",
         "hover:bg-accent/45",
         task.color && "border-l-4",
         isDragging && "opacity-40",
@@ -138,37 +213,61 @@ export const TaskCard = memo(function TaskCard({
       )}
       style={task.color ? { borderLeftColor: task.color } : undefined}
     >
-      {canCompleteFromCircle ? (
-        <button
-          type="button"
-          className="shrink-0 rounded-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Mark complete"
-          title="Mark complete"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCompleteFromCircle();
-          }}
+      {isOpenTask ? (
+        <div
+          className={cn("relative", bodyPaddingClass)}
+          style={openTaskRailStyle}
         >
-          <OpenStatusCircle />
-        </button>
-      ) : (
-        <TaskStatusIndicator status={task.status} />
-      )}
-      <div
-        className="min-w-0 flex-1 text-left"
-        onClick={onOpen}
-      >
-        <div className="font-medium">{task.title || "Untitled"}</div>
-        {preview ? (
-          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-            {preview}
+          {canCompleteFromCircle ? (
+            <button
+              type="button"
+              className={cn(
+                "absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start rounded-sm opacity-0 outline-none transition-opacity duration-150 ring-offset-background pointer-events-none group-hover/task-card:pointer-events-auto group-hover/task-card:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+              aria-label="Mark complete"
+              title="Mark complete"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompleteFromCircle();
+              }}
+            >
+              <OpenStatusCircle />
+            </button>
+          ) : (
+            <div className="absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start">
+              <TaskStatusIndicator status={task.status} />
+            </div>
+          )}
+          <div
+            className={cn(
+              "min-w-0 translate-x-0 transition-transform duration-150 ease-out group-hover/task-card:translate-x-[var(--task-card-status-slot)]",
+            )}
+          >
+            <TaskCardContent
+              task={task}
+              viewMode={viewMode}
+              groupLabel={groupLabel}
+              preview={preview}
+              onOpen={onOpen}
+            />
           </div>
-        ) : null}
-        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-          {groupLabel}
         </div>
-      </div>
+      ) : (
+        // Non-open tasks: normal flex layout with status always visible.
+        <div className={cn("flex gap-2", bodyPaddingClass)}>
+          <div className="shrink-0">
+            <TaskStatusIndicator status={task.status} />
+          </div>
+          <TaskCardContent
+            task={task}
+            viewMode={viewMode}
+            groupLabel={groupLabel}
+            preview={preview}
+            onOpen={onOpen}
+          />
+        </div>
+      )}
     </div>
   );
 });

@@ -2,6 +2,20 @@ function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
 }
 
+/** Workflow status accent dot — shared by header status toggles and lanes status rail. */
+export function statusDotClass(status: string): string {
+  switch (normalizeStatus(status)) {
+    case "open":
+      return "bg-red-400";
+    case "in-progress":
+      return "bg-amber-300";
+    case "closed":
+      return "bg-emerald-400";
+    default:
+      return "bg-muted-foreground/35";
+  }
+}
+
 export function laneStatusTintClass(status: string): string {
   switch (normalizeStatus(status)) {
     case "open":
@@ -15,19 +29,6 @@ export function laneStatusTintClass(status: string): string {
   }
 }
 
-export function laneStatusRailClass(status: string): string {
-  switch (normalizeStatus(status)) {
-    case "open":
-      return "bg-red-200/95 text-red-950 dark:bg-red-400/24 dark:text-red-100";
-    case "in-progress":
-      return "bg-amber-200/95 text-amber-950 dark:bg-amber-400/24 dark:text-amber-100";
-    case "closed":
-      return "bg-emerald-200/95 text-emerald-950 dark:bg-emerald-400/24 dark:text-emerald-100";
-    default:
-      return "bg-muted/70 text-foreground dark:bg-muted/30";
-  }
-}
-
 export function laneStatusDividerClass(status: string): string {
   switch (normalizeStatus(status)) {
     case "open":
@@ -38,18 +39,5 @@ export function laneStatusDividerClass(status: string): string {
       return "border-emerald-300/85 dark:border-emerald-400/40";
     default:
       return "border-border/80";
-  }
-}
-
-export function laneStatusAccentClass(status: string): string {
-  switch (normalizeStatus(status)) {
-    case "open":
-      return "text-red-400/85 dark:text-red-300/70";
-    case "in-progress":
-      return "text-amber-400/85 dark:text-amber-300/70";
-    case "closed":
-      return "text-emerald-400/85 dark:text-emerald-300/70";
-    default:
-      return "text-border";
   }
 }

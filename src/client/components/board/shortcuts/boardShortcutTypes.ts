@@ -7,6 +7,8 @@ export type { ShortcutScope };
 export interface BoardShortcutActions {
   openHelp: () => void;
   toggleFilters: () => void;
+  /** S — cycle the board-local task card view mode. */
+  cycleTaskCardViewMode: (board: Board) => void;
   /** Cycle All → group1 → group2 → … → All. No-op if there are no groups. */
   cycleTaskGroup: (board: Board) => void;
   allTaskGroups: (board: Board) => void;

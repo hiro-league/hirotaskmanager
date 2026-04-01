@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   closestCenter,
+  pointerWithin,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
@@ -117,6 +118,7 @@ export function useTaskDndCore(
 
   const taskDragStartMapRef = useRef<Record<string, string[]> | null>(null);
   const activeKindRef = useRef<"list" | "task" | null>(null);
+  const lastResolvedTaskCollisionIdRef = useRef<string | null>(null);
 
   const boardRef = useRef(board);
   boardRef.current = board;
@@ -145,7 +147,44 @@ export function useTaskDndCore(
   const collisionDetection: CollisionDetection = useCallback(
     (args) => {
       if (activeKindRef.current === "list") return listCollision(args);
-      return closestCenter(args);
+      const items = taskContainersRef.current;
+      // When dragging tasks, ignore list-column droppables entirely. The logs
+      // showed `closestCenter` picking `list-*` ids during task drag, which
+      // makes `over` bounce between unrelated droppable types.
+      const taskDroppableArgs = {
+        ...args,
+        droppableContainers: args.droppableContainers.filter((container) => {
+          const id = String(container.id);
+          return parseTaskSortableId(id) != null || (items ? isContainerKey(items, id) : false);
+        }),
+      };
+      const pointerHits = pointerWithin(taskDroppableArgs);
+      const closestHits = closestCenter(taskDroppableArgs);
+      let collisions = pointerHits.length > 0 ? pointerHits : closestHits;
+      if (pointerHits.length === 0 && closestHits.length > 0) {
+        const lastResolvedId = lastResolvedTaskCollisionIdRef.current;
+        const topTwoClosest = closestHits.slice(0, 2);
+        const fallbackHit =
+          lastResolvedId != null
+            ? topTwoClosest.find((hit) => String(hit.id) === lastResolvedId)
+            : undefined;
+        if (
+          fallbackHit &&
+          String(topTwoClosest[0]?.id) !== lastResolvedId
+        ) {
+          collisions = [fallbackHit];
+        }
+      }
+      const nextId =
+        collisions[0]?.id != null ? String(collisions[0].id) : null;
+      const nextContainer =
+        nextId != null && items
+          ? findTaskContainer(items, reverseIdxRef.current, nextId) ?? null
+          : null;
+      if (nextId != null && nextContainer != null) {
+        lastResolvedTaskCollisionIdRef.current = nextId;
+      }
+      return collisions;
     },
     [],
   );
@@ -182,6 +221,19 @@ export function useTaskDndCore(
           const overIndex = prev[overContainer].indexOf(overId);
           if (activeIndex < 0 || overIndex < 0) return prev;
           if (activeIndex === overIndex) return prev;
+          const activeRect = active.rect.current.translated;
+          const overRect = over?.rect ?? null;
+          if (activeRect && overRect) {
+            const activeMidY = activeRect.top + activeRect.height / 2;
+            const overMidY = overRect.top + overRect.height / 2;
+            const movingDown = overIndex > activeIndex;
+            const midpointCrossed = movingDown
+              ? activeMidY > overMidY
+              : activeMidY < overMidY;
+            if (!midpointCrossed) {
+              return prev;
+            }
+          }
           return {
             ...prev,
             [activeContainer]: arrayMove(
@@ -191,6 +243,25 @@ export function useTaskDndCore(
             ),
           };
         });
+        return;
+      }
+
+      const overRect = over?.rect ?? null;
+      const overIsContainer = isContainerKey(items, overId);
+      const activeRect = active.rect.current.translated;
+      let midpointCrossed = true;
+      if (activeRect && overRect) {
+        const activeMidY = activeRect.top + activeRect.height / 2;
+        const overMidY = overRect.top + overRect.height / 2;
+        const targetBelowActive = overRect.top > activeRect.top;
+        midpointCrossed = targetBelowActive
+          ? activeMidY > overMidY
+          : activeMidY < overMidY;
+      }
+      if (!overIsContainer && !midpointCrossed) {
+        // Keep task items in their current band until the dragged midpoint
+        // truly crosses the hovered task midpoint; otherwise adjacent bands
+        // can ping-pong the optimistic move and trigger dnd-kit measure loops.
         return;
       }
 
@@ -246,6 +317,7 @@ export function useTaskDndCore(
         reverseIdxRef.current = buildReverseIndex(initial);
         setTaskContainers({ ...initial });
         setActiveTaskId(tid);
+        lastResolvedTaskCollisionIdRef.current = null;
       }
     },
     [list],

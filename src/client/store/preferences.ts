@@ -4,7 +4,75 @@ import { persist } from "zustand/middleware";
 import { ALL_TASK_GROUPS, type GroupDefinition } from "../../shared/models";
 
 export type ThemePreference = "system" | "light" | "dark";
-export type TaskCardSizePreference = "normal" | "large" | "larger" | "small";
+export type TaskCardViewMode = "small" | "normal" | "large" | "larger";
+
+export const TASK_CARD_VIEW_MODE_ORDER: TaskCardViewMode[] = [
+  "small",
+  "normal",
+  "large",
+  "larger",
+];
+
+export const TASK_CARD_VIEW_MODE_LABELS: Record<TaskCardViewMode, string> = {
+  small: "Small",
+  normal: "Normal",
+  large: "Large",
+  larger: "Larger",
+};
+
+export interface TaskCardViewSpec {
+  containerClassName?: string;
+  titleClassName?: string;
+  showGroupLabel: boolean;
+  showDescriptionPreview: boolean;
+  previewClassName?: string;
+  previewMaxLength: number;
+}
+
+// Keep card-mode behavior data-driven so new views stay out of TaskCard's render logic.
+const TASK_CARD_VIEW_SPECS: Record<TaskCardViewMode, TaskCardViewSpec> = {
+  small: {
+    containerClassName: "px-2 py-1.5",
+    titleClassName: "text-xs leading-tight",
+    showGroupLabel: false,
+    showDescriptionPreview: false,
+    previewMaxLength: 0,
+  },
+  normal: {
+    showGroupLabel: false,
+    showDescriptionPreview: false,
+    previewMaxLength: 0,
+  },
+  large: {
+    showGroupLabel: true,
+    showDescriptionPreview: false,
+    previewMaxLength: 0,
+  },
+  larger: {
+    showGroupLabel: true,
+    showDescriptionPreview: true,
+    previewClassName: "line-clamp-2",
+    previewMaxLength: 140,
+  },
+};
+
+function isTaskCardViewMode(value: unknown): value is TaskCardViewMode {
+  return (
+    value === "small" ||
+    value === "normal" ||
+    value === "large" ||
+    value === "larger"
+  );
+}
+
+export function getNextTaskCardViewMode(mode: TaskCardViewMode): TaskCardViewMode {
+  const index = TASK_CARD_VIEW_MODE_ORDER.indexOf(mode);
+  return TASK_CARD_VIEW_MODE_ORDER[(index + 1) % TASK_CARD_VIEW_MODE_ORDER.length] ?? "normal";
+}
+
+export function getTaskCardViewSpec(mode: TaskCardViewMode): TaskCardViewSpec {
+  return TASK_CARD_VIEW_SPECS[mode];
+}
 
 export const PREFERENCES_STORAGE_KEY = "tm-preferences";
 
@@ -14,7 +82,8 @@ interface PersistedShape {
     sidebarCollapsed?: boolean;
     boardFilterStripCollapsed?: boolean;
     activeTaskGroupByBoardId?: Record<string, string>;
-    taskCardSizeByBoardId?: Record<string, TaskCardSizePreference>;
+    taskCardViewModeByBoardId?: Record<string, TaskCardViewMode>;
+    taskCardSizeByBoardId?: Record<string, TaskCardViewMode>;
     /** User checked "don't show again" on board keyboard help — disables auto-open on board selection. */
     boardShortcutHelpDismissed?: boolean;
   };
@@ -25,7 +94,7 @@ function readPersistedSlice(): {
   sidebarCollapsed: boolean;
   boardFilterStripCollapsed: boolean;
   activeTaskGroupByBoardId: Record<string, string>;
-  taskCardSizeByBoardId: Record<string, TaskCardSizePreference>;
+  taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   boardShortcutHelpDismissed: boolean;
 } {
   if (typeof localStorage === "undefined") {
@@ -34,7 +103,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
-      taskCardSizeByBoardId: {},
+      taskCardViewModeByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
   }
@@ -46,7 +115,7 @@ function readPersistedSlice(): {
         sidebarCollapsed: false,
         boardFilterStripCollapsed: false,
         activeTaskGroupByBoardId: {},
-        taskCardSizeByBoardId: {},
+        taskCardViewModeByBoardId: {},
         boardShortcutHelpDismissed: false,
       };
     }
@@ -57,18 +126,16 @@ function readPersistedSlice(): {
       rawMap && typeof rawMap === "object" && !Array.isArray(rawMap)
         ? { ...rawMap }
         : {};
-    const rawTaskCardSizeMap = s?.taskCardSizeByBoardId;
-    // Keep card-size cycling user-local per board until the visual sizing behavior is wired.
-    const taskCardSizeByBoardId =
-      rawTaskCardSizeMap &&
-      typeof rawTaskCardSizeMap === "object" &&
-      !Array.isArray(rawTaskCardSizeMap)
+    const rawTaskCardViewModeMap =
+      s?.taskCardViewModeByBoardId ?? s?.taskCardSizeByBoardId;
+    // Migrate the older "size" key to the newer view-mode concept without losing board-local prefs.
+    const taskCardViewModeByBoardId =
+      rawTaskCardViewModeMap &&
+      typeof rawTaskCardViewModeMap === "object" &&
+      !Array.isArray(rawTaskCardViewModeMap)
         ? Object.fromEntries(
-            Object.entries(rawTaskCardSizeMap).filter(([, value]) =>
-              value === "normal" ||
-              value === "large" ||
-              value === "larger" ||
-              value === "small",
+            Object.entries(rawTaskCardViewModeMap).filter(([, value]) =>
+              isTaskCardViewMode(value),
             ),
           )
         : {};
@@ -82,7 +149,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: Boolean(s?.sidebarCollapsed),
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
       activeTaskGroupByBoardId,
-      taskCardSizeByBoardId,
+      taskCardViewModeByBoardId,
       boardShortcutHelpDismissed: Boolean(s?.boardShortcutHelpDismissed),
     };
   } catch {
@@ -91,7 +158,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
-      taskCardSizeByBoardId: {},
+      taskCardViewModeByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
   }
@@ -110,10 +177,10 @@ interface PreferencesState {
   toggleBoardFilterStripCollapsed: () => void;
   activeTaskGroupByBoardId: Record<string, string>;
   setActiveTaskGroupForBoard: (boardId: string | number, group: string) => void;
-  taskCardSizeByBoardId: Record<string, TaskCardSizePreference>;
-  setTaskCardSizeForBoard: (
+  taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
+  setTaskCardViewModeForBoard: (
     boardId: string | number,
-    size: TaskCardSizePreference,
+    mode: TaskCardViewMode,
   ) => void;
   pruneBoardScopedPreferences: (boardIds: Iterable<string | number>) => void;
   boardShortcutHelpDismissed: boolean;
@@ -144,12 +211,12 @@ export const usePreferencesStore = create<PreferencesState>()(
             [String(boardId)]: group,
           },
         })),
-      taskCardSizeByBoardId: initial.taskCardSizeByBoardId,
-      setTaskCardSizeForBoard: (boardId, size) =>
+      taskCardViewModeByBoardId: initial.taskCardViewModeByBoardId,
+      setTaskCardViewModeForBoard: (boardId, mode) =>
         set((s) => ({
-          taskCardSizeByBoardId: {
-            ...s.taskCardSizeByBoardId,
-            [String(boardId)]: size,
+          taskCardViewModeByBoardId: {
+            ...s.taskCardViewModeByBoardId,
+            [String(boardId)]: mode,
           },
         })),
       pruneBoardScopedPreferences: (boardIds) =>
@@ -160,16 +227,16 @@ export const usePreferencesStore = create<PreferencesState>()(
               validIds.has(id),
             ),
           );
-          const nextTaskCardSizeByBoardId = Object.fromEntries(
-            Object.entries(s.taskCardSizeByBoardId).filter(([id]) =>
+          const nextTaskCardViewModeByBoardId = Object.fromEntries(
+            Object.entries(s.taskCardViewModeByBoardId).filter(([id]) =>
               validIds.has(id),
             ),
           );
           if (
             Object.keys(nextActiveTaskGroupByBoardId).length ===
               Object.keys(s.activeTaskGroupByBoardId).length &&
-            Object.keys(nextTaskCardSizeByBoardId).length ===
-              Object.keys(s.taskCardSizeByBoardId).length
+            Object.keys(nextTaskCardViewModeByBoardId).length ===
+              Object.keys(s.taskCardViewModeByBoardId).length
           ) {
             return s;
           }
@@ -177,7 +244,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           // pruned or a new board can inherit an old group filter/card size from the recycled id.
           return {
             activeTaskGroupByBoardId: nextActiveTaskGroupByBoardId,
-            taskCardSizeByBoardId: nextTaskCardSizeByBoardId,
+            taskCardViewModeByBoardId: nextTaskCardViewModeByBoardId,
           };
         }),
       boardShortcutHelpDismissed: initial.boardShortcutHelpDismissed,
@@ -191,7 +258,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
         activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
-        taskCardSizeByBoardId: state.taskCardSizeByBoardId,
+        taskCardViewModeByBoardId: state.taskCardViewModeByBoardId,
         boardShortcutHelpDismissed: state.boardShortcutHelpDismissed,
       }),
     },
@@ -214,8 +281,8 @@ export function useResolvedActiveTaskGroup(
   }, [raw, key, taskGroups]);
 }
 
-export function useResolvedTaskCardSize(boardId: string | number): TaskCardSizePreference {
+export function useResolvedTaskCardViewMode(boardId: string | number): TaskCardViewMode {
   const key = String(boardId);
-  const raw = usePreferencesStore((s) => s.taskCardSizeByBoardId[key]);
-  return raw === "large" || raw === "larger" || raw === "small" ? raw : "normal";
+  const raw = usePreferencesStore((s) => s.taskCardViewModeByBoardId[key]);
+  return isTaskCardViewMode(raw) ? raw : "normal";
 }

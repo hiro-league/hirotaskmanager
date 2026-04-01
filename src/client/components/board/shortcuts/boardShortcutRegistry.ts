@@ -1,6 +1,9 @@
 import { ALL_TASK_GROUPS } from "../../../../shared/models";
 import type { Board } from "../../../../shared/models";
-import { usePreferencesStore } from "@/store/preferences";
+import {
+  getNextTaskCardViewMode,
+  usePreferencesStore,
+} from "@/store/preferences";
 import type { BoardShortcutDefinition } from "./boardShortcutTypes";
 
 function letterKey(letter: string): (key: string) => boolean {
@@ -37,6 +40,17 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     matchKey: letterKey("m"),
     run: (_board, actions) => {
       actions.toggleFilters();
+    },
+  },
+  {
+    id: "cycle-task-card-view-mode",
+    scope: "board",
+    keys: ["S"],
+    description: "Cycle task card view mode",
+    preventDefault: true,
+    matchKey: letterKey("s"),
+    run: (board, actions) => {
+      actions.cycleTaskCardViewMode(board);
     },
   },
   {
@@ -228,4 +242,13 @@ export function cycleTaskGroupForBoard(
   const idx = Math.max(0, order.indexOf(resolved));
   const next = order[(idx + 1) % order.length] ?? ALL_TASK_GROUPS;
   setActive(board.id, next);
+}
+
+export function cycleTaskCardViewModeForBoard(
+  board: Board,
+  setViewMode: (boardId: string | number, mode: "small" | "normal" | "large" | "larger") => void,
+): void {
+  const current =
+    usePreferencesStore.getState().taskCardViewModeByBoardId[String(board.id)] ?? "normal";
+  setViewMode(board.id, getNextTaskCardViewMode(current));
 }

@@ -42,6 +42,7 @@ This document proposes a modular keyboard shortcut system for board interactions
 | `d` | Open delete confirmation for highlighted task |
 | `c` | Complete highlighted task |
 | `r` | Reopen highlighted task |
+| `s` | Cycle task card view mode |
 | `g` | Cycle task groups filter |
 | `a` | Switch to all groups |
 | `m` | Toggle filters / compact header |

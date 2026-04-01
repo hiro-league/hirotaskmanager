@@ -17,7 +17,11 @@ import { useStatuses } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import {
+  type TaskCardViewMode,
+  useResolvedActiveTaskGroup,
+  useResolvedTaskCardViewMode,
+} from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import { parseTaskSortableId } from "./dndIds";
 import { SortableTaskRow } from "./SortableTaskRow";
@@ -44,6 +48,7 @@ export function ListStatusBand({
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
 
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
   const taskMap = useMemo(() => {
@@ -242,6 +247,7 @@ export function ListStatusBand({
               <SortableBandContent
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
+                viewMode={taskCardViewMode}
                 containerId={containerId}
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
@@ -253,6 +259,7 @@ export function ListStatusBand({
                   <TaskCard
                     key={task.id}
                     task={task}
+                    viewMode={taskCardViewMode}
                     groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}
                     onCompleteFromCircle={() => completeFromList(task)}
@@ -369,6 +376,7 @@ export function ListStatusBand({
           <SortableBandContent
             taskMap={taskMap}
             taskGroups={board.taskGroups}
+            viewMode={taskCardViewMode}
             containerId={containerId}
             sortableIds={sortableIds}
             onComplete={handleComplete}
@@ -380,6 +388,7 @@ export function ListStatusBand({
               <TaskCard
                 key={task.id}
                 task={task}
+                viewMode={taskCardViewMode}
                 groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                 onOpen={() => setEditingTask(task)}
               />
@@ -404,12 +413,14 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   sid,
   task,
   taskGroups,
+  viewMode,
   onComplete,
   onEdit,
 }: {
   sid: string;
   task: Task;
   taskGroups: Board["taskGroups"];
+  viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
 }) {
@@ -422,6 +433,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
     <SortableTaskRow
       sortableId={sid}
       task={task}
+      viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
       onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
@@ -433,6 +445,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
 const SortableBandContent = memo(function SortableBandContent({
   taskMap,
   taskGroups,
+  viewMode,
   containerId,
   sortableIds,
   onComplete,
@@ -440,6 +453,7 @@ const SortableBandContent = memo(function SortableBandContent({
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
+  viewMode: TaskCardViewMode;
   containerId: string;
   sortableIds: string[];
   onComplete: (taskId: number) => void;
@@ -470,6 +484,7 @@ const SortableBandContent = memo(function SortableBandContent({
               sid={sid}
               task={task}
               taskGroups={taskGroups}
+              viewMode={viewMode}
               onComplete={onComplete}
               onEdit={onEdit}
             />

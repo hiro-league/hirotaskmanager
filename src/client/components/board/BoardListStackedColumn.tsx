@@ -24,7 +24,12 @@ import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { ListHeader } from "@/components/list/ListHeader";
-import { usePreferencesStore, useResolvedActiveTaskGroup } from "@/store/preferences";
+import {
+  type TaskCardViewMode,
+  usePreferencesStore,
+  useResolvedActiveTaskGroup,
+  useResolvedTaskCardViewMode,
+} from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import {
   boardListColumnOverlayShellClass,
@@ -46,24 +51,28 @@ interface ListStackedBodyProps {
   workflowOrder: readonly string[];
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
-  stackedTaskMap?: Record<string, string[]>;
+  sortableIds?: string[];
   /** Container id for this list's task droppable. */
   taskContainerId?: string;
   /** List-column DragOverlay clone: fill shell height like lanes (flex-1 body). */
   forDragOverlay?: boolean;
 }
 
+const EMPTY_SORTABLE_IDS: string[] = [];
+
 /** Per-row component that derives stable callbacks from task id */
 const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   sid,
   task,
   taskGroups,
+  viewMode,
   onComplete,
   onEdit,
 }: {
   sid: string;
   task: Task;
   taskGroups: Board["taskGroups"];
+  viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
 }) {
@@ -76,6 +85,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
     <SortableTaskRow
       sortableId={sid}
       task={task}
+      viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
       onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
@@ -87,6 +97,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
 const StackedSortableList = memo(function StackedSortableList({
   taskMap,
   taskGroups,
+  viewMode,
   containerId,
   sortableIds,
   onComplete,
@@ -94,6 +105,7 @@ const StackedSortableList = memo(function StackedSortableList({
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
+  viewMode: TaskCardViewMode;
   containerId: string;
   sortableIds: string[];
   onComplete: (taskId: number) => void;
@@ -124,6 +136,7 @@ const StackedSortableList = memo(function StackedSortableList({
               sid={sid}
               task={task}
               taskGroups={taskGroups}
+              viewMode={viewMode}
               onComplete={onComplete}
               onEdit={onEdit}
             />
@@ -142,7 +155,7 @@ function ListStackedBody({
   workflowOrder,
   dragAttributes,
   dragListeners,
-  stackedTaskMap = {},
+  sortableIds = EMPTY_SORTABLE_IDS,
   taskContainerId,
   forDragOverlay = false,
 }: ListStackedBodyProps) {
@@ -150,6 +163,7 @@ function ListStackedBody({
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
 
   // O(1) task lookup map
@@ -297,9 +311,6 @@ function ListStackedBody({
     workflowOrder.includes("open") ? "open" : (workflowOrder[0] ?? "open");
   const canAddOpen = visibleStatuses.includes(quickAddStatus);
 
-  const sortableIds =
-    taskContainerId != null ? (stackedTaskMap[taskContainerId] ?? []) : [];
-
   const staticTasks = useMemo(
     () =>
       taskContainerId != null
@@ -388,6 +399,7 @@ function ListStackedBody({
               <StackedSortableList
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
+                viewMode={taskCardViewMode}
                 containerId={taskContainerId}
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
@@ -399,6 +411,7 @@ function ListStackedBody({
                   <TaskCard
                     key={task.id}
                     task={task}
+                    viewMode={taskCardViewMode}
                     groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}
                   />
@@ -550,16 +563,16 @@ export function BoardListStackedColumnOverlay({
 interface BoardListStackedColumnProps {
   board: Board;
   listId: number;
-  stackedTaskMap: Record<string, string[]>;
   taskContainerId: string;
+  sortableIds: string[];
 }
 
 // Memoized: only re-renders when this column's props actually change
 export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   board,
   listId,
-  stackedTaskMap,
   taskContainerId,
+  sortableIds,
 }: BoardListStackedColumnProps) {
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
@@ -613,8 +626,8 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
             workflowOrder={workflowOrder}
             dragAttributes={attributes}
             dragListeners={listeners}
-            stackedTaskMap={stackedTaskMap}
             taskContainerId={taskContainerId}
+            sortableIds={sortableIds}
           />
         )}
       </div>

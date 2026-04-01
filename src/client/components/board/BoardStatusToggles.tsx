@@ -8,6 +8,7 @@ import {
   visibleStatusesForBoard,
   weightsAfterVisibilityChange,
 } from "./boardStatusUtils";
+import { statusDotClass } from "./laneStatusTheme";
 
 interface BoardStatusTogglesProps {
   board: Board;
@@ -58,7 +59,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       role="group"
       aria-label="Show or hide task statuses"
     >
-      <span className="text-xs font-medium text-muted-foreground">Statuses</span>
+      <span className="text-xs font-medium text-muted-foreground">Status</span>
       {workflowOrder.map((statusId) => {
         const active = visibleStatusesForBoard(board, workflowOrder).includes(
           statusId,
@@ -79,7 +80,17 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
             onPointerDown={stopPan}
             onClick={() => toggle(statusId)}
           >
-            {label}
+            {/* Mirror the board lane colors in the header so each workflow state reads faster at a glance. */}
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "size-2.5 shrink-0 rounded-full border border-black",
+                  statusDotClass(statusId),
+                )}
+                aria-hidden
+              />
+              <span>{label}</span>
+            </span>
           </button>
         );
       })}

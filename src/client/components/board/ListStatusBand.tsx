@@ -1,10 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { useDroppable } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -25,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseTaskSortableId } from "./dndIds";
 import { SortableTaskRow } from "./SortableTaskRow";
+import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
 import { scrollElementToBottomThen } from "./useVerticalScrollOverflow";
 
 interface ListStatusBandProps {
@@ -248,6 +244,8 @@ export function ListStatusBand({
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
                 viewMode={taskCardViewMode}
+                listId={list.id}
+                status={status}
                 containerId={containerId}
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
@@ -377,6 +375,8 @@ export function ListStatusBand({
             taskMap={taskMap}
             taskGroups={board.taskGroups}
             viewMode={taskCardViewMode}
+            listId={list.id}
+            status={status}
             containerId={containerId}
             sortableIds={sortableIds}
             onComplete={handleComplete}
@@ -411,6 +411,8 @@ export function ListStatusBand({
 /** Per-row component that derives stable callbacks from task id, avoiding inline closures */
 const SortableTaskRowById = memo(function SortableTaskRowById({
   sid,
+  containerId,
+  index,
   task,
   taskGroups,
   viewMode,
@@ -418,6 +420,8 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   onEdit,
 }: {
   sid: string;
+  containerId: string;
+  index: number;
   task: Task;
   taskGroups: Board["taskGroups"];
   viewMode: TaskCardViewMode;
@@ -432,6 +436,8 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   return (
     <SortableTaskRow
       sortableId={sid}
+      containerId={containerId}
+      index={index}
       task={task}
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
@@ -446,6 +452,8 @@ const SortableBandContent = memo(function SortableBandContent({
   taskMap,
   taskGroups,
   viewMode,
+  listId,
+  status,
   containerId,
   sortableIds,
   onComplete,
@@ -454,43 +462,46 @@ const SortableBandContent = memo(function SortableBandContent({
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   viewMode: TaskCardViewMode;
+  listId: number;
+  status: string;
   containerId: string;
   sortableIds: string[];
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: containerId });
+  const { ref, isDropTarget } = useBoardTaskContainerDroppableReact({
+    containerId,
+    layout: "lanes",
+    listId,
+    status,
+  });
 
   return (
     <div
-      ref={setNodeRef}
+      ref={ref}
       className={cn(
         "flex min-h-6 flex-col gap-2 rounded-md",
-        isOver && "bg-primary/[0.07] ring-1 ring-primary/15",
+        isDropTarget && "bg-primary/[0.07] ring-1 ring-primary/15",
       )}
     >
-      <SortableContext
-        id={containerId}
-        items={sortableIds}
-        strategy={verticalListSortingStrategy}
-      >
-        {sortableIds.map((sid) => {
-          const tid = parseTaskSortableId(sid);
-          const task = tid != null ? taskMap.get(tid) : undefined;
-          if (!task) return null;
-          return (
-            <SortableTaskRowById
-              key={sid}
-              sid={sid}
-              task={task}
-              taskGroups={taskGroups}
-              viewMode={viewMode}
-              onComplete={onComplete}
-              onEdit={onEdit}
-            />
-          );
-        })}
-      </SortableContext>
+      {sortableIds.map((sid, index) => {
+        const tid = parseTaskSortableId(sid);
+        const task = tid != null ? taskMap.get(tid) : undefined;
+        if (!task) return null;
+        return (
+          <SortableTaskRowById
+            key={sid}
+            sid={sid}
+            containerId={containerId}
+            index={index}
+            task={task}
+            taskGroups={taskGroups}
+            viewMode={viewMode}
+            onComplete={onComplete}
+            onEdit={onEdit}
+          />
+        );
+      })}
     </div>
   );
 });

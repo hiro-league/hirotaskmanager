@@ -1,6 +1,12 @@
 # Board drag performance notes
 
-This document explains the two drag performance optimizations identified for the stacked board layout, what has already been implemented, and how a future coding agent should decide whether to continue with the larger refactor.
+This document explains the drag performance work that led into the React-first board DnD migration.
+
+Legacy note:
+
+- the old `useTaskDndCore.ts` and `useHorizontalListReorder.ts` files have been deleted
+- the current shared React-first equivalents are `useBoardTaskDndReact.ts` and `useHorizontalListReorderReact.ts`
+- historical references below to the old task core describe the pre-migration implementation that was later replaced
 
 ## Problem summary
 
@@ -21,14 +27,14 @@ Relevant code paths:
 - `src/client/components/board/BoardColumnsStacked.tsx`
 - `src/client/components/board/BoardListStackedColumn.tsx`
 - `src/client/components/board/SortableTaskRow.tsx`
-- `src/client/components/board/useTaskDndCore.ts`
+- `src/client/components/board/useBoardTaskDndReact.ts`
 - `src/client/components/board/useStackedBoardDnd.ts`
 
 ## Root causes
 
 ### 1. Broad prop fan-out from the task container map
 
-During task drag, `useTaskDndCore()` updates the optimistic container map on every `onDragOver`. That map is a top-level `Record<string, string[]>` keyed by list container id.
+During task drag, the shared task DnD state updates the optimistic container map on every `onDragOver`. That map is a top-level `Record<string, string[]>` keyed by list container id.
 
 Before the first optimization, `BoardColumnsStacked` passed the entire map to every stacked column:
 
@@ -44,9 +50,9 @@ This is especially wasteful in stacked view because cross-list drag usually chan
 
 Unrelated lists should be able to keep stable props.
 
-### 2. Global `DndContext` + many `useSortable()` subscribers
+### 2. Global drag provider + many `useSortable()` subscribers
 
-The stacked board still keeps all task rows under one `DndContext`, and each row uses `useSortable()`.
+The stacked board still keeps all task rows under one shared drag provider, and each row uses `useSortable()`.
 
 That means drag updates from dnd-kit can still propagate through many sortable rows, even after prop fan-out is reduced.
 
@@ -131,7 +137,7 @@ Likely touched files:
 - `src/client/components/board/BoardColumnsStacked.tsx`
 - `src/client/components/board/BoardListStackedColumn.tsx`
 - `src/client/components/board/SortableTaskRow.tsx`
-- `src/client/components/board/useTaskDndCore.ts`
+- `src/client/components/board/useBoardTaskDndReact.ts`
 - `src/client/components/board/useStackedBoardDnd.ts`
 - possibly `src/client/components/board/dndIds.ts`
 - possibly overlay code, collision handling, and keyboard navigation integration
@@ -228,7 +234,7 @@ Do not assume that dnd-kit is randomly unstable. The library is measurement-sens
 
 A prior mitigation attempt combined:
 
-- a short cross-container move cooldown in `useTaskDndCore()`
+- a short cross-container move cooldown in the old shared task core
 - a stacked-only height freeze
 
 That attempt did not eliminate the error, so it should not be considered a completed fix. It is kept here only to document a rejected direction.
@@ -245,13 +251,135 @@ The final diagnosis was:
 - `pointerWithin(...)` can temporarily produce no hits near boundaries, so a small amount of collision stabilization is still useful
 - the real crash trigger was cross-container task-to-task movement happening too early, before midpoint crossing
 
-The implemented fix in `src/client/components/board/useTaskDndCore.ts` now does all of the following:
+The implemented fix in the shared task drag state now does all of the following:
 
-- filters task drag collision candidates to task ids and task containers only
-- keeps a `lastResolvedTaskCollisionIdRef` fallback for the empty-`pointerWithin(...)` case
-- requires midpoint crossing for same-container reorder
+- filters task drag collision candidates to task ids and task containers only, so task drag no longer collides with unrelated `list-*` droppables
+- records per-container task layout (`TaskLayoutEntry`) so insertion can be computed from actual row geometry instead of only from the current `over` id
+- keeps a `lastResolvedTaskCollisionIdRef` fallback for short empty-`pointerWithin(...)` windows
+- prefers same-container closest task hits when pointer hits temporarily disappear, which reduces cross-list jitter near gutters
+- resolves same-list container-gap hits through a boundary calculation (`pointerBoundaryFromLayout`) instead of snapping to a "nearest" task across the gap
+- uses pointer-based insertion (`pointerInsertionIndexFromLayout`) for container-level drops and geometry-fallback cases, so empty-list and gap targeting stay deterministic
+- requires midpoint crossing for same-container reorder before committing a task-to-task optimistic move
 - also requires midpoint crossing for cross-container task-to-task moves
-- still allows container-level drops so empty-band targeting continues to work
+- ignores task-to-task cross-container updates when `pointerWithin(...)` reports no hit, which avoids reintroducing the update-depth feedback loop
+- keeps optimistic refs (`taskContainersRef`, `reverseIdxRef`) synchronized inside the state updater so `onDragEnd` reads the latest preview map
+- drops trailing task drag-over / collision work once the drag lifecycle has been cleared, preventing stale post-end updates from rewriting final order
+- still allows container-level drops so empty-band targeting and non-task gap targeting continue to work
+
+### Implemented stability fixes in detail
+
+The retained fixes were not one single change. They were a set of smaller guardrails that made the hover path, optimistic state, and drop finalization agree with each other.
+
+#### 1. Collision filtering by draggable type
+
+Task drag now filters collision candidates down to task ids plus task container ids only.
+
+Why this mattered:
+
+- dnd-kit could otherwise resolve a task drag against unrelated `list-*` droppables
+- that made `over` jump between different droppable types
+- once `over` became unstable, optimistic reordering also became unstable
+
+#### 2. Layout-aware insertion instead of "nearest item" guesses
+
+The hook now keeps lightweight per-container layout data (`top` and `midY` for each visible task).
+
+That layout is used in two different ways:
+
+- `pointerInsertionIndexFromLayout(...)` computes the insertion index from pointer Y against task midpoints
+- `pointerBoundaryFromLayout(...)` turns a same-list container-gap hit into the exact boundary task that should be treated as the collision target
+
+Why this mattered:
+
+- the earlier "nearest task" approach could flip across a gap even when the intended insertion boundary was stable
+- that mismatch made the overlay and final drop position disagree
+- using the boundary's `afterId` keeps the same-list collision target aligned with the visible insertion slot
+
+#### 3. Midpoint gating for task-to-task optimistic moves
+
+The hook now requires the dragged task's midpoint to cross the hovered task's midpoint before it commits a task-to-task optimistic move.
+
+This applies to both:
+
+- same-container reorder
+- cross-container task-to-task moves
+
+Why this mattered:
+
+- before this gate, optimistic moves could fire too early while the pointer was still hovering near a boundary
+- those early moves changed geometry, which changed collision results, which triggered more optimistic moves
+- that feedback loop was the main reason the `Maximum update depth exceeded` crash could come back during long hover sessions
+
+#### 4. Safer handling of empty-pointer windows
+
+`pointerWithin(...)` can briefly return no hits while the pointer is near a boundary or gutter.
+
+The final implementation stabilizes those moments by:
+
+- preferring a same-container closest task hit when possible
+- keeping `lastResolvedTaskCollisionIdRef` as a short-lived fallback
+- refusing cross-container task-to-task optimistic updates when there are no pointer hits at all
+
+Why this mattered:
+
+- empty-pointer moments were enough to let cross-list collision resolution wander
+- that produced random-feeling overlay movement and occasional snap-back behavior
+
+#### 5. Ref synchronization for optimistic state
+
+The final implementation keeps the optimistic container map ref synchronized inside the `setTaskContainers(...)` updater itself, not only through React render timing.
+
+It also snapshots the initial map at drag start and clears the refs at drag end/cancel.
+
+Why this mattered:
+
+- `onDragEnd` can run before React has rendered the most recent optimistic preview
+- if `onDragEnd` reads an older map, the task can appear to "return" even though the drag-over logic already produced the right order
+- synchronizing the ref inside the updater keeps drag-over and drag-end reading the same optimistic state
+
+#### 6. Stale drag-event guards after end/cancel
+
+The hook now explicitly ignores trailing task drag events once the active task lifecycle has been cleared.
+
+This happens in three places:
+
+- `collisionDetection(...)` returns no task collisions when there is no active task drag
+- `onDragOver(...)` drops task events when `activeKindRef` is no longer `"task"`
+- `updateContainers(...)` ignores queued state updaters after drag end
+
+Why this mattered:
+
+- React and dnd-kit can still flush late measurements or queued updates after the user has already dropped
+- without these guards, stale drag-over work could overwrite the committed final order
+
+#### 7. Narrow drop finalization instead of always correcting on end
+
+`onDragEnd(...)` now does a release-time same-list pointer correction only in the narrow case where:
+
+- there is a same-container drop
+- there was no optimistic preview change already committed during drag-over
+- the release-time pointer index still differs from the active index
+
+Why this mattered:
+
+- a broad end-of-drag correction can fight against a preview map that is already correct
+- narrowing the correction prevents `onDragEnd(...)` from over-adjusting a drop that was already resolved during hover
+
+#### 8. Container-level drops remain supported
+
+The final fix did not remove container-level drop behavior.
+
+Instead, container hits now insert by pointer position within the target list when possible, which preserves:
+
+- dropping into empty lists
+- dropping into list gaps instead of directly over a task
+- deterministic top/bottom insertion when the pointer is over the container rather than a task row
+
+#### 9. Instrumentation was temporary
+
+The investigation added runtime logging to prove the failure mode and verify the fix. That instrumentation was removed after the drag behavior was confirmed fixed.
+
+Future readers should treat the code path above as the retained solution. The logging was diagnostic only and is not part of the shipped behavior.
 
 ### Prevention guidance for future drag bugs
 
@@ -300,9 +428,9 @@ Useful safeguards for future work:
 1. Apply Optimization 1 first.
 2. Re-profile the same stacked-board drag scenario.
 3. Compare:
-   - number of `BoardListStackedColumn` renders
-   - number of `SortableTaskRow` renders
-   - largest React commit durations
+  - number of `BoardListStackedColumn` renders
+  - number of `SortableTaskRow` renders
+  - largest React commit durations
 4. Only plan Optimization 2 if the board is still materially slow.
 
 ## Important implementation note
@@ -322,7 +450,8 @@ That is why per-list `sortableIds` are still correct and useful for both:
 ## Current status
 
 - Optimization 1: implemented in the stacked board path
-- Optimization 2: not implemented
-- Additional issue: the prior `Maximum update depth exceeded` crash was reproduced in both stacked and lanes layouts and was ultimately fixed in `useTaskDndCore()` with collision filtering plus midpoint gating for cross-container task moves
+- Optimization 2: not implemented as a separate pass; the React-first migration replaced the old legacy board path instead
+- Additional issue: the prior `Maximum update depth exceeded` crash was reproduced in both stacked and lanes layouts and ultimately informed the shared grouped task flow that now lives in `useBoardTaskDndReact.ts`
 - A prior mitigation attempt did not fully resolve the crash; the final fix came from runtime evidence rather than a throttle-only workaround
 - Recommended next step: if future drag work touches collision or optimistic hover behavior, re-run long boundary-hover stress testing in both layouts before landing the change
+

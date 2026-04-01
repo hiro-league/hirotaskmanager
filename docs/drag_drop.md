@@ -1,6 +1,6 @@
 # Drag & Drop — Patterns and Gotchas
 
-Reference for implementing DnD features in this project using **@dnd-kit/core** + **@dnd-kit/sortable**.
+Reference for implementing DnD features in this project using the React-first **@dnd-kit/react** stack and **@dnd-kit/helpers**.
 
 ---
 
@@ -8,9 +8,9 @@ Reference for implementing DnD features in this project using **@dnd-kit/core** 
 
 | Layer | Role |
 |---|---|
-| `DndContext` | Wraps the drag region. Owns sensors, collision detection, and event handlers. |
-| `SortableContext` | Declares the ordered list of item ids for a sortable group. |
-| `useSortable` | Per-item hook — provides `setNodeRef`, `transform`, `transition`, `isDragging`, `attributes`, `listeners`. |
+| `DragDropProvider` | Wraps the drag region and owns drag event handlers. |
+| `useSortable` | Per-item hook for sortable columns or tasks. |
+| `useDroppable` | Explicit container hook for empty-drop targets and non-sortable bands. |
 | `DragOverlay` | Portal-rendered floating clone that follows the pointer. |
 
 ## Key patterns we use

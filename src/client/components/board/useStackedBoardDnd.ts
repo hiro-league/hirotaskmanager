@@ -9,15 +9,15 @@ import {
   sortableTaskId,
   stackedListContainerId,
 } from "./dndIds";
-import { useHorizontalListReorder } from "./useHorizontalListReorder";
 import {
   listTasksMergedSorted,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
-  useTaskDndCore,
-} from "./useTaskDndCore";
+  useBoardTaskDndReact,
+} from "./useBoardTaskDndReact";
+import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 function buildStackedTaskContainerMap(
   board: Board,
@@ -132,14 +132,16 @@ async function persistStackedChanges(
   }
 }
 
-export function useStackedBoardDnd(board: Board) {
-  const list = useHorizontalListReorder(board);
+export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
+  const list = useHorizontalListReorderReact(board);
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+
+  const listIds = listIdsOverride ?? list.localListIds;
 
   const tasksLayoutSig = useMemo(
     () =>
@@ -149,25 +151,25 @@ export function useStackedBoardDnd(board: Board) {
     [board.tasks],
   );
 
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${list.localListIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
 
-  const config = useMemo(
-    () => ({
-      buildContainerMap: () =>
-        buildStackedTaskContainerMap(
-          board,
-          list.localListIds,
-          visibleStatuses,
-          activeGroup,
-          workflowOrder,
-        ),
-      persistChanges: persistStackedChanges,
-      containerMapDeps,
-    }),
-    [board, list.localListIds, visibleStatuses, activeGroup, workflowOrder, containerMapDeps],
+  const serverTaskMap = useMemo(
+    () =>
+      buildStackedTaskContainerMap(
+        board,
+        listIds,
+        visibleStatuses,
+        activeGroup,
+        workflowOrder,
+      ),
+    [containerMapDeps, board, listIds, visibleStatuses, activeGroup, workflowOrder],
   );
 
-  const core = useTaskDndCore(board, list, config);
+  const core = useBoardTaskDndReact(board, list, {
+    buildContainerMap: () => serverTaskMap,
+    persistChanges: persistStackedChanges,
+    containerMapDeps,
+  });
 
   return {
     ...core,

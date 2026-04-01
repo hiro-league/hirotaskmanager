@@ -1,14 +1,10 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
-  type PointerEvent,
+  useRef,
+  type RefCallback,
 } from "react";
-import type {
-  DraggableAttributes,
-  DraggableSyntheticListeners,
-} from "@dnd-kit/core";
 import { MoreVertical } from "lucide-react";
 import { useDeleteList, useRenameList } from "@/api/mutations";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
@@ -16,64 +12,17 @@ import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeCo
 import { cn } from "@/lib/utils";
 import type { List } from "../../../shared/models";
 
-const TAP_MOVE_THRESHOLD_SQ = 8 * 8;
-
 interface ListHeaderProps {
   boardId: number;
   list: List;
-  /** When set, the title strip is the list drag handle (board columns). */
-  dragAttributes?: DraggableAttributes;
-  dragListeners?: DraggableSyntheticListeners;
-}
-
-function mergeTapAwareListeners(
-  listeners: DraggableSyntheticListeners | undefined,
-  tapRef: React.MutableRefObject<{
-    x: number;
-    y: number;
-    moved: boolean;
-  } | null>,
-  onTap: () => void,
-  editing: boolean,
-): DraggableSyntheticListeners | undefined {
-  if (!listeners) return undefined;
-  return {
-    ...listeners,
-    onPointerDown: (e: PointerEvent<HTMLElement>) => {
-      if (!editing) {
-        tapRef.current = { x: e.clientX, y: e.clientY, moved: false };
-      }
-      listeners.onPointerDown?.(e);
-    },
-    onPointerMove: (e: PointerEvent<HTMLElement>) => {
-      const t = tapRef.current;
-      if (t && !t.moved) {
-        const dx = e.clientX - t.x;
-        const dy = e.clientY - t.y;
-        if (dx * dx + dy * dy > TAP_MOVE_THRESHOLD_SQ) t.moved = true;
-      }
-      listeners.onPointerMove?.(e);
-    },
-    onPointerUp: (e: PointerEvent<HTMLElement>) => {
-      const t = tapRef.current;
-      if (t && !t.moved && !editing) {
-        onTap();
-      }
-      tapRef.current = null;
-      listeners.onPointerUp?.(e);
-    },
-    onPointerCancel: (e: PointerEvent<HTMLElement>) => {
-      tapRef.current = null;
-      listeners.onPointerCancel?.(e);
-    },
-  };
+  /** Attach the list drag handle for board column sorting. */
+  dragHandleRef?: RefCallback<HTMLElement>;
 }
 
 export function ListHeader({
   boardId,
   list,
-  dragAttributes,
-  dragListeners,
+  dragHandleRef,
 }: ListHeaderProps) {
   const renameList = useRenameList();
   const deleteList = useDeleteList();
@@ -82,9 +31,7 @@ export function ListHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const tapRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-
-  const boardDrag = dragAttributes !== undefined && dragListeners !== undefined;
+  const boardDrag = dragHandleRef != null;
 
   const startRename = useCallback(() => {
     setEditing(true);
@@ -150,10 +97,6 @@ export function ListHeader({
     setListDeleteConfirmOpen(false);
   }, [boardId, deleteList, list.id]);
 
-  const mergedListeners = boardDrag
-    ? mergeTapAwareListeners(dragListeners, tapRef, startRename, editing)
-    : dragListeners;
-
   return (
     <>
     <div
@@ -184,9 +127,13 @@ export function ListHeader({
         <>
           <div className="pointer-events-none min-w-0 flex-1" aria-hidden />
           <div
+            ref={dragHandleRef}
             className="absolute inset-y-0 left-2 right-10 z-[1] flex cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-            {...dragAttributes}
-            {...(mergedListeners ?? {})}
+            // The React-first sortable handle is ref-based, so keep an explicit
+            // double-click rename affordance on the handle itself.
+            onDoubleClick={() => {
+              if (!editing) startRename();
+            }}
           >
             <span className="w-full truncate text-center text-[0.9375rem] font-bold leading-tight text-foreground">
               {list.name}

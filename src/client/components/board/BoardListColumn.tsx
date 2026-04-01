@@ -1,17 +1,12 @@
-import type {
-  DraggableAttributes,
-  DraggableSyntheticListeners,
-} from "@dnd-kit/core";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef, type RefCallback } from "react";
 import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { cn } from "@/lib/utils";
 import { boardListColumnOverlayShellClass } from "./boardDragOverlayShell";
-import { laneBandContainerId, sortableListId } from "./dndIds";
+import { laneBandContainerId } from "./dndIds";
 import { laneStatusDividerClass } from "./laneStatusTheme";
+import { useBoardColumnSortableReact } from "./useBoardColumnSortableReact";
 
 interface ListColumnBodyProps {
   board: Board;
@@ -19,8 +14,7 @@ interface ListColumnBodyProps {
   listId: number;
   visibleStatuses: string[];
   weights: number[];
-  dragAttributes?: DraggableAttributes;
-  dragListeners?: DraggableSyntheticListeners;
+  dragHandleRef?: RefCallback<HTMLElement>;
   taskMap?: Record<string, string[]>;
   isTaskDragActive?: boolean;
 }
@@ -31,8 +25,7 @@ function ListColumnBody({
   listId,
   visibleStatuses,
   weights,
-  dragAttributes,
-  dragListeners,
+  dragHandleRef,
   taskMap,
   isTaskDragActive = false,
 }: ListColumnBodyProps) {
@@ -55,8 +48,7 @@ function ListColumnBody({
       <ListHeader
         boardId={board.id}
         list={list}
-        dragAttributes={dragAttributes}
-        dragListeners={dragListeners}
+        dragHandleRef={dragHandleRef}
       />
       <div ref={bandsRef} className="flex min-h-0 flex-1 flex-col bg-transparent">
         {visibleStatuses.map((status, i) => {
@@ -143,6 +135,7 @@ export function BoardListColumnOverlay({
 interface BoardListColumnProps {
   board: Board;
   listId: number;
+  listIndex: number;
   visibleStatuses: string[];
   weights: number[];
   taskMap?: Record<string, string[]>;
@@ -153,32 +146,23 @@ interface BoardListColumnProps {
 export const BoardListColumn = memo(function BoardListColumn({
   board,
   listId,
+  listIndex,
   visibleStatuses,
   weights,
   taskMap,
   isTaskDragActive,
 }: BoardListColumnProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: sortableListId(listId) });
+  const { ref, handleRef, isDragging } = useBoardColumnSortableReact(
+    listId,
+    listIndex,
+  );
 
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
 
-  const style: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-  };
-
   return (
     <div
-      ref={setNodeRef}
-      style={style}
+      ref={ref}
       className="relative flex h-full min-h-0 w-72 shrink-0 flex-col"
       data-list-column={list.id}
       data-board-no-pan
@@ -200,8 +184,7 @@ export const BoardListColumn = memo(function BoardListColumn({
             listId={listId}
             visibleStatuses={visibleStatuses}
             weights={weights}
-            dragAttributes={attributes}
-            dragListeners={listeners}
+            dragHandleRef={handleRef}
             taskMap={taskMap}
             isTaskDragActive={isTaskDragActive}
           />

@@ -1,16 +1,5 @@
-import type {
-  DraggableAttributes,
-  DraggableSyntheticListeners,
-} from "@dnd-kit/core";
-import { useDroppable } from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { Plus, X } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefCallback } from "react";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -35,13 +24,15 @@ import {
   boardListColumnOverlayShellClass,
   stackedListColumnMinHeightClass,
 } from "./boardDragOverlayShell";
-import { parseTaskSortableId, sortableListId } from "./dndIds";
+import { parseTaskSortableId } from "./dndIds";
 import {
   listTasksMergedSorted,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import { SortableTaskRow } from "./SortableTaskRow";
 import { scrollElementToBottomThen } from "./useVerticalScrollOverflow";
+import { useBoardColumnSortableReact } from "./useBoardColumnSortableReact";
+import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
 
 interface ListStackedBodyProps {
   board: Board;
@@ -49,8 +40,7 @@ interface ListStackedBodyProps {
   listId: number;
   visibleStatuses: string[];
   workflowOrder: readonly string[];
-  dragAttributes?: DraggableAttributes;
-  dragListeners?: DraggableSyntheticListeners;
+  dragHandleRef?: RefCallback<HTMLElement>;
   sortableIds?: string[];
   /** Container id for this list's task droppable. */
   taskContainerId?: string;
@@ -63,6 +53,8 @@ const EMPTY_SORTABLE_IDS: string[] = [];
 /** Per-row component that derives stable callbacks from task id */
 const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   sid,
+  containerId,
+  index,
   task,
   taskGroups,
   viewMode,
@@ -70,6 +62,8 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   onEdit,
 }: {
   sid: string;
+  containerId: string;
+  index: number;
   task: Task;
   taskGroups: Board["taskGroups"];
   viewMode: TaskCardViewMode;
@@ -84,6 +78,8 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   return (
     <SortableTaskRow
       sortableId={sid}
+      containerId={containerId}
+      index={index}
       task={task}
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
@@ -98,6 +94,7 @@ const StackedSortableList = memo(function StackedSortableList({
   taskMap,
   taskGroups,
   viewMode,
+  listId,
   containerId,
   sortableIds,
   onComplete,
@@ -106,43 +103,44 @@ const StackedSortableList = memo(function StackedSortableList({
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   viewMode: TaskCardViewMode;
+  listId: number;
   containerId: string;
   sortableIds: string[];
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: containerId });
+  const { ref, isDropTarget } = useBoardTaskContainerDroppableReact({
+    containerId,
+    layout: "stacked",
+    listId,
+  });
 
   return (
     <div
-      ref={setNodeRef}
+      ref={ref}
       className={cn(
         "flex min-h-8 flex-col gap-2 rounded-md",
-        isOver && "bg-primary/[0.07] ring-1 ring-primary/15",
+        isDropTarget && "bg-primary/[0.07] ring-1 ring-primary/15",
       )}
     >
-      <SortableContext
-        id={containerId}
-        items={sortableIds}
-        strategy={verticalListSortingStrategy}
-      >
-        {sortableIds.map((sid) => {
-          const tid = parseTaskSortableId(sid);
-          const task = tid != null ? taskMap.get(tid) : undefined;
-          if (!task) return null;
-          return (
-            <StackedSortableTaskRowById
-              key={sid}
-              sid={sid}
-              task={task}
-              taskGroups={taskGroups}
-              viewMode={viewMode}
-              onComplete={onComplete}
-              onEdit={onEdit}
-            />
-          );
-        })}
-      </SortableContext>
+      {sortableIds.map((sid, index) => {
+        const tid = parseTaskSortableId(sid);
+        const task = tid != null ? taskMap.get(tid) : undefined;
+        if (!task) return null;
+        return (
+          <StackedSortableTaskRowById
+            key={sid}
+            sid={sid}
+            containerId={containerId}
+            index={index}
+            task={task}
+            taskGroups={taskGroups}
+            viewMode={viewMode}
+            onComplete={onComplete}
+            onEdit={onEdit}
+          />
+        );
+      })}
     </div>
   );
 });
@@ -153,8 +151,7 @@ function ListStackedBody({
   listId,
   visibleStatuses,
   workflowOrder,
-  dragAttributes,
-  dragListeners,
+  dragHandleRef,
   sortableIds = EMPTY_SORTABLE_IDS,
   taskContainerId,
   forDragOverlay = false,
@@ -382,8 +379,7 @@ function ListStackedBody({
       <ListHeader
         boardId={board.id}
         list={list}
-        dragAttributes={dragAttributes}
-        dragListeners={dragListeners}
+        dragHandleRef={dragHandleRef}
       />
       <div ref={outerRef} className={outerClass} style={outerStyle}>
         {/* Scroll container — FAB lives outside this div so it never scrolls */}
@@ -400,6 +396,7 @@ function ListStackedBody({
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
                 viewMode={taskCardViewMode}
+                listId={listId}
                 containerId={taskContainerId}
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
@@ -563,14 +560,16 @@ export function BoardListStackedColumnOverlay({
 interface BoardListStackedColumnProps {
   board: Board;
   listId: number;
-  taskContainerId: string;
-  sortableIds: string[];
+  listIndex: number;
+  taskContainerId?: string;
+  sortableIds?: string[];
 }
 
 // Memoized: only re-renders when this column's props actually change
 export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   board,
   listId,
+  listIndex,
   taskContainerId,
   sortableIds,
 }: BoardListStackedColumnProps) {
@@ -580,27 +579,17 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     [board, workflowOrder],
   );
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: sortableListId(listId) });
+  const { ref, handleRef, isDragging } = useBoardColumnSortableReact(
+    listId,
+    listIndex,
+  );
 
   const list = board.lists.find((l) => l.id === listId);
   if (!list) return null;
 
-  const style: CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-  };
-
   return (
     <div
-      ref={setNodeRef}
-      style={style}
+      ref={ref}
       className={cn(
         "relative flex w-72 shrink-0 flex-col self-start",
         isDragging && stackedListColumnMinHeightClass,
@@ -624,8 +613,7 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
             listId={listId}
             visibleStatuses={visibleStatuses}
             workflowOrder={workflowOrder}
-            dragAttributes={attributes}
-            dragListeners={listeners}
+            dragHandleRef={handleRef}
             taskContainerId={taskContainerId}
             sortableIds={sortableIds}
           />

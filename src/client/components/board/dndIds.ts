@@ -1,4 +1,4 @@
-import type { UniqueIdentifier } from "@dnd-kit/core";
+import type { UniqueIdentifier } from "@dnd-kit/abstract";
 
 const LIST_PREFIX = "list-";
 const TASK_PREFIX = "task-";

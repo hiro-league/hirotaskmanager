@@ -10,12 +10,12 @@ import {
   parseTaskSortableId,
   sortableTaskId,
 } from "./dndIds";
-import { useHorizontalListReorder } from "./useHorizontalListReorder";
 import { visibleStatusesForBoard } from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
-  useTaskDndCore,
-} from "./useTaskDndCore";
+  useBoardTaskDndReact,
+} from "./useBoardTaskDndReact";
+import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 /**
  * Build one container per (list, status) band. Each container holds the
@@ -121,14 +121,16 @@ async function persistLanesChanges(
   }
 }
 
-export function useLanesBoardDnd(board: Board) {
-  const list = useHorizontalListReorder(board);
+export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
+  const list = useHorizontalListReorderReact(board);
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+
+  const listIds = listIdsOverride ?? list.localListIds;
 
   const tasksLayoutSig = useMemo(
     () =>
@@ -138,24 +140,24 @@ export function useLanesBoardDnd(board: Board) {
     [board.tasks],
   );
 
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${list.localListIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
 
-  const config = useMemo(
-    () => ({
-      buildContainerMap: () =>
-        buildLanesTaskContainerMap(
-          board,
-          list.localListIds,
-          visibleStatuses,
-          activeGroup,
-        ),
-      persistChanges: persistLanesChanges,
-      containerMapDeps,
-    }),
-    [board, list.localListIds, visibleStatuses, activeGroup, containerMapDeps],
+  const serverTaskMap = useMemo(
+    () =>
+      buildLanesTaskContainerMap(
+        board,
+        listIds,
+        visibleStatuses,
+        activeGroup,
+      ),
+    [containerMapDeps, board, listIds, visibleStatuses, activeGroup],
   );
 
-  const core = useTaskDndCore(board, list, config);
+  const core = useBoardTaskDndReact(board, list, {
+    buildContainerMap: () => serverTaskMap,
+    persistChanges: persistLanesChanges,
+    containerMapDeps,
+  });
 
   return {
     ...core,

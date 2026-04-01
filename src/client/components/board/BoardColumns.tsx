@@ -1,10 +1,11 @@
 import { Plus, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
-import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DragDropProvider,
+  DragOverlay as ReactDragOverlay,
+} from "@dnd-kit/react";
 import type { Board } from "../../../shared/models";
-import { sortableListId } from "./dndIds";
 import { useCreateList, usePatchBoardViewPrefs } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
@@ -13,6 +14,7 @@ import {
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import { BoardListColumn } from "./BoardListColumn";
+import { laneBandContainerId } from "./dndIds";
 import { StatusLabelColumn } from "./StatusLabelColumn";
 import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useLanesBoardDnd } from "./useLanesBoardDnd";
@@ -125,33 +127,20 @@ export function BoardColumns({ board }: BoardColumnsProps) {
 
   const {
     localListIds,
-    activeId,
-    sensors,
-    collisionDetection,
+    activeId: activeListId,
+    activeTaskId,
+    displayTaskMap,
     onDragStart,
     onDragOver,
     onDragEnd,
-    onDragCancel,
     reorderPending,
-    displayTaskMap,
-    activeTaskId,
-    visibleStatuses,
   } = useLanesBoardDnd(board);
+  const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
 
   const boardKeyboardNav = useBoardKeyboardNavOptional();
   useEffect(() => {
     boardKeyboardNav?.setListColumnOrder(localListIds);
   }, [boardKeyboardNav, localListIds]);
-
-  const overlayTask =
-    activeTaskId != null
-      ? board.tasks.find((t) => t.id === activeTaskId)
-      : undefined;
-
-  const sortableListItemIds = useMemo(
-    () => localListIds.map(sortableListId),
-    [localListIds],
-  );
 
   const [weights, setWeights] = useState<number[]>(() =>
     bandWeightsForBoard(board, workflowOrder),
@@ -204,18 +193,17 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     });
   }, []);
 
+  const overlayTask =
+    activeTaskId != null
+      ? board.tasks.find((task) => task.id === activeTaskId)
+      : undefined;
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        measuring={{
-          droppable: { strategy: MeasuringStrategy.BeforeDragging },
-        }}
+      <DragDropProvider
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
-        onDragCancel={onDragCancel}
       >
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col items-start"
@@ -230,38 +218,41 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               flushWeights={flushWeights}
               splittersDisabled={reorderPending}
             />
-            <SortableContext
-              items={sortableListItemIds}
-              strategy={horizontalListSortingStrategy}
-            >
-              <div className="flex min-h-0 flex-row gap-4">
-                {localListIds.map((id) => (
-                  <BoardListColumn
-                    key={id}
-                    board={board}
-                    listId={id}
-                    visibleStatuses={visibleStatuses}
-                    weights={weights}
-                    taskMap={displayTaskMap}
-                    isTaskDragActive={activeTaskId != null}
-                  />
-                ))}
-              </div>
-            </SortableContext>
+            <div className="flex min-h-0 flex-row gap-4">
+              {localListIds.map((id, index) => (
+                <BoardListColumn
+                  key={id}
+                  board={board}
+                  listId={id}
+                  listIndex={index}
+                  visibleStatuses={visibleStatuses}
+                  weights={weights}
+                  taskMap={Object.fromEntries(
+                    visibleStatuses.map((status) => [
+                      laneBandContainerId(id, status),
+                      displayTaskMap[laneBandContainerId(id, status)] ?? [],
+                    ]),
+                  )}
+                  isTaskDragActive={activeTaskId != null}
+                />
+              ))}
+            </div>
             <AddListSlot boardId={board.id} />
           </div>
         </div>
-        <DragOverlay dropAnimation={null} zIndex={60}>
-          <BoardDragOverlayContent
-            board={board}
-            overlayTask={overlayTask}
-            activeListId={activeId}
-            layout="lanes"
-            visibleStatuses={visibleStatuses}
-            weights={weights}
-          />
-        </DragOverlay>
-      </DndContext>
+        <ReactDragOverlay dropAnimation={null} style={{ zIndex: 60 }}>
+          {overlayTask != null || activeListId != null ? (
+            <BoardDragOverlayContent
+              board={board}
+              overlayTask={overlayTask}
+              activeListId={activeListId}
+              layout="lanes"
+              visibleStatuses={visibleStatuses}
+              weights={weights}
+            />
+          ) : null}
+        </ReactDragOverlay>
+      </DragDropProvider>
     </div>
   );
 }

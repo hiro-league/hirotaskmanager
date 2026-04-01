@@ -1,0 +1,13 @@
+---
+description: Use the hirotm CLI for TaskManager data operations
+alwaysApply: true
+---
+
+# hirotm CLI Usage
+
+- Use `hirotm` for all TaskManager board, list, task, and status operations before touching app internals.
+- Prefer query commands such as `hirotm boards list`, `hirotm boards show <id-or-slug>`, and `hirotm statuses list` to inspect live state.
+- If a query command says the server is unreachable, run the exact `hirotm start ...` command from the error hint and retry.
+- Treat CLI JSON output as the source of truth for live app data.
+- Do not read or modify SQLite files directly, and do not write raw SQL for normal task/board work.
+- When changes are needed, prefer CLI or HTTP API flows over direct database edits.

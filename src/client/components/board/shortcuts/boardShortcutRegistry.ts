@@ -1,4 +1,4 @@
-import { ALL_TASK_GROUPS } from "../../../../shared/models";
+import { ALL_TASK_GROUPS, sortPrioritiesByValue } from "../../../../shared/models";
 import type { Board } from "../../../../shared/models";
 import {
   getNextTaskCardViewMode,
@@ -29,6 +29,28 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     matchKey: letterKey("h"),
     run: (_board, actions) => {
       actions.openHelp();
+    },
+  },
+  {
+    id: "open-board-search",
+    scope: "board",
+    keys: ["K"],
+    description: "Search tasks on this board",
+    preventDefault: true,
+    matchKey: letterKey("k"),
+    run: (_board, actions) => {
+      actions.openBoardSearch();
+    },
+  },
+  {
+    id: "open-board-search-f3",
+    scope: "board",
+    keys: ["F3"],
+    description: "Search tasks on this board (same as K)",
+    preventDefault: true,
+    matchKey: keyCode("F3"),
+    run: (_board, actions) => {
+      actions.openBoardSearch();
     },
   },
   {
@@ -74,6 +96,30 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     matchKey: letterKey("a"),
     run: (board, actions) => {
       actions.allTaskGroups(board);
+    },
+  },
+  {
+    id: "cycle-priority",
+    scope: "board",
+    keys: ["R"],
+    description: "Cycle priority filter",
+    preventDefault: true,
+    matchKey: letterKey("r"),
+    enabled: (board) => Boolean(board && board.taskPriorities.length > 0),
+    run: (board, actions) => {
+      actions.cycleTaskPriority(board);
+    },
+  },
+  {
+    id: "cycle-highlighted-task-priority",
+    scope: "board",
+    keys: ["P"],
+    description: "Cycle the highlighted task priority",
+    preventDefault: true,
+    matchKey: letterKey("p"),
+    enabled: (board) => Boolean(board && board.taskPriorities.length > 0),
+    run: (board, actions) => {
+      actions.cycleHighlightedTaskPriority(board);
     },
   },
   {
@@ -212,10 +258,10 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "reopen-highlighted-task",
     scope: "board",
-    keys: ["R"],
+    keys: ["O"],
     description: "Reopen the highlighted task (if done)",
     preventDefault: true,
-    matchKey: letterKey("r"),
+    matchKey: letterKey("o"),
     run: (board, actions) => {
       actions.reopenHighlightedTask(board);
     },
@@ -251,4 +297,36 @@ export function cycleTaskCardViewModeForBoard(
   const current =
     usePreferencesStore.getState().taskCardViewModeByBoardId[String(board.id)] ?? "normal";
   setViewMode(board.id, getNextTaskCardViewMode(current));
+}
+
+export function cycleTaskPriorityForBoard(
+  board: Board,
+  setActive: (
+    boardId: string | number,
+    priorityIds: string[] | undefined,
+  ) => void,
+): void {
+  const orderedIds = sortPrioritiesByValue(board.taskPriorities).map((priority) =>
+    String(priority.id),
+  );
+  if (orderedIds.length === 0) return;
+  const raw =
+    usePreferencesStore.getState().activeTaskPriorityIdsByBoardId[
+      String(board.id)
+    ];
+  if (raw === undefined) {
+    setActive(board.id, [orderedIds[0]!]);
+    return;
+  }
+  if (raw.length !== 1 || !orderedIds.includes(raw[0]!)) {
+    setActive(board.id, undefined);
+    return;
+  }
+  const resolved = raw[0]!;
+  const idx = orderedIds.indexOf(resolved);
+  if (idx < 0 || idx >= orderedIds.length - 1) {
+    setActive(board.id, undefined);
+    return;
+  }
+  setActive(board.id, [orderedIds[idx + 1]!]);
 }

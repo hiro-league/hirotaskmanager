@@ -58,3 +58,7 @@ export function useBoardTaskKeyboardBridge(): BoardTaskKeyboardBridgeValue {
   }
   return ctx;
 }
+
+export function useBoardTaskKeyboardBridgeOptional(): BoardTaskKeyboardBridgeValue | null {
+  return useContext(BoardTaskKeyboardBridgeContext);
+}

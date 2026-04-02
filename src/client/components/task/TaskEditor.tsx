@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { Board, Task } from "../../../shared/models";
+import {
+  priorityDisplayLabel,
+  sortPrioritiesByValue,
+  type Board,
+  type Task,
+} from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
@@ -23,6 +28,7 @@ interface Baseline {
   title: string;
   body: string;
   group: string;
+  priority: string;
 }
 
 export function TaskEditor({
@@ -45,7 +51,14 @@ export function TaskEditor({
   const [body, setBody] = useState("");
   /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
-  const baselineRef = useRef<Baseline>({ title: "", body: "", group: "" });
+  /** Select value — matches `String(taskPriority.id)` or empty string for no priority. */
+  const [priority, setPriority] = useState("");
+  const baselineRef = useRef<Baseline>({
+    title: "",
+    body: "",
+    group: "",
+    priority: "",
+  });
   const [showDiscard, setShowDiscard] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -55,10 +68,12 @@ export function TaskEditor({
       setTitle(task.title);
       setBody(task.body);
       setGroup(String(task.groupId));
+      setPriority(task.priorityId != null ? String(task.priorityId) : "");
       baselineRef.current = {
         title: task.title,
         body: task.body,
         group: String(task.groupId),
+        priority: task.priorityId != null ? String(task.priorityId) : "",
       };
     } else if (mode === "create" && createContext) {
       setTitle("");
@@ -68,7 +83,13 @@ export function TaskEditor({
           ? activeGroup
           : String(board.taskGroups[0]?.id ?? "");
       setGroup(defaultGroup);
-      baselineRef.current = { title: "", body: "", group: defaultGroup };
+      setPriority("");
+      baselineRef.current = {
+        title: "",
+        body: "",
+        group: defaultGroup,
+        priority: "",
+      };
     }
   }, [
     open,
@@ -85,14 +106,22 @@ export function TaskEditor({
       return (
         title.trim() !== baselineRef.current.title.trim() ||
         body !== baselineRef.current.body ||
-        group !== baselineRef.current.group
+        group !== baselineRef.current.group ||
+        priority !== baselineRef.current.priority
       );
     }
     if (mode === "create" && createContext) {
-      return title.trim() !== "" || body.trim() !== "";
+      // Track board-owned selects as dirty so closing after a priority change
+      // does not silently discard a user choice.
+      return (
+        title.trim() !== "" ||
+        body.trim() !== "" ||
+        group !== baselineRef.current.group ||
+        priority !== baselineRef.current.priority
+      );
     }
     return false;
-  }, [open, mode, task, createContext, title, body, group]);
+  }, [open, mode, task, createContext, title, body, group, priority]);
 
   const busy =
     createTask.isPending || updateTask.isPending || deleteTask.isPending;
@@ -118,6 +147,7 @@ export function TaskEditor({
   const handleSave = useCallback(async () => {
     const trimmedTitle = title.trim() || "Untitled";
     const now = new Date().toISOString();
+    const priorityId = priority ? Number(priority) : null;
     if (mode === "create" && createContext) {
       const gid = Number(group) || board.taskGroups[0]?.id || 0;
       await createTask.mutateAsync({
@@ -127,6 +157,7 @@ export function TaskEditor({
         title: trimmedTitle,
         body,
         groupId: gid,
+        priorityId,
       });
     } else if (mode === "edit" && task) {
       const gid = Number(group) || task.groupId;
@@ -137,6 +168,7 @@ export function TaskEditor({
           title: trimmedTitle,
           body,
           groupId: gid,
+          priorityId,
           updatedAt: now,
         },
       });
@@ -150,6 +182,7 @@ export function TaskEditor({
     title,
     body,
     group,
+    priority,
     createTask,
     updateTask,
     onClose,
@@ -157,6 +190,10 @@ export function TaskEditor({
 
   const closedStatusId =
     statuses?.find((s) => s.isClosed)?.id ?? "closed";
+  const sortedPriorities = useMemo(
+    () => sortPrioritiesByValue(board.taskPriorities),
+    [board.taskPriorities],
+  );
 
   const applyWorkflowStatus = useCallback(
     async (nextStatusId: string) => {
@@ -259,6 +296,25 @@ export function TaskEditor({
                 {board.taskGroups.map((g) => (
                   <option key={g.id} value={String(g.id)}>
                     {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${titleId}-priority`} className="text-xs font-medium text-muted-foreground">
+                Priority
+              </label>
+              <select
+                id={`${titleId}-priority`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                value={priority}
+                disabled={busy}
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="">No priority</option>
+                {sortedPriorities.map((taskPriority) => (
+                  <option key={taskPriority.id} value={String(taskPriority.id)}>
+                    {taskPriority.value} - {priorityDisplayLabel(taskPriority.label)}
                   </option>
                 ))}
               </select>

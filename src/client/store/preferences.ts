@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { ALL_TASK_GROUPS, type GroupDefinition } from "../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  sortPrioritiesByValue,
+  type GroupDefinition,
+  type TaskPriorityDefinition,
+} from "../../shared/models";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type TaskCardViewMode = "small" | "normal" | "large" | "larger";
@@ -82,6 +87,7 @@ interface PersistedShape {
     sidebarCollapsed?: boolean;
     boardFilterStripCollapsed?: boolean;
     activeTaskGroupByBoardId?: Record<string, string>;
+    activeTaskPriorityIdsByBoardId?: Record<string, string[]>;
     taskCardViewModeByBoardId?: Record<string, TaskCardViewMode>;
     taskCardSizeByBoardId?: Record<string, TaskCardViewMode>;
     /** User checked "don't show again" on board keyboard help — disables auto-open on board selection. */
@@ -94,6 +100,7 @@ function readPersistedSlice(): {
   sidebarCollapsed: boolean;
   boardFilterStripCollapsed: boolean;
   activeTaskGroupByBoardId: Record<string, string>;
+  activeTaskPriorityIdsByBoardId: Record<string, string[]>;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   boardShortcutHelpDismissed: boolean;
 } {
@@ -103,6 +110,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
+      activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
@@ -115,6 +123,7 @@ function readPersistedSlice(): {
         sidebarCollapsed: false,
         boardFilterStripCollapsed: false,
         activeTaskGroupByBoardId: {},
+        activeTaskPriorityIdsByBoardId: {},
         taskCardViewModeByBoardId: {},
         boardShortcutHelpDismissed: false,
       };
@@ -122,9 +131,22 @@ function readPersistedSlice(): {
     const parsed = JSON.parse(raw) as PersistedShape;
     const s = parsed.state;
     const rawMap = s?.activeTaskGroupByBoardId;
+    const rawPriorityMap = s?.activeTaskPriorityIdsByBoardId;
     const activeTaskGroupByBoardId =
       rawMap && typeof rawMap === "object" && !Array.isArray(rawMap)
         ? { ...rawMap }
+        : {};
+    const activeTaskPriorityIdsByBoardId =
+      rawPriorityMap &&
+      typeof rawPriorityMap === "object" &&
+      !Array.isArray(rawPriorityMap)
+        ? Object.fromEntries(
+            Object.entries(rawPriorityMap).filter(
+              ([, value]) =>
+                Array.isArray(value) &&
+                value.every((entry) => typeof entry === "string"),
+            ),
+          )
         : {};
     const rawTaskCardViewModeMap =
       s?.taskCardViewModeByBoardId ?? s?.taskCardSizeByBoardId;
@@ -149,6 +171,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: Boolean(s?.sidebarCollapsed),
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
       activeTaskGroupByBoardId,
+      activeTaskPriorityIdsByBoardId,
       taskCardViewModeByBoardId,
       boardShortcutHelpDismissed: Boolean(s?.boardShortcutHelpDismissed),
     };
@@ -158,6 +181,7 @@ function readPersistedSlice(): {
       sidebarCollapsed: false,
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
+      activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
@@ -177,6 +201,11 @@ interface PreferencesState {
   toggleBoardFilterStripCollapsed: () => void;
   activeTaskGroupByBoardId: Record<string, string>;
   setActiveTaskGroupForBoard: (boardId: string | number, group: string) => void;
+  activeTaskPriorityIdsByBoardId: Record<string, string[]>;
+  setActiveTaskPriorityIdsForBoard: (
+    boardId: string | number,
+    priorityIds: string[] | undefined,
+  ) => void;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   setTaskCardViewModeForBoard: (
     boardId: string | number,
@@ -211,6 +240,18 @@ export const usePreferencesStore = create<PreferencesState>()(
             [String(boardId)]: group,
           },
         })),
+      activeTaskPriorityIdsByBoardId: initial.activeTaskPriorityIdsByBoardId,
+      setActiveTaskPriorityIdsForBoard: (boardId, priorityIds) =>
+        set((s) => {
+          const key = String(boardId);
+          const next = { ...s.activeTaskPriorityIdsByBoardId };
+          if (priorityIds === undefined) {
+            delete next[key];
+          } else {
+            next[key] = [...priorityIds];
+          }
+          return { activeTaskPriorityIdsByBoardId: next };
+        }),
       taskCardViewModeByBoardId: initial.taskCardViewModeByBoardId,
       setTaskCardViewModeForBoard: (boardId, mode) =>
         set((s) => ({
@@ -227,6 +268,11 @@ export const usePreferencesStore = create<PreferencesState>()(
               validIds.has(id),
             ),
           );
+          const nextActiveTaskPriorityIdsByBoardId = Object.fromEntries(
+            Object.entries(s.activeTaskPriorityIdsByBoardId).filter(([id]) =>
+              validIds.has(id),
+            ),
+          );
           const nextTaskCardViewModeByBoardId = Object.fromEntries(
             Object.entries(s.taskCardViewModeByBoardId).filter(([id]) =>
               validIds.has(id),
@@ -235,6 +281,8 @@ export const usePreferencesStore = create<PreferencesState>()(
           if (
             Object.keys(nextActiveTaskGroupByBoardId).length ===
               Object.keys(s.activeTaskGroupByBoardId).length &&
+            Object.keys(nextActiveTaskPriorityIdsByBoardId).length ===
+              Object.keys(s.activeTaskPriorityIdsByBoardId).length &&
             Object.keys(nextTaskCardViewModeByBoardId).length ===
               Object.keys(s.taskCardViewModeByBoardId).length
           ) {
@@ -244,6 +292,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           // pruned or a new board can inherit an old group filter/card size from the recycled id.
           return {
             activeTaskGroupByBoardId: nextActiveTaskGroupByBoardId,
+            activeTaskPriorityIdsByBoardId: nextActiveTaskPriorityIdsByBoardId,
             taskCardViewModeByBoardId: nextTaskCardViewModeByBoardId,
           };
         }),
@@ -258,6 +307,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
         activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
+        activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,
         taskCardViewModeByBoardId: state.taskCardViewModeByBoardId,
         boardShortcutHelpDismissed: state.boardShortcutHelpDismissed,
       }),
@@ -279,6 +329,30 @@ export function useResolvedActiveTaskGroup(
     if (raw && taskGroups.some((g) => String(g.id) === raw)) return raw;
     return ALL_TASK_GROUPS;
   }, [raw, key, taskGroups]);
+}
+
+/**
+ * Returns `null` for All priorities, `[]` for an explicit empty filter, or the
+ * current valid selected ids after removing stale priority references.
+ */
+export function useResolvedActiveTaskPriorityIds(
+  boardId: string | number,
+  taskPriorities: TaskPriorityDefinition[],
+): string[] | null {
+  const key = String(boardId);
+  const raw = usePreferencesStore(
+    (s) => s.activeTaskPriorityIdsByBoardId[key],
+  );
+  return useMemo(() => {
+    if (raw === undefined) return null;
+    if (!Array.isArray(raw)) return null;
+    if (raw.length === 0) return [];
+    const validIds = new Set(
+      sortPrioritiesByValue(taskPriorities).map((priority) => String(priority.id)),
+    );
+    const filtered = raw.filter((id) => validIds.has(id));
+    return filtered.length > 0 ? filtered : null;
+  }, [raw, taskPriorities]);
 }
 
 export function useResolvedTaskCardViewMode(boardId: string | number): TaskCardViewMode {

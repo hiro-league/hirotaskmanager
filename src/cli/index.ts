@@ -1,10 +1,15 @@
 #!/usr/bin/env bun
 
 import { Command } from "commander";
-import type { Board, BoardIndexEntry, Status } from "../shared/models";
+import type { Board, BoardIndexEntry, SearchHit, Status } from "../shared/models";
 import { fetchApi } from "./lib/api-client";
 import { resolveDataDir, resolvePort } from "./lib/config";
-import { CliError, exitWithError, printJson } from "./lib/output";
+import {
+  CliError,
+  exitWithError,
+  printJson,
+  printSearchTable,
+} from "./lib/output";
 import { readServerStatus, startServer } from "./lib/process";
 
 function addPortOption(command: Command): Command {
@@ -114,6 +119,81 @@ addPortOption(
     exitWithError(error);
   }
 });
+
+function parseLimitOption(limit: string | undefined): number {
+  if (limit == null || limit === "") return 20;
+  const n = Number(limit);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new CliError("Invalid limit", 2, { limit });
+  }
+  return Math.min(50, n);
+}
+
+addPortOption(
+  program
+    .command("search")
+    .description(
+      "Search tasks (title, body, list name, group & status labels) via FTS5",
+    )
+    .argument("<query...>", "Search query (quote phrases with spaces)")
+    .option("--board <id-or-slug>", "Limit results to one board")
+    .option("--limit <n>", "Max results (default 20, max 50)")
+    .option(
+      "--format <fmt>",
+      "Output format: json (default) or table",
+      "json",
+    )
+    .option(
+      "--no-prefix",
+      "Do not add * to the last token (exact token only). Default matches prefixes (drag finds dragging); this flag does not",
+    ),
+).action(
+  async (
+    queryParts: string[],
+    options: {
+      port?: string;
+      board?: string;
+      limit?: string;
+      format?: string;
+      noPrefix?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      const q = queryParts.join(" ").trim();
+      if (!q) {
+        throw new CliError("Query required", 2);
+      }
+      const limit = parseLimitOption(options.limit);
+      const fmt = (options.format ?? "json").toLowerCase();
+      if (fmt !== "json" && fmt !== "table") {
+        throw new CliError("Invalid --format (use json or table)", 2, {
+          format: options.format,
+        });
+      }
+      const params = new URLSearchParams();
+      params.set("q", q);
+      params.set("limit", String(limit));
+      if (options.board?.trim()) {
+        params.set("board", options.board.trim());
+      }
+      if (options.noPrefix) {
+        params.set("prefix", "0");
+      }
+      const hits = await fetchApi<SearchHit[]>(
+        `/search?${params.toString()}`,
+        { port },
+      );
+      if (fmt === "table") {
+        printSearchTable(hits);
+      } else {
+        printJson(hits);
+      }
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
 
 try {
   await program.parseAsync(process.argv);

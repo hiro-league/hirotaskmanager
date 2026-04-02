@@ -5,7 +5,7 @@
 **hirotm** is a command-line interface for the TaskManager app. It serves two purposes:
 
 1. **Server control** — start the API + web UI with a single command (`hirotm start`)
-2. **Data queries** — read boards, lists, tasks, and statuses via structured JSON output
+2. **Data operations** — read and mutate boards, lists, and tasks via structured JSON output
 
 The primary consumer is **AI coding agents** (Cursor, Claude Code, Codex, etc.) running on the same machine. Human users interact with it for setup and testing.
 
@@ -35,9 +35,10 @@ The `hirotm start` command launches the same API + web server that `npm run dev`
 | F4 | `hirotm boards list` returns all boards as JSON |
 | F5 | `hirotm boards show <id-or-slug>` returns a single board with its lists and tasks |
 | F6 | `hirotm statuses list` returns the workflow statuses |
-| F7 | All query commands output JSON by default (AI-first) |
-| F8 | All query commands fail with a clear error and non-zero exit code if the server is unreachable |
-| F9 | `hirotm help` and `--help` on every command |
+| F7 | `hirotm boards add`, `hirotm lists add`, `hirotm tasks add`, `hirotm tasks update`, and `hirotm tasks move` provide the AI-first write surface |
+| F8 | All commands output JSON by default (AI-first) |
+| F9 | All commands fail with a clear error and non-zero exit code if the server is unreachable |
+| F10 | `hirotm help` and `--help` on every command |
 
 ### Non-Functional
 
@@ -48,6 +49,7 @@ The `hirotm start` command launches the same API + web server that `npm run dev`
 | NF3 | No interactive prompts during normal operation (AI agents can't answer prompts) |
 | NF4 | Server starts once and stays running; no start/stop cycling |
 | NF5 | Optional API key for localhost safety (prevents accidental cross-app calls) |
+| NF6 | Multiline Markdown task bodies must be supported without opening an editor |
 
 ---
 
@@ -75,6 +77,11 @@ hirotm start --background --port 4000
 hirotm status
 hirotm boards list
 hirotm boards show my-project
+hirotm boards add "Sprint Planning"
+hirotm lists add --board sprint-planning "Ready"
+hirotm tasks add --board sprint-planning --list 12 --group 2 --title "Draft notes"
+hirotm tasks update --board sprint-planning 42 --priority 30
+hirotm tasks move --board sprint-planning 42 --to-list 15 --to-status closed
 hirotm statuses list
 ```
 
@@ -133,15 +140,27 @@ Phase 1 ships without auth enforcement. The config field is reserved for a futur
 
 ### 3.8 Output format
 
-JSON by default on all query commands. Every response is a valid JSON object written to `stdout`. Errors are JSON objects written to `stderr`:
+JSON by default on all commands. Read commands return the raw API payload. Write commands return compact normalized result objects derived from the API payload so agents do not need to diff full boards after every mutation. Errors are JSON objects written to `stderr`:
 
 ```json
 { "error": "Server not reachable at http://localhost:3001" }
 ```
 
-Future phase adds `--format table` and `--format plain` for human use.
+Future phase adds `--format table` and `--format plain` for more read commands intended for human use.
 
-### 3.9 Shebang
+### 3.9 Body input for tasks
+
+Task writes must support multiline Markdown bodies without interactive editing.
+
+Supported input modes:
+
+- `--body <text>`
+- `--body-file <path>`
+- `--body-stdin`
+
+Exactly one body source may be used on a single command.
+
+### 3.10 Shebang
 
 The CLI entry file uses:
 
@@ -153,7 +172,7 @@ This tells the OS to run the script with Bun. It works on macOS/Linux. On Window
 
 ---
 
-## 4. Command Reference (Phase 1)
+## 4. Command Reference (Current + Proposed)
 
 ### `hirotm start`
 
@@ -237,6 +256,77 @@ Output: the JSON array from `GET /api/statuses`.
 ]
 ```
 
+### `hirotm boards add [name]`
+
+Creates a new board.
+
+```
+hirotm boards add [name]
+```
+
+Notes:
+
+- `name` is optional
+- blank names fall back to the server default
+- CLI prints a compact board result instead of the full board document
+
+### `hirotm lists add --board <id-or-slug> [name]`
+
+Creates a list on an existing board.
+
+```
+hirotm lists add --board <id-or-slug> [name]
+```
+
+Notes:
+
+- `--board` is required
+- `name` is optional
+- new lists are appended to the end of the board's list order
+
+### `hirotm tasks add --board <id-or-slug> --list <id> --group <id> [options]`
+
+Creates a task on an existing board.
+
+```
+hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--title <text>] [--status <id>] [--priority <id>] [--body <text> | --body-file <path> | --body-stdin]
+```
+
+Notes:
+
+- `--board`, `--list`, and `--group` are required
+- blank or omitted title falls back to `"Untitled"`
+- exactly one body input source may be provided
+- new tasks are appended to the end of the destination list/status band
+
+### `hirotm tasks update --board <id-or-slug> <task-id> [options]`
+
+Updates any mutable task field exposed by the app.
+
+```
+hirotm tasks update --board <id-or-slug> <task-id> [--title <text>] [--status <id>] [--list <id>] [--group <id>] [--priority <id> | --no-priority] [--color <css-color> | --clear-color] [--body <text> | --body-file <path> | --body-stdin]
+```
+
+Notes:
+
+- at least one field must be supplied
+- supports current edit-dialog fields plus other mutable task fields already supported by the API
+- exactly one body input source may be provided
+
+### `hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]`
+
+Moves a task using simple append semantics.
+
+```
+hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+```
+
+Notes:
+
+- destination order is always append-to-end
+- omitted `--to-status` keeps the current status
+- implemented as a convenience wrapper over task patching
+
 ---
 
 ## 5. Project Structure
@@ -314,21 +404,24 @@ Created by `hirotm init` (future) or manually by the user.
 
 ### Phase 3 — Write Commands
 
-Add mutation commands for AI agents to modify data.
+Add the first AI-first mutation commands, keeping them simple and non-interactive.
 
-| Command | HTTP call |
-|---------|-----------|
-| `hirotm boards create [--name <name>]` | `POST /api/boards` |
-| `hirotm boards rename <id> --name <name>` | `PATCH /api/boards/:id` |
-| `hirotm boards delete <id> --confirm` | `DELETE /api/boards/:id` |
-| `hirotm lists create <board> --name <name>` | `POST /api/boards/:id/lists` |
-| `hirotm lists rename <board> <list-id> --name <n>` | `PATCH /api/boards/:id/lists/:listId` |
-| `hirotm lists delete <board> <list-id> --confirm` | `DELETE /api/boards/:id/lists/:listId` |
-| `hirotm tasks create <board> --list <id> --group <id> --title <t>` | `POST /api/boards/:id/tasks` |
-| `hirotm tasks update <board> <task-id> [--title] [--status] [--list] [--body]` | `PATCH /api/boards/:id/tasks/:taskId` |
-| `hirotm tasks delete <board> <task-id> --confirm` | `DELETE /api/boards/:id/tasks/:taskId` |
+| Command | HTTP call | Notes |
+|---------|-----------|-------|
+| `hirotm boards add [name]` | `POST /api/boards` | compact board result |
+| `hirotm lists add --board <id-or-slug> [name]` | `POST /api/boards/:id/lists` | append new list to end |
+| `hirotm tasks add --board <id-or-slug> --list <id> --group <id> ...` | `POST /api/boards/:id/tasks` | body via inline text, file, or stdin |
+| `hirotm tasks update --board <id-or-slug> <task-id> ...` | `PATCH /api/boards/:id/tasks/:taskId` | supports any mutable task field |
+| `hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]` | `PATCH /api/boards/:id/tasks/:taskId` | convenience wrapper; append-to-end semantics |
 
-Destructive commands (`delete`) require `--confirm` flag. Without it, they print what would be deleted and exit with code 1.
+Write commands should return compact normalized JSON objects, not full board payloads.
+
+Later phase:
+
+- board rename/delete
+- list rename/delete/reorder
+- task delete
+- explicit reorder commands when agents need exact placement
 
 ### Phase 4 — MCP Server
 
@@ -365,7 +458,9 @@ All errors are JSON on stderr with a non-zero exit code.
 |----------|-----------|--------|
 | Server not running | 1 | `{ "error": "Server not reachable", "hint": "Run: hirotm start" }` |
 | Board not found | 1 | `{ "error": "Board not found", "id": "bad-slug" }` |
+| Task not found | 1 | `{ "error": "Task not found", "board": "my-project", "taskId": 999 }` |
 | Invalid arguments | 2 | `{ "error": "Missing required argument: <id-or-slug>" }` |
+| Invalid body input | 2 | `{ "error": "Exactly one body input source is allowed" }` |
 | Server error (5xx) | 1 | `{ "error": "Server error", "status": 500, "detail": "..." }` |
 
 ---
@@ -373,8 +468,8 @@ All errors are JSON on stderr with a non-zero exit code.
 ## 8. Safety Rules
 
 1. The CLI **never** accesses SQLite directly — all data flows through the HTTP API
-2. Destructive write commands (Phase 3+) require `--confirm`
-3. No interactive prompts during command execution
+2. No interactive prompts during command execution
+3. Task bodies may be multiline Markdown, but must come from flags, file input, or stdin
 4. API key support is reserved in config for future use
 5. The CLI does not expose raw SQL, DB file paths, or migration commands
 

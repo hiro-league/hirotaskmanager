@@ -8,19 +8,24 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
-import { useBoard } from "@/api/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronUp, Search, Settings2 } from "lucide-react";
+import { boardKeys, useBoard } from "@/api/queries";
 import { usePatchBoardName } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
+  priorityDisplayLabel,
+  priorityLabelForId,
   resolvedBoardLayout,
+  sortPrioritiesByValue,
   type Board,
 } from "../../../shared/models";
 import {
   usePreferencesStore,
   useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
 } from "@/store/preferences";
 import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { BoardColorMenu } from "./BoardColorMenu";
@@ -28,12 +33,14 @@ import { BoardColumns } from "./BoardColumns";
 import { BoardColumnsStacked } from "./BoardColumnsStacked";
 import { BoardLayoutToggle } from "./BoardLayoutToggle";
 import { BoardStatusToggles } from "./BoardStatusToggles";
+import { BoardPriorityToggles } from "./BoardPriorityToggles";
 import { BoardTaskCardSizeToggle } from "./BoardTaskCardSizeToggle";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
+import { TaskPrioritiesEditorDialog } from "./TaskPrioritiesEditorDialog";
 import {
   BoardKeyboardNavProvider,
-  useBoardKeyboardNav,
+  useBoardKeyboardNavOptional,
 } from "./shortcuts/BoardKeyboardNavContext";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useUpdateTask } from "@/api/mutations";
@@ -42,16 +49,19 @@ import { BoardTaskDeleteConfirm } from "./shortcuts/BoardTaskDeleteConfirm";
 import {
   cycleTaskCardViewModeForBoard,
   cycleTaskGroupForBoard,
+  cycleTaskPriorityForBoard,
 } from "./shortcuts/boardShortcutRegistry";
 import { ShortcutHelpDialog } from "./shortcuts/ShortcutHelpDialog";
 import { ShortcutScopeProvider } from "./shortcuts/ShortcutScopeContext";
 import { useBoardShortcutKeydown } from "./shortcuts/useBoardShortcutKeydown";
-import { useBoardTaskKeyboardBridge } from "./shortcuts/BoardTaskKeyboardBridge";
+import { useBoardTaskKeyboardBridgeOptional } from "./shortcuts/BoardTaskKeyboardBridge";
 import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
 import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
+import { useBoardSearch } from "@/context/BoardSearchContext";
 import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
+import { BoardSearchDialog } from "./BoardSearchDialog";
 
 interface BoardViewProps {
   boardId: string | null;
@@ -61,11 +71,13 @@ interface BoardViewProps {
 function BoardShortcutBindings({
   board,
   openHelp,
+  openBoardSearch,
   toggleFilters,
   setTaskDeleteConfirmId,
 }: {
   board: Board;
   openHelp: () => void;
+  openBoardSearch: () => void;
   toggleFilters: () => void;
   setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
 }) {
@@ -75,15 +87,34 @@ function BoardShortcutBindings({
   const setTaskCardViewModeForBoard = usePreferencesStore(
     (s) => s.setTaskCardViewModeForBoard,
   );
-  const nav = useBoardKeyboardNav();
-  const bridge = useBoardTaskKeyboardBridge();
+  const setActiveTaskPriorityIdsForBoard = usePreferencesStore(
+    (s) => s.setActiveTaskPriorityIdsForBoard,
+  );
+  const nav = useBoardKeyboardNavOptional();
+  const bridge = useBoardTaskKeyboardBridgeOptional();
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
   const updateTask = useUpdateTask();
+  const queryClient = useQueryClient();
+  const pendingPrioritySavesRef = useRef(
+    new Map<number, ReturnType<typeof setTimeout>>(),
+  );
+  const pendingPriorityTasksRef = useRef(new Map<number, Board["tasks"][number]>());
+
+  useEffect(() => {
+    return () => {
+      for (const timeoutId of pendingPrioritySavesRef.current.values()) {
+        clearTimeout(timeoutId);
+      }
+      pendingPrioritySavesRef.current.clear();
+      pendingPriorityTasksRef.current.clear();
+    };
+  }, []);
 
   const actions = useMemo<BoardShortcutActions>(
     () => ({
       openHelp,
+      openBoardSearch,
       toggleFilters,
       cycleTaskCardViewMode: (b) =>
         cycleTaskCardViewModeForBoard(b, setTaskCardViewModeForBoard),
@@ -91,21 +122,82 @@ function BoardShortcutBindings({
         cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
       allTaskGroups: (b) =>
         setActiveTaskGroupForBoard(b.id, ALL_TASK_GROUPS),
-      focusOrScrollHighlight: nav.focusOrScrollHighlight,
-      moveHighlight: nav.moveHighlight,
-      highlightHome: nav.highlightHome,
-      highlightEnd: nav.highlightEnd,
-      highlightPage: nav.highlightPage,
+      cycleTaskPriority: (b) =>
+        cycleTaskPriorityForBoard(b, setActiveTaskPriorityIdsForBoard),
+      cycleHighlightedTaskPriority: (b) => {
+        const highlightedTaskId = nav?.highlightedTaskId;
+        if (highlightedTaskId == null) return;
+        const currentBoard =
+          queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
+        const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
+        if (!task) return;
+        const priorityOrder = [
+          null,
+          ...sortPrioritiesByValue(currentBoard.taskPriorities).map(
+            (priority) => priority.id,
+          ),
+        ];
+        const currentPriorityId = task.priorityId ?? null;
+        const currentIndex = Math.max(
+          0,
+          priorityOrder.findIndex((priorityId) => priorityId === currentPriorityId),
+        );
+        const nextPriorityId =
+          priorityOrder[(currentIndex + 1) % priorityOrder.length] ?? null;
+        const nextTask = {
+          ...task,
+          priorityId: nextPriorityId,
+          updatedAt: new Date().toISOString(),
+        };
+        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.id), {
+          ...currentBoard,
+          tasks: currentBoard.tasks.map((entry) =>
+            entry.id === nextTask.id ? nextTask : entry,
+          ),
+          updatedAt: nextTask.updatedAt,
+        });
+        pendingPriorityTasksRef.current.set(nextTask.id, nextTask);
+        const existingTimeout = pendingPrioritySavesRef.current.get(nextTask.id);
+        if (existingTimeout !== undefined) {
+          clearTimeout(existingTimeout);
+        }
+        // Delay the PATCH so rapid P presses only persist the final choice.
+        const timeoutId = setTimeout(() => {
+          const pendingTask = pendingPriorityTasksRef.current.get(nextTask.id);
+          pendingPriorityTasksRef.current.delete(nextTask.id);
+          pendingPrioritySavesRef.current.delete(nextTask.id);
+          if (!pendingTask) return;
+          const latestBoard =
+            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.id)) ??
+            currentBoard;
+          const latestTask =
+            latestBoard.tasks.find((entry) => entry.id === pendingTask.id) ?? pendingTask;
+          updateTask.mutate({
+            boardId: latestBoard.id,
+            task: {
+              ...latestTask,
+              priorityId: pendingTask.priorityId,
+              updatedAt: pendingTask.updatedAt,
+            },
+          });
+        }, 1000);
+        pendingPrioritySavesRef.current.set(nextTask.id, timeoutId);
+      },
+      focusOrScrollHighlight: () => nav?.focusOrScrollHighlight(),
+      moveHighlight: (dir) => nav?.moveHighlight(dir),
+      highlightHome: () => nav?.highlightHome(),
+      highlightEnd: () => nav?.highlightEnd(),
+      highlightPage: (dir) => nav?.highlightPage(dir),
       openHighlightedTask: () => {
-        const id = nav.highlightedTaskId;
-        if (id != null) bridge.requestOpenTaskEditor(id);
+        const id = nav?.highlightedTaskId;
+        if (id != null) bridge?.requestOpenTaskEditor(id);
       },
       requestDeleteHighlightedTask: () => {
-        const id = nav.highlightedTaskId;
+        const id = nav?.highlightedTaskId;
         if (id != null) setTaskDeleteConfirmId(id);
       },
       completeHighlightedTask: (b) => {
-        const id = nav.highlightedTaskId;
+        const id = nav?.highlightedTaskId;
         if (id == null) return;
         const task = b.tasks.find((t) => t.id === id);
         if (!task) return;
@@ -124,7 +216,7 @@ function BoardShortcutBindings({
         });
       },
       reopenHighlightedTask: (b) => {
-        const id = nav.highlightedTaskId;
+        const id = nav?.highlightedTaskId;
         if (id == null) return;
         const task = b.tasks.find((t) => t.id === id);
         if (!task) return;
@@ -146,11 +238,14 @@ function BoardShortcutBindings({
     }),
     [
       openHelp,
+      openBoardSearch,
       toggleFilters,
       setTaskCardViewModeForBoard,
       setActiveTaskGroupForBoard,
+      setActiveTaskPriorityIdsForBoard,
       nav,
       bridge,
+      queryClient,
       setTaskDeleteConfirmId,
       statuses,
       workflowOrder,
@@ -158,12 +253,16 @@ function BoardShortcutBindings({
     ],
   );
 
-  useBoardShortcutKeydown({ board, actions });
+  useBoardShortcutKeydown({
+    board: nav && bridge ? board : null,
+    actions,
+  });
   return null;
 }
 
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
+  const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
   const patchBoardName = usePatchBoardName();
   const themePreference = usePreferencesStore((s) => s.themePreference);
   const systemDark = useSystemDark();
@@ -183,6 +282,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   );
 
   const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
+  const [prioritiesEditorOpen, setPrioritiesEditorOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [editingBoardName, setEditingBoardName] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
@@ -200,6 +300,10 @@ export function BoardView({ boardId }: BoardViewProps) {
 
   const { scrollRef, panning, boardCanvasPanHandlers } =
     useBoardCanvasPanScroll();
+
+  useEffect(() => {
+    closeSearch();
+  }, [boardId, closeSearch]);
 
   // Auto-open keyboard help whenever a board is selected from the sidebar, until the user
   // checks "Don't show again" (`boardShortcutHelpDismissed`). Closing without the checkbox
@@ -243,6 +347,10 @@ export function BoardView({ boardId }: BoardViewProps) {
   const activeTaskGroup = useResolvedActiveTaskGroup(
     data?.id ?? boardId ?? "",
     data?.taskGroups ?? [],
+  );
+  const activeTaskPriorityIds = useResolvedActiveTaskPriorityIds(
+    data?.id ?? boardId ?? "",
+    data?.taskPriorities ?? [],
   );
 
   const cancelBoardRename = useCallback(() => {
@@ -311,6 +419,26 @@ export function BoardView({ boardId }: BoardViewProps) {
     activeTaskGroup !== ALL_TASK_GROUPS
       ? groupLabelForId(data.taskGroups, Number(activeTaskGroup))
       : null;
+  const activePriorityLabel =
+    activeTaskPriorityIds && activeTaskPriorityIds.length === 1
+      ? priorityLabelForId(data.taskPriorities, Number(activeTaskPriorityIds[0]))
+      : null;
+  const activePrioritySummary =
+    activeTaskPriorityIds === null
+      ? null
+      : activeTaskPriorityIds.length === 0
+        ? "None"
+        : activeTaskPriorityIds.length === 1
+          ? activePriorityLabel
+            ? priorityDisplayLabel(activePriorityLabel)
+            : null
+          : `${activeTaskPriorityIds.length} selected`;
+  const activePriorityColor =
+    activeTaskPriorityIds && activeTaskPriorityIds.length === 1
+      ? sortPrioritiesByValue(data.taskPriorities).find(
+          (priority) => String(priority.id) === activeTaskPriorityIds[0],
+        )?.color
+      : undefined;
 
   return (
     <ShortcutScopeProvider>
@@ -322,6 +450,7 @@ export function BoardView({ boardId }: BoardViewProps) {
       <BoardShortcutBindings
         board={data}
         openHelp={openHelp}
+        openBoardSearch={openSearch}
         toggleFilters={toggleFilterStrip}
         setTaskDeleteConfirmId={setTaskDeleteConfirmId}
       />
@@ -400,12 +529,36 @@ export function BoardView({ boardId }: BoardViewProps) {
                   {data.name}
                 </button>
               )}
+              <button
+                type="button"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
+                title="Search tasks (K or F3)"
+                aria-label="Search tasks on this board"
+                onClick={() => openSearch()}
+              >
+                <Search className="size-4 shrink-0" aria-hidden />
+              </button>
               {activeGroupLabel ? (
                 // Surface the active group near the title so expanded filters read at a glance.
                 <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
                   <span className="uppercase tracking-wide">Group</span>
                   <span className="truncate font-medium text-foreground">
                     {activeGroupLabel}
+                  </span>
+                </div>
+              ) : null}
+              {activePrioritySummary ? (
+                <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                  <span className="uppercase tracking-wide">Priority</span>
+                  {activePriorityColor ? (
+                    <span
+                      className="size-2.5 shrink-0 rounded-full border border-black/30"
+                      style={{ backgroundColor: activePriorityColor }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="truncate font-medium text-foreground">
+                    {activePrioritySummary}
                   </span>
                 </div>
               ) : null}
@@ -423,6 +576,15 @@ export function BoardView({ boardId }: BoardViewProps) {
                 >
                   <Settings2 className="size-3.5 shrink-0" aria-hidden />
                   Task groups
+                </button>
+                <button
+                  type="button"
+                  className={boardHeaderActionButtonClass()}
+                  title="Edit task priorities for this board"
+                  onClick={() => setPrioritiesEditorOpen(true)}
+                >
+                  <Settings2 className="size-3.5 shrink-0" aria-hidden />
+                  Task priorities
                 </button>
               </div>
             ) : (
@@ -449,9 +611,10 @@ export function BoardView({ boardId }: BoardViewProps) {
               className="pointer-events-auto flex flex-col gap-2 pt-1"
               data-board-no-pan
             >
-              {/* Keep groups and statuses on distinct rows so scanning the active filters is easier. */}
-              <div className="flex min-w-0 flex-wrap items-start">
+              {/* Keep the two task-metadata filters on one row so they read as peers. */}
+              <div className="flex min-w-0 flex-wrap items-start gap-4">
                 <TaskGroupSwitcher board={data} />
+                <BoardPriorityToggles board={data} />
               </div>
               <div className="flex min-w-0 flex-wrap items-start">
                 <BoardStatusToggles board={data} />
@@ -481,6 +644,12 @@ export function BoardView({ boardId }: BoardViewProps) {
         </div>
       </div>
 
+      <BoardSearchDialog
+        board={data}
+        open={boardSearchOpen}
+        onClose={closeSearch}
+      />
+
       <ShortcutHelpDialog
         open={shortcutHelpOpen}
         onClose={handleShortcutHelpClose}
@@ -491,6 +660,12 @@ export function BoardView({ boardId }: BoardViewProps) {
         board={data}
         open={groupsEditorOpen}
         onClose={() => setGroupsEditorOpen(false)}
+      />
+
+      <TaskPrioritiesEditorDialog
+        board={data}
+        open={prioritiesEditorOpen}
+        onClose={() => setPrioritiesEditorOpen(false)}
       />
 
       <BoardTaskDeleteConfirm

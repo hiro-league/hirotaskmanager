@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { getDb, runMigrations } from "./db";
 import { boardsRoute } from "./routes/boards";
+import { searchRoute } from "./routes/search";
 import { statusesRoute } from "./routes/statuses";
 import { ensureDataDir } from "./storage";
 
@@ -19,6 +20,7 @@ const app = new Hono();
 app.get("/api/health", (c) => c.json({ ok: true }));
 app.route("/api/statuses", statusesRoute);
 app.route("/api/boards", boardsRoute);
+app.route("/api/search", searchRoute);
 
 if (isProd) {
   const distDir = path.resolve(import.meta.dir, "../..", "dist");

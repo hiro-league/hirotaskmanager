@@ -3,14 +3,20 @@ import type { Board } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
 import { useStatusWorkflowOrder } from "@/api/queries";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import {
+  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
+} from "@/store/preferences";
 import {
   laneBandContainerId,
   parseLaneBandContainerId,
   parseTaskSortableId,
   sortableTaskId,
 } from "./dndIds";
-import { visibleStatusesForBoard } from "./boardStatusUtils";
+import {
+  taskMatchesPriorityFilter,
+  visibleStatusesForBoard,
+} from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
   useBoardTaskDndReact,
@@ -26,6 +32,7 @@ function buildLanesTaskContainerMap(
   listIds: number[],
   visibleStatuses: string[],
   activeGroup: string,
+  activePriorityIds: string[] | null,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
@@ -37,6 +44,9 @@ function buildLanesTaskContainerMap(
       if (activeGroup !== ALL_TASK_GROUPS) {
         tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
       }
+      tasks = tasks.filter((t) =>
+        taskMatchesPriorityFilter(t, activePriorityIds),
+      );
       out[key] = tasks.map((t) => sortableTaskId(t.id));
     }
   }
@@ -129,18 +139,27 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     [board, workflowOrder],
   );
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activePriorityIds = useResolvedActiveTaskPriorityIds(
+    board.id,
+    board.taskPriorities,
+  );
 
   const listIds = listIdsOverride ?? list.localListIds;
 
   const tasksLayoutSig = useMemo(
     () =>
       board.tasks
-        .map((t) => `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}`)
+        .map(
+          (t) =>
+            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}`,
+        )
         .join("|"),
     [board.tasks],
   );
 
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
+  const prioritySig =
+    activePriorityIds === null ? "__all__" : activePriorityIds.join("\0");
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}`;
 
   const serverTaskMap = useMemo(
     () =>
@@ -149,8 +168,16 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
         listIds,
         visibleStatuses,
         activeGroup,
+        activePriorityIds,
       ),
-    [containerMapDeps, board, listIds, visibleStatuses, activeGroup],
+    [
+      containerMapDeps,
+      board,
+      listIds,
+      visibleStatuses,
+      activeGroup,
+      activePriorityIds,
+    ],
   );
 
   const core = useBoardTaskDndReact(board, list, {
@@ -163,5 +190,6 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     ...core,
     visibleStatuses,
     activeGroup,
+    activePriorityIds,
   };
 }

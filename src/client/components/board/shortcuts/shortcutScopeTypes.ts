@@ -5,8 +5,10 @@
 export type ShortcutScope =
   | "board"
   | "shortcut-help-dialog"
+  | "board-search-dialog"
   | "task-editor"
   | "task-groups-editor"
+  | "task-priorities-editor"
   | "discard-dialog"
   | "task-delete-confirmation"
   | "list-delete-confirmation"

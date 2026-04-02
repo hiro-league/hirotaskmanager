@@ -15,6 +15,7 @@ import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTa
 import {
   type TaskCardViewMode,
   useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,10 @@ export function ListStatusBand({
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activePriorityIds = useResolvedActiveTaskPriorityIds(
+    board.id,
+    board.taskPriorities,
+  );
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
 
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
@@ -62,8 +67,15 @@ export function ListStatusBand({
         (t) => String(t.groupId) === activeGroup,
       );
     }
+    if (activePriorityIds !== null) {
+      listTasks = listTasks.filter(
+        (t) =>
+          t.priorityId != null &&
+          activePriorityIds.includes(String(t.priorityId)),
+      );
+    }
     return listTasks.sort((a, b) => a.order - b.order);
-  }, [board.tasks, list.id, status, activeGroup]);
+  }, [board.tasks, list.id, status, activeGroup, activePriorityIds]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -243,6 +255,7 @@ export function ListStatusBand({
               <SortableBandContent
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
+                taskPriorities={board.taskPriorities}
                 viewMode={taskCardViewMode}
                 listId={list.id}
                 status={status}
@@ -257,6 +270,7 @@ export function ListStatusBand({
                   <TaskCard
                     key={task.id}
                     task={task}
+                    taskPriorities={board.taskPriorities}
                     viewMode={taskCardViewMode}
                     groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}
@@ -374,6 +388,7 @@ export function ListStatusBand({
           <SortableBandContent
             taskMap={taskMap}
             taskGroups={board.taskGroups}
+            taskPriorities={board.taskPriorities}
             viewMode={taskCardViewMode}
             listId={list.id}
             status={status}
@@ -388,6 +403,7 @@ export function ListStatusBand({
               <TaskCard
                 key={task.id}
                 task={task}
+                taskPriorities={board.taskPriorities}
                 viewMode={taskCardViewMode}
                 groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                 onOpen={() => setEditingTask(task)}
@@ -415,6 +431,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   index,
   task,
   taskGroups,
+  taskPriorities,
   viewMode,
   onComplete,
   onEdit,
@@ -424,6 +441,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   index: number;
   task: Task;
   taskGroups: Board["taskGroups"];
+  taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
@@ -439,6 +457,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
       containerId={containerId}
       index={index}
       task={task}
+      taskPriorities={taskPriorities}
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
@@ -451,6 +470,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
 const SortableBandContent = memo(function SortableBandContent({
   taskMap,
   taskGroups,
+  taskPriorities,
   viewMode,
   listId,
   status,
@@ -461,6 +481,7 @@ const SortableBandContent = memo(function SortableBandContent({
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
+  taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
   listId: number;
   status: string;
@@ -496,6 +517,7 @@ const SortableBandContent = memo(function SortableBandContent({
             index={index}
             task={task}
             taskGroups={taskGroups}
+            taskPriorities={taskPriorities}
             viewMode={viewMode}
             onComplete={onComplete}
             onEdit={onEdit}

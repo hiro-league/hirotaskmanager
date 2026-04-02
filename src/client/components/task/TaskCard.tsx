@@ -1,6 +1,12 @@
 import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { Check } from "lucide-react";
-import type { Task, TaskStatus } from "../../../shared/models";
+import {
+  priorityDisplayLabel,
+  priorityLabelForId,
+  type Task,
+  type TaskPriorityDefinition,
+  type TaskStatus,
+} from "../../../shared/models";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import {
   getTaskCardViewSpec,
@@ -83,6 +89,7 @@ function TaskStatusIndicator({ status }: { status: TaskStatus }) {
 
 interface TaskCardProps {
   task: Task;
+  taskPriorities: TaskPriorityDefinition[];
   viewMode: TaskCardViewMode;
   /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
@@ -98,29 +105,68 @@ interface TaskCardProps {
   skipNavRegistration?: boolean;
 }
 
+function PriorityPill({
+  label,
+  color,
+}: {
+  label: string;
+  color: string;
+}) {
+  const displayLabel = priorityDisplayLabel(label);
+  if (!displayLabel) return null;
+  return (
+    <span
+      className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-black/85"
+      title={label}
+      style={{
+        backgroundColor: color,
+      }}
+    >
+      {displayLabel}
+    </span>
+  );
+}
+
 /**
  * Content section shared by both open and non-open card layouts.
  * Extracted so the two branches render identical markup for the text area.
  */
 function TaskCardContent({
   task,
+  taskPriorities,
   viewMode,
   groupLabel,
   preview,
   onOpen,
 }: {
   task: Task;
+  taskPriorities: TaskPriorityDefinition[];
   viewMode: TaskCardViewMode;
   groupLabel: string;
   preview: string;
   onOpen: () => void;
 }) {
   const viewSpec = getTaskCardViewSpec(viewMode);
+  const priorityLabel = priorityLabelForId(taskPriorities, task.priorityId);
+  const priorityColor =
+    task.priorityId != null
+      ? taskPriorities.find((priority) => priority.id === task.priorityId)?.color
+      : undefined;
   return (
     <div className="min-w-0 flex-1 text-left" onClick={onOpen}>
       <div className={cn("font-medium", viewSpec.titleClassName)}>
         {task.title || "Untitled"}
       </div>
+      {viewMode !== "small" ? (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+          <span className="uppercase tracking-wide text-muted-foreground/80">
+            {groupLabel}
+          </span>
+          {priorityLabel && priorityColor ? (
+            <PriorityPill label={priorityLabel} color={priorityColor} />
+          ) : null}
+        </div>
+      ) : null}
       {preview ? (
         <div
           className={cn(
@@ -129,11 +175,6 @@ function TaskCardContent({
           )}
         >
           {preview}
-        </div>
-      ) : null}
-      {viewSpec.showGroupLabel ? (
-        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-          {groupLabel}
         </div>
       ) : null}
     </div>
@@ -162,6 +203,7 @@ function openTaskContentRailStyle(viewMode: TaskCardViewMode): CSSProperties {
 // Memoized to avoid re-rendering every card on each drag-over event
 export const TaskCard = memo(function TaskCard({
   task,
+  taskPriorities,
   viewMode,
   groupLabel,
   onOpen,
@@ -246,6 +288,7 @@ export const TaskCard = memo(function TaskCard({
           >
             <TaskCardContent
               task={task}
+              taskPriorities={taskPriorities}
               viewMode={viewMode}
               groupLabel={groupLabel}
               preview={preview}
@@ -261,6 +304,7 @@ export const TaskCard = memo(function TaskCard({
           </div>
           <TaskCardContent
             task={task}
+            taskPriorities={taskPriorities}
             viewMode={viewMode}
             groupLabel={groupLabel}
             preview={preview}

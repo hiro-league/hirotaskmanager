@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import type { Board } from "../../../shared/models";
 import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
 import { useStatusWorkflowOrder } from "@/api/queries";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import {
+  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
+} from "@/store/preferences";
 import {
   parseStackedListContainerId,
   parseTaskSortableId,
@@ -24,6 +27,7 @@ function buildStackedTaskContainerMap(
   listIds: number[],
   visibleStatuses: string[],
   activeGroup: string,
+  activePriorityIds: string[] | null,
   workflowOrder: readonly string[],
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
@@ -34,6 +38,7 @@ function buildStackedTaskContainerMap(
       listId,
       visibleStatuses,
       activeGroup,
+      activePriorityIds,
       workflowOrder,
     );
     out[key] = tasks.map((t) => sortableTaskId(t.id));
@@ -140,18 +145,27 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     [board, workflowOrder],
   );
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activePriorityIds = useResolvedActiveTaskPriorityIds(
+    board.id,
+    board.taskPriorities,
+  );
 
   const listIds = listIdsOverride ?? list.localListIds;
 
   const tasksLayoutSig = useMemo(
     () =>
       board.tasks
-        .map((t) => `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}`)
+        .map(
+          (t) =>
+            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}`,
+        )
         .join("|"),
     [board.tasks],
   );
 
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}`;
+  const prioritySig =
+    activePriorityIds === null ? "__all__" : activePriorityIds.join("\0");
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}`;
 
   const serverTaskMap = useMemo(
     () =>
@@ -160,9 +174,18 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
         listIds,
         visibleStatuses,
         activeGroup,
+        activePriorityIds,
         workflowOrder,
       ),
-    [containerMapDeps, board, listIds, visibleStatuses, activeGroup, workflowOrder],
+    [
+      containerMapDeps,
+      board,
+      listIds,
+      visibleStatuses,
+      activeGroup,
+      activePriorityIds,
+      workflowOrder,
+    ],
   );
 
   const core = useBoardTaskDndReact(board, list, {
@@ -175,5 +198,6 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     ...core,
     visibleStatuses,
     activeGroup,
+    activePriorityIds,
   };
 }

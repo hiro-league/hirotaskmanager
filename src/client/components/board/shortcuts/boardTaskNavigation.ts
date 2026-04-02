@@ -1,5 +1,9 @@
 import { ALL_TASK_GROUPS, type Board } from "../../../../shared/models";
-import { listTasksMergedSorted } from "../boardStatusUtils";
+import {
+  listTasksMergedSorted,
+  taskMatchesPriorityFilter,
+  type ActiveTaskPriorityIds,
+} from "../boardStatusUtils";
 
 export type BoardLayoutNav = "lanes" | "stacked";
 
@@ -14,6 +18,7 @@ export function buildListColumnTaskIds(
   visibleStatuses: string[],
   workflowOrder: readonly string[],
   activeGroup: string,
+  activePriorityIds: ActiveTaskPriorityIds,
 ): Map<number, number[]> {
   const map = new Map<number, number[]>();
   for (const listId of listIdsInOrder) {
@@ -23,6 +28,7 @@ export function buildListColumnTaskIds(
         listId,
         visibleStatuses,
         activeGroup,
+        activePriorityIds,
         workflowOrder,
       );
       map.set(
@@ -38,6 +44,9 @@ export function buildListColumnTaskIds(
         if (activeGroup !== ALL_TASK_GROUPS) {
           tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
         }
+        tasks = tasks.filter((t) =>
+          taskMatchesPriorityFilter(t, activePriorityIds),
+        );
         tasks.sort((a, b) => a.order - b.order);
         ids.push(...tasks.map((t) => t.id));
       }

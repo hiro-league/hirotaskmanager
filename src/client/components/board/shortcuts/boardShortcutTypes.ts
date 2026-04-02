@@ -6,12 +6,18 @@ export type { ShortcutScope };
 /** Actions wired in BoardView; registry runs use this instead of importing the store directly. */
 export interface BoardShortcutActions {
   openHelp: () => void;
+  /** K or F3 — open board task search (same as header control). */
+  openBoardSearch: () => void;
   toggleFilters: () => void;
   /** S — cycle the board-local task card view mode. */
   cycleTaskCardViewMode: (board: Board) => void;
   /** Cycle All → group1 → group2 → … → All. No-op if there are no groups. */
   cycleTaskGroup: (board: Board) => void;
   allTaskGroups: (board: Board) => void;
+  /** Cycle All → priority1 → priority2 → … → All using board-local numeric order. */
+  cycleTaskPriority: (board: Board) => void;
+  /** Cycle the highlighted task's assigned priority, debounced before persisting. */
+  cycleHighlightedTaskPriority: (board: Board) => void;
   /** F — focus first task or scroll current highlight into view. */
   focusOrScrollHighlight: () => void;
   moveHighlight: (dir: "up" | "down" | "left" | "right") => void;
@@ -24,7 +30,7 @@ export interface BoardShortcutActions {
   requestDeleteHighlightedTask: () => void;
   /** C — complete highlighted task if not already closed. */
   completeHighlightedTask: (board: Board) => void;
-  /** R — reopen highlighted task to canonical open if closed. */
+  /** O — reopen highlighted task to canonical open if closed. */
   reopenHighlightedTask: (board: Board) => void;
 }
 

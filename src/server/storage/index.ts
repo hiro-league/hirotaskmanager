@@ -9,6 +9,7 @@ export {
   createBoardWithDefaults,
   patchBoardName,
   patchBoardViewPrefs,
+  patchBoardTaskPriorities,
   patchBoardTaskGroups,
 } from "./board";
 export {
@@ -23,3 +24,4 @@ export {
   deleteTaskOnBoard,
   reorderTasksInBand,
 } from "./tasks";
+export { searchTasks } from "./search";

@@ -17,6 +17,7 @@ export function BoardTaskDragOverlay({
     <div className={boardTaskDragOverlayClass}>
       <TaskCard
         task={task}
+        taskPriorities={board.taskPriorities}
         viewMode={taskCardViewMode}
         groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
         onOpen={() => {}}

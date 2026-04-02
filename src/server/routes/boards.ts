@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Board, GroupDefinition } from "../../shared/models";
+import type { Board, GroupDefinition, TaskPriorityDefinition } from "../../shared/models";
 import {
   createBoardWithDefaults,
   createListOnBoard,
@@ -11,6 +11,7 @@ import {
   generateSlug,
   loadBoard,
   patchBoardName,
+  patchBoardTaskPriorities,
   patchBoardTaskGroups,
   patchBoardViewPrefs,
   patchListOnBoard,
@@ -113,6 +114,46 @@ boardsRoute.patch("/:id/groups", async (c) => {
   }
 });
 
+boardsRoute.patch("/:id/priorities", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  let body: { taskPriorities?: unknown };
+  try {
+    body = (await c.req.json()) as { taskPriorities?: unknown };
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  if (!Array.isArray(body.taskPriorities)) {
+    return c.json({ error: "taskPriorities array required" }, 400);
+  }
+  const taskPriorities: TaskPriorityDefinition[] = [];
+  for (const item of body.taskPriorities) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const label = typeof rec.label === "string" ? rec.label.trim() : "";
+    const color = typeof rec.color === "string" ? rec.color.trim() : "";
+    const value =
+      typeof rec.value === "number" && Number.isFinite(rec.value)
+        ? rec.value
+        : Number.NaN;
+    const id =
+      typeof rec.id === "number" && Number.isFinite(rec.id) ? rec.id : 0;
+    const isSystem = Boolean(rec.isSystem);
+    taskPriorities.push({ id, value, label, color, isSystem });
+  }
+  if (taskPriorities.length === 0) {
+    return c.json({ error: "At least one task priority required" }, 400);
+  }
+  try {
+    const saved = patchBoardTaskPriorities(entry.id, taskPriorities);
+    if (!saved) return c.json({ error: "Board not found" }, 404);
+    return c.json(saved);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Invalid task priorities";
+    return c.json({ error: msg }, 400);
+  }
+});
+
 boardsRoute.post("/:id/lists", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
@@ -202,9 +243,16 @@ boardsRoute.post("/:id/tasks", async (c) => {
   const title = typeof body.title === "string" ? body.title : "";
   const taskBody = typeof body.body === "string" ? body.body : "";
   const status = typeof body.status === "string" ? body.status : "open";
+  const priorityId =
+    body.priorityId === null
+      ? null
+      : body.priorityId === undefined
+        ? undefined
+        : Number(body.priorityId);
   const saved = createTaskOnBoard(entry.id, {
     listId,
     groupId,
+    priorityId,
     title,
     body: taskBody,
     status,
@@ -231,6 +279,10 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
   if (typeof body.body === "string") patch.body = body.body;
   if (body.listId !== undefined) patch.listId = Number(body.listId);
   if (body.groupId !== undefined) patch.groupId = Number(body.groupId);
+  if (body.priorityId !== undefined) {
+    patch.priorityId =
+      body.priorityId === null ? null : Number(body.priorityId);
+  }
   if (typeof body.status === "string") patch.status = body.status;
   if (typeof body.order === "number") patch.order = body.order;
   if (typeof body.color === "string" || body.color === null) {

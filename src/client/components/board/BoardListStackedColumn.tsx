@@ -17,6 +17,7 @@ import {
   type TaskCardViewMode,
   usePreferencesStore,
   useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   index,
   task,
   taskGroups,
+  taskPriorities,
   viewMode,
   onComplete,
   onEdit,
@@ -66,6 +68,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   index: number;
   task: Task;
   taskGroups: Board["taskGroups"];
+  taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
@@ -81,6 +84,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
       containerId={containerId}
       index={index}
       task={task}
+      taskPriorities={taskPriorities}
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
@@ -93,6 +97,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
 const StackedSortableList = memo(function StackedSortableList({
   taskMap,
   taskGroups,
+  taskPriorities,
   viewMode,
   listId,
   containerId,
@@ -102,6 +107,7 @@ const StackedSortableList = memo(function StackedSortableList({
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
+  taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
   listId: number;
   containerId: string;
@@ -135,6 +141,7 @@ const StackedSortableList = memo(function StackedSortableList({
             index={index}
             task={task}
             taskGroups={taskGroups}
+            taskPriorities={taskPriorities}
             viewMode={viewMode}
             onComplete={onComplete}
             onEdit={onEdit}
@@ -160,6 +167,10 @@ function ListStackedBody({
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activePriorityIds = useResolvedActiveTaskPriorityIds(
+    board.id,
+    board.taskPriorities,
+  );
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
 
@@ -312,8 +323,23 @@ function ListStackedBody({
     () =>
       taskContainerId != null
         ? null
-        : listTasksMergedSorted(board, listId, visibleStatuses, activeGroup, workflowOrder),
-    [taskContainerId, board, listId, visibleStatuses, activeGroup, workflowOrder],
+        : listTasksMergedSorted(
+            board,
+            listId,
+            visibleStatuses,
+            activeGroup,
+            activePriorityIds,
+            workflowOrder,
+          ),
+    [
+      taskContainerId,
+      board,
+      listId,
+      visibleStatuses,
+      activeGroup,
+      activePriorityIds,
+      workflowOrder,
+    ],
   );
 
   // Show FAB whenever the add-task button is scrolled out of view.
@@ -395,6 +421,7 @@ function ListStackedBody({
               <StackedSortableList
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
+                taskPriorities={board.taskPriorities}
                 viewMode={taskCardViewMode}
                 listId={listId}
                 containerId={taskContainerId}
@@ -408,6 +435,7 @@ function ListStackedBody({
                   <TaskCard
                     key={task.id}
                     task={task}
+                    taskPriorities={board.taskPriorities}
                     viewMode={taskCardViewMode}
                     groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}

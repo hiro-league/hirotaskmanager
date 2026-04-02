@@ -1,5 +1,5 @@
 import { memo, useCallback } from "react";
-import type { Task } from "../../../shared/models";
+import type { Task, TaskPriorityDefinition } from "../../../shared/models";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { TaskCard } from "@/components/task/TaskCard";
 import type { TaskCardViewMode } from "@/store/preferences";
@@ -10,6 +10,7 @@ export interface SortableTaskRowProps {
   containerId: string;
   index: number;
   task: Task;
+  taskPriorities: TaskPriorityDefinition[];
   viewMode: TaskCardViewMode;
   groupLabel: string;
   onOpen: () => void;
@@ -22,6 +23,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   containerId,
   index,
   task,
+  taskPriorities,
   viewMode,
   groupLabel,
   onOpen,
@@ -54,6 +56,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
     >
       <TaskCard
         task={task}
+        taskPriorities={taskPriorities}
         viewMode={viewMode}
         groupLabel={groupLabel}
         onOpen={onOpen}

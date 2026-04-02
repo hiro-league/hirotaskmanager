@@ -2,6 +2,7 @@ export {
   useCreateBoard,
   useDeleteBoard,
   usePatchBoardName,
+  usePatchBoardTaskPriorities,
   usePatchBoardTaskGroups,
   usePatchBoardViewPrefs,
 } from "./board";

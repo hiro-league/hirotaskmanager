@@ -2,10 +2,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_BOARD_COLOR } from "../../../shared/boardColor";
 import {
   createDefaultTaskGroups,
+  createDefaultTaskPriorities,
   DEFAULT_STATUS_IDS,
   type Board,
   type BoardIndexEntry,
   type GroupDefinition,
+  type TaskPriorityDefinition,
 } from "../../../shared/models";
 import { appNavigate } from "@/lib/appNavigate";
 import { boardPath, parseBoardIdFromPath } from "@/lib/boardPath";
@@ -15,10 +17,12 @@ import { tempNumericId } from "./shared";
 function buildOptimisticBoard(id: number, name: string): Board {
   const now = new Date().toISOString();
   const taskGroups = createDefaultTaskGroups();
+  const taskPriorities = createDefaultTaskPriorities();
   return {
     id,
     name,
     taskGroups,
+    taskPriorities,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
     boardLayout: "stacked",
     boardColor: DEFAULT_BOARD_COLOR,
@@ -220,6 +224,25 @@ export function usePatchBoardTaskGroups() {
         method: "PATCH",
         headers: jsonHeaders,
         body: JSON.stringify({ taskGroups: input.taskGroups }),
+      });
+    },
+    onSuccess: (data) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+    },
+  });
+}
+
+export function usePatchBoardTaskPriorities() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      boardId: number;
+      taskPriorities: TaskPriorityDefinition[];
+    }) => {
+      return fetchJson<Board>(`/api/boards/${input.boardId}/priorities`, {
+        method: "PATCH",
+        headers: jsonHeaders,
+        body: JSON.stringify({ taskPriorities: input.taskPriorities }),
       });
     },
     onSuccess: (data) => {

@@ -12,6 +12,7 @@ export function createTaskOnBoard(
     title: string;
     body: string;
     groupId: number;
+    priorityId?: number | null;
   },
 ): Board | null {
   const db = getDb();
@@ -26,6 +27,14 @@ export function createTaskOnBoard(
     .query("SELECT id FROM task_group WHERE id = ? AND board_id = ?")
     .get(input.groupId, boardId) as { id: number } | null;
   if (!gRow) return null;
+
+  const priorityId = input.priorityId ?? null;
+  if (priorityId !== null) {
+    const pRow = db
+      .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
+      .get(priorityId, boardId) as { id: number } | null;
+    if (!pRow) return null;
+  }
 
   const allowedStatusIds = (
     db.query("SELECT id FROM status ORDER BY sort_order ASC, id ASC").all() as {
@@ -48,12 +57,13 @@ export function createTaskOnBoard(
   const closedAt = statusIsClosed(db, statusId) ? now : null;
   withTransaction(db, () => {
     db.run(
-      `INSERT INTO task (list_id, group_id, board_id, status_id,
+      `INSERT INTO task (list_id, group_id, priority_id, board_id, status_id,
          title, body, sort_order, color, created_at, updated_at, closed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.listId,
         input.groupId,
+        priorityId,
         boardId,
         statusId,
         input.title,
@@ -78,6 +88,7 @@ export function patchTaskOnBoard(
     body: string;
     listId: number;
     groupId: number;
+    priorityId: number | null;
     status: string;
     order: number;
     color: string | null;
@@ -88,13 +99,14 @@ export function patchTaskOnBoard(
 
   const trow = db
     .query(
-      `SELECT id, list_id, group_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
        FROM task WHERE id = ? AND board_id = ?`,
     )
     .get(taskId, boardId) as {
     id: number;
     list_id: number;
     group_id: number;
+    priority_id: number | null;
     status_id: string;
     title: string;
     body: string;
@@ -108,6 +120,8 @@ export function patchTaskOnBoard(
 
   let listId = patch.listId ?? trow.list_id;
   let groupId = patch.groupId ?? trow.group_id;
+  const priorityId =
+    patch.priorityId !== undefined ? patch.priorityId : trow.priority_id;
   const allowedStatusIds = (
     db.query("SELECT id FROM status ORDER BY sort_order ASC, id ASC").all() as {
       id: string;
@@ -127,6 +141,14 @@ export function patchTaskOnBoard(
     .query("SELECT id FROM task_group WHERE id = ? AND board_id = ?")
     .get(groupId, boardId) as { id: number } | null;
   if (!gOk) return null;
+
+  if (priorityId !== null) {
+    // Nullable priorities are valid, but any non-null id must still belong to this board.
+    const pOk = db
+      .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
+      .get(priorityId, boardId) as { id: number } | null;
+    if (!pOk) return null;
+  }
 
   const statusChanged = trow.status_id !== statusId;
   const listChanged = trow.list_id !== listId;
@@ -156,11 +178,12 @@ export function patchTaskOnBoard(
 
   withTransaction(db, () => {
     db.run(
-      `UPDATE task SET list_id = ?, group_id = ?, status_id = ?, title = ?, body = ?,
+      `UPDATE task SET list_id = ?, group_id = ?, priority_id = ?, status_id = ?, title = ?, body = ?,
          sort_order = ?, color = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
       [
         listId,
         groupId,
+        priorityId,
         statusId,
         title,
         body,

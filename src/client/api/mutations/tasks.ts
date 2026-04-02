@@ -15,6 +15,7 @@ export function useCreateTask() {
       title: string;
       body: string;
       groupId: number;
+      priorityId?: number | null;
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/tasks`, {
         method: "POST",
@@ -25,6 +26,7 @@ export function useCreateTask() {
           title: input.title,
           body: input.body,
           groupId: input.groupId,
+          priorityId: input.priorityId ?? null,
         }),
       });
     },
@@ -42,6 +44,7 @@ export function useCreateTask() {
         title: input.title,
         body: input.body,
         groupId: input.groupId,
+        priorityId: input.priorityId ?? null,
         status: input.status,
         order: maxOrder + 1,
         createdAt: now,
@@ -81,6 +84,7 @@ export function useUpdateTask() {
             body: t.body,
             listId: t.listId,
             groupId: t.groupId,
+            priorityId: t.priorityId ?? null,
             status: t.status,
             order: t.order,
             color: t.color ?? null,

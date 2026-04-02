@@ -10,7 +10,10 @@ import {
 } from "react";
 import type { Board } from "../../../../shared/models";
 import { useStatusWorkflowOrder } from "@/api/queries";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
+import {
+  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskPriorityIds,
+} from "@/store/preferences";
 import { visibleStatusesForBoard } from "../boardStatusUtils";
 import {
   buildListColumnTaskIds,
@@ -63,6 +66,10 @@ export function BoardKeyboardNavProvider({
 }: ProviderProps) {
   const workflowOrder = useStatusWorkflowOrder();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activePriorityIds = useResolvedActiveTaskPriorityIds(
+    board.id,
+    board.taskPriorities,
+  );
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
@@ -92,6 +99,7 @@ export function BoardKeyboardNavProvider({
         visibleStatuses,
         workflowOrder,
         activeGroup,
+        activePriorityIds,
       ),
     [
       board,
@@ -100,6 +108,7 @@ export function BoardKeyboardNavProvider({
       visibleStatuses,
       workflowOrder,
       activeGroup,
+      activePriorityIds,
     ],
   );
 

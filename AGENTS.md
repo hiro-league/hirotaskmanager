@@ -1,6 +1,6 @@
 # TaskManager Agent Guide
 
-Use the `hirotm` CLI for TaskManager board, list, task, and status operations.
+Use the `hirotm` CLI for TaskManager board, list, task, status, and **search** operations.
 
 ## Rules
 
@@ -17,6 +17,9 @@ hirotm status
 hirotm boards list
 hirotm boards show <id-or-slug>
 hirotm statuses list
+hirotm search "<query>"                    # all boards; JSON hits
+hirotm search "bug" --board <id-or-slug>   # one board
+hirotm search "drag" --format table        # fixed-width table
 hirotm start --background
 ```
 

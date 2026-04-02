@@ -5,6 +5,8 @@ import {
   type Task,
 } from "../../../shared/models";
 
+export type ActiveTaskPriorityIds = string[] | null;
+
 /** Statuses shown on the board, in workflow order (`GET /api/statuses`). */
 export function visibleStatusesForBoard(
   board: Board,
@@ -57,6 +59,19 @@ function statusOrderIndex(
   return i >= 0 ? i : 0;
 }
 
+/** `null` = All priorities, `[]` = explicit empty filter, otherwise selected ids. */
+export function taskMatchesPriorityFilter(
+  task: Task,
+  activePriorityIds: ActiveTaskPriorityIds | undefined,
+): boolean {
+  if (activePriorityIds == null) return true;
+  if (activePriorityIds.length === 0) return false;
+  return (
+    task.priorityId != null &&
+    activePriorityIds.includes(String(task.priorityId))
+  );
+}
+
 /**
  * Tasks for a list in stacked view: filter by visible statuses and active group,
  * then sort by workflow order then band order.
@@ -66,6 +81,7 @@ export function listTasksMergedSorted(
   listId: number,
   visibleStatuses: string[],
   activeGroup: string,
+  activePriorityIds: ActiveTaskPriorityIds,
   workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): Task[] {
   const vis = new Set(visibleStatuses);
@@ -75,6 +91,7 @@ export function listTasksMergedSorted(
   if (activeGroup !== ALL_TASK_GROUPS) {
     tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
   }
+  tasks = tasks.filter((t) => taskMatchesPriorityFilter(t, activePriorityIds));
   return [...tasks].sort((a, b) => {
     const da = statusOrderIndex(a.status, workflowOrder);
     const db = statusOrderIndex(b.status, workflowOrder);

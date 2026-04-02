@@ -1,6 +1,6 @@
 # SQLite data model (current)
 
-Authoritative DDL lives in `src/server/migrations/001_initial.ts` (migration version **1**). The running schema version is stored in `_meta.schema_version` and applied by `src/server/migrations/runner.ts`.
+Authoritative DDL is applied by numbered migrations under `src/server/migrations/` (e.g. `001_initial.ts`, `003_task_search_fts5.ts`). The running schema version is stored in `_meta.schema_version` and applied by `src/server/migrations/runner.ts`.
 
 This document describes the **latest** tables only: structure, how they map to `src/shared/models.ts`, and which product/API surface each table backs.
 
@@ -15,6 +15,7 @@ This document describes the **latest** tables only: structure, how they map to `
 | `task_group` | Per-board task categories (e.g. feature / bug) used as `groupId` on tasks. |
 | `list` | Kanban columns within a board; ordered with `sort_order`. |
 | `task` | Tasks: body content, workflow status, ordering within a list+status band, optional colors. |
+| `task_search` | FTS5 virtual table over task `title` / `body`; kept in sync via triggers on `task`. |
 | `board_view_prefs` | Per-board UI preferences (layout, visible bands, weights, chrome) — not core domain identity. |
 | `_meta` | Internal key/value store (currently `schema_version` for migrations). |
 
@@ -110,6 +111,26 @@ This document describes the **latest** tables only: structure, how they map to `
 **Maps to:** `Task` (`listId`, `groupId`, `status` ← `status_id`, `order` ← `sort_order`, etc.).
 
 **Features / API:** `POST/PATCH/DELETE …/tasks/…`, reorder within a band (`PUT …/tasks/reorder` with `listId`, `status`, `orderedTaskIds`). Drives cards on the board, drag-and-drop between lists/statuses, and inline edits.
+
+---
+
+## `task_search` (FTS5)
+
+**Purpose:** Full-text search over task text plus denormalized list name, task group label, and workflow status label. Not a separate domain entity; one row per task.
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `task_id` | UNINDEXED | Matches `task.id`. |
+| `board_id` | UNINDEXED | Matches `task.board_id`; used to filter board-scoped search. |
+| `title` | indexed | From `task.title`. |
+| `body` | indexed | From `task.body`. |
+| `list_name` | indexed | From `list.name` for `task.list_id`. |
+| `group_label` | indexed | From `task_group.label` for `task.group_id`. |
+| `status_label` | indexed | From `status.label` for `task.status_id`. |
+
+**Maintenance:** Triggers on `task` (insert / update / delete) keep rows aligned. `AFTER UPDATE OF name` on `list`, `AFTER UPDATE OF label` on `task_group`, and `AFTER UPDATE OF label` on `status` reindex affected tasks so renames stay searchable. CASCADE deletes on tasks still remove FTS rows via the task delete trigger.
+
+**Features / API:** `GET /api/search` (`q`, optional `board`, optional `limit`, optional `prefix` — default adds `*` to the last token for prefix match; `prefix=0` disables). CLI: `hirotm search` (e.g. `--format table`, `--no-prefix`).
 
 ---
 

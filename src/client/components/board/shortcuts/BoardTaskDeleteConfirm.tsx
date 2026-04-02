@@ -10,7 +10,7 @@ interface BoardTaskDeleteConfirmProps {
 }
 
 /**
- * Board-scoped delete confirmation for keyboard `d` and flows that share the same scope.
+ * Board-scoped delete confirmation for the Delete key and flows that share the same scope.
  */
 export function BoardTaskDeleteConfirm({
   board,

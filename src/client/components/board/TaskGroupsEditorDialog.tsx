@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   nextGroupId,
   type Board,
@@ -9,6 +9,7 @@ import { usePatchBoardTaskGroups } from "@/api/mutations";
 import { DiscardChangesDialog } from "./shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
 import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
+import { useModalFocusTrap } from "./shortcuts/useModalFocusTrap";
 
 interface TaskGroupsEditorDialogProps {
   board: Board;
@@ -22,6 +23,7 @@ export function TaskGroupsEditorDialog({
   onClose,
 }: TaskGroupsEditorDialogProps) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const patchGroups = usePatchBoardTaskGroups();
   const [rows, setRows] = useState<GroupDefinition[]>([]);
   /** Snapshot when dialog opens — used for dirty detection (Phase 4 close-request path). */
@@ -62,7 +64,13 @@ export function TaskGroupsEditorDialog({
     [requestClose],
   );
 
-  useShortcutOverlay(open && !showDiscard, "task-groups-editor", keyHandler);
+  const taskGroupsEditorActive = open && !showDiscard;
+  useShortcutOverlay(taskGroupsEditorActive, "task-groups-editor", keyHandler);
+  useModalFocusTrap({
+    open,
+    active: taskGroupsEditorActive,
+    containerRef: dialogRef,
+  });
 
   const { nextGroups, remapCount } = useMemo(() => {
     const trimmed = rows
@@ -103,6 +111,8 @@ export function TaskGroupsEditorDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={dialogRef}
+        tabIndex={-1}
         // Dialogs opt back into selection so board-wide drag suppression does not block editing text.
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
         onClick={(e) => e.stopPropagation()}

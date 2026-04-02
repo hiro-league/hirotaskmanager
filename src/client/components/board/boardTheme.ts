@@ -98,6 +98,16 @@ function boardHeaderBorder(seed: BoardThemeSeed, dark: boolean): string {
   return oklch(borderL, profile.chroma * scale * 0.52, hue, borderAlpha);
 }
 
+function boardSelectionRing(seed: BoardThemeSeed, dark: boolean): string {
+  const scale = chromaScale(seed);
+  // Use a contrasting board-derived accent instead of the global app ring so
+  // keyboard selection stays visible even on blue-ish boards.
+  const hue = (seed.hue + 150) % 360;
+  const lightness = dark ? 0.82 : 0.56;
+  const chroma = (dark ? 0.19 : 0.2) * scale;
+  return oklch(lightness, chroma, hue, 0.96);
+}
+
 export function getBoardThemeStyle(
   preset: BoardColorPreset,
   dark: boolean,
@@ -110,6 +120,7 @@ export function getBoardThemeStyle(
           "--board-header-bg":
             "linear-gradient(180deg, oklch(0.32 0.010 260 / 1) 0%, oklch(0.25 0.008 260 / 1) 100%)",
           "--board-header-border": oklch(0.38, 0.012, 260, 0.62),
+          "--board-selection-ring": oklch(0.78, 0.18, 35, 0.96),
         }
       : {
           "--board-canvas-image":
@@ -117,6 +128,7 @@ export function getBoardThemeStyle(
           "--board-header-bg":
             "linear-gradient(180deg, oklch(0.86 0.010 260 / 1) 0%, oklch(0.79 0.012 260 / 1) 100%)",
           "--board-header-border": oklch(0.72, 0.012, 260, 0.72),
+          "--board-selection-ring": oklch(0.58, 0.2, 35, 0.96),
         };
   }
 
@@ -128,6 +140,7 @@ export function getBoardThemeStyle(
     "--board-canvas-image": boardCanvasGradient(seed, dark),
     "--board-header-bg": boardHeaderBackground(seed, dark),
     "--board-header-border": boardHeaderBorder(seed, dark),
+    "--board-selection-ring": boardSelectionRing(seed, dark),
   };
 }
 

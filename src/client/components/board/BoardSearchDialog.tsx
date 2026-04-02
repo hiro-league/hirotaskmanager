@@ -5,6 +5,7 @@ import { fetchBoardSearchHits } from "@/api/search";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
+import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { cn } from "@/lib/utils";
 
 const DEBOUNCE_MS = 250;
@@ -25,6 +26,7 @@ export function BoardSearchDialog({
   onClose,
 }: BoardSearchDialogProps) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -104,6 +106,11 @@ export function BoardSearchDialog({
   );
 
   useShortcutOverlay(open, "board-search-dialog", keyHandler);
+  useModalFocusTrap({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: inputRef,
+  });
 
   const pickHit = useCallback(
     (taskId: number) => {
@@ -125,6 +132,8 @@ export function BoardSearchDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={dialogRef}
+        tabIndex={-1}
         className="flex max-h-[min(70vh,520px)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >

@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
+import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 
 interface TaskEditorProps {
   board: Board;
@@ -53,6 +54,8 @@ export function TaskEditor({
   const [group, setGroup] = useState("");
   /** Select value — matches `String(taskPriority.id)` or empty string for no priority. */
   const [priority, setPriority] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef<Baseline>({
     title: "",
     body: "",
@@ -142,7 +145,14 @@ export function TaskEditor({
     [requestClose],
   );
 
-  useShortcutOverlay(open && !showDiscard && !showDeleteConfirm, "task-editor", taskEditorKeyHandler);
+  const taskEditorActive = open && !showDiscard && !showDeleteConfirm;
+  useShortcutOverlay(taskEditorActive, "task-editor", taskEditorKeyHandler);
+  useModalFocusTrap({
+    open,
+    active: taskEditorActive,
+    containerRef: dialogRef,
+    initialFocusRef: titleInputRef,
+  });
 
   const handleSave = useCallback(async () => {
     const trimmedTitle = title.trim() || "Untitled";
@@ -248,6 +258,8 @@ export function TaskEditor({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          ref={dialogRef}
+          tabIndex={-1}
           // Dialogs opt back into selection so text fields work normally above the board's select-none surface.
           className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
           onClick={(e) => e.stopPropagation()}
@@ -263,6 +275,7 @@ export function TaskEditor({
               </label>
               <input
                 id={`${titleId}-title`}
+                ref={titleInputRef}
                 className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
                 value={title}
                 disabled={busy}

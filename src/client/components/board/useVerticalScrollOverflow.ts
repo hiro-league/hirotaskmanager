@@ -11,7 +11,8 @@ import {
  * True when the scroll container has more content than fits (vertical).
  * Once raw overflow is detected, stays true until `latchResetKey` changes
  * (e.g. tasks added/removed), so layout/scroll quirks at the bottom edge
- * cannot flip back to inline "Add task" + hide the FAB.
+ * cannot briefly report "no overflow" while content is still effectively
+ * pinned to the bottom edge.
  */
 export function useVerticalScrollOverflow(
   scrollRef: RefObject<HTMLElement | null>,

@@ -1,5 +1,15 @@
 import { Plus, X } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefCallback } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefCallback,
+} from "react";
 import {
   ALL_TASK_GROUPS,
   groupLabelForId,
@@ -12,6 +22,7 @@ import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
+import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { ListHeader } from "@/components/list/ListHeader";
 import {
   type TaskCardViewMode,
@@ -31,7 +42,6 @@ import {
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
 import { SortableTaskRow } from "./SortableTaskRow";
-import { scrollElementToBottomThen } from "./useVerticalScrollOverflow";
 import { useBoardColumnSortableReact } from "./useBoardColumnSortableReact";
 import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
 
@@ -62,6 +72,12 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   viewMode,
   onComplete,
   onEdit,
+  editingTitle,
+  titleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy,
 }: {
   sid: string;
   containerId: string;
@@ -72,6 +88,12 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
+  editingTitle: boolean;
+  titleDraft?: string;
+  onTitleDraftChange: (value: string) => void;
+  onTitleCommit: () => void;
+  onTitleCancel: () => void;
+  titleEditBusy: boolean;
 }) {
   const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
   const handleComplete = useCallback(
@@ -88,6 +110,12 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
+      editingTitle={editingTitle}
+      titleDraft={titleDraft}
+      onTitleDraftChange={onTitleDraftChange}
+      onTitleCommit={onTitleCommit}
+      onTitleCancel={onTitleCancel}
+      titleEditBusy={titleEditBusy}
       onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
     />
   );
@@ -104,6 +132,14 @@ const StackedSortableList = memo(function StackedSortableList({
   sortableIds,
   onComplete,
   onEdit,
+  editingTitleTaskId,
+  editingTitleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy,
+  quickAddInsertIndex,
+  quickAddComposer,
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
@@ -114,6 +150,14 @@ const StackedSortableList = memo(function StackedSortableList({
   sortableIds: string[];
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
+  editingTitleTaskId: number | null;
+  editingTitleDraft: string;
+  onTitleDraftChange: (value: string) => void;
+  onTitleCommit: () => void;
+  onTitleCancel: () => void;
+  titleEditBusy: boolean;
+  quickAddInsertIndex: number | null;
+  quickAddComposer?: ReactNode;
 }) {
   const { ref, isDropTarget } = useBoardTaskContainerDroppableReact({
     containerId,
@@ -129,23 +173,32 @@ const StackedSortableList = memo(function StackedSortableList({
         isDropTarget && "bg-primary/[0.07] ring-1 ring-primary/15",
       )}
     >
+      {quickAddInsertIndex === 0 ? quickAddComposer : null}
       {sortableIds.map((sid, index) => {
         const tid = parseTaskSortableId(sid);
         const task = tid != null ? taskMap.get(tid) : undefined;
         if (!task) return null;
         return (
-          <StackedSortableTaskRowById
-            key={sid}
-            sid={sid}
-            containerId={containerId}
-            index={index}
-            task={task}
-            taskGroups={taskGroups}
-            taskPriorities={taskPriorities}
-            viewMode={viewMode}
-            onComplete={onComplete}
-            onEdit={onEdit}
-          />
+          <div key={sid} className="contents">
+            <StackedSortableTaskRowById
+              sid={sid}
+              containerId={containerId}
+              index={index}
+              task={task}
+              taskGroups={taskGroups}
+              taskPriorities={taskPriorities}
+              viewMode={viewMode}
+              onComplete={onComplete}
+              onEdit={onEdit}
+              editingTitle={editingTitleTaskId === task.id}
+              titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+              onTitleDraftChange={onTitleDraftChange}
+              onTitleCommit={onTitleCommit}
+              onTitleCancel={onTitleCancel}
+              titleEditBusy={titleEditBusy}
+            />
+            {quickAddInsertIndex === index + 1 ? quickAddComposer : null}
+          </div>
         );
       })}
     </div>
@@ -185,12 +238,13 @@ function ListStackedBody({
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const addCardRef = useRef<HTMLDivElement>(null);
-  const addBtnRef = useRef<HTMLButtonElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [editingTitleTaskId, setEditingTitleTaskId] = useState<number | null>(null);
+  const [editingTitleDraft, setEditingTitleDraft] = useState("");
   const [bodyMaxHeight, setBodyMaxHeight] = useState<number | null>(null);
   createPendingRef.current = createTask.isPending;
 
@@ -230,48 +284,104 @@ function ListStackedBody({
     setEditingTaskId(taskId);
   }, []);
 
-  const { registerOpenTaskEditor } = useBoardTaskKeyboardBridge();
+  const cancelInlineTitleEdit = useCallback(() => {
+    setEditingTitleTaskId(null);
+    setEditingTitleDraft("");
+  }, []);
+
+  const startInlineTitleEdit = useCallback(
+    (taskId: number) => {
+      const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+      if (!taskToEdit || taskToEdit.listId !== list.id) return false;
+      // F2 keeps the task card in place and only swaps its title into edit mode.
+      setEditingTask(null);
+      setEditingTaskId(null);
+      setEditingTitleTaskId(taskId);
+      setEditingTitleDraft(taskToEdit.title);
+      return true;
+    },
+    [list.id],
+  );
+
+  const commitInlineTitleEdit = useCallback(async () => {
+    const taskId = editingTitleTaskId;
+    if (taskId == null) return;
+    const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+    cancelInlineTitleEdit();
+    if (!taskToEdit) return;
+    const nextTitle = editingTitleDraft.trim() || "Untitled";
+    if (nextTitle === taskToEdit.title) return;
+    await updateTask.mutateAsync({
+      boardId: boardRef.current.id,
+      task: {
+        ...taskToEdit,
+        title: nextTitle,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }, [cancelInlineTitleEdit, editingTitleDraft, editingTitleTaskId, updateTask]);
+
+  const { registerOpenTaskEditor, registerEditTaskTitle } = useBoardTaskKeyboardBridge();
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
       const t = board.tasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
+      cancelInlineTitleEdit();
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, list.id, registerOpenTaskEditor]);
+  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
 
   useEffect(() => {
-    if (!adding) return;
-    inputRef.current?.focus();
-  }, [adding]);
+    return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
+  }, [registerEditTaskTitle, startInlineTitleEdit]);
 
   const cancelAdd = () => {
     setAdding(false);
     setTitle("");
   };
 
-  const openComposerAtBottom = () => {
-    // The composer adds extra height after mount, so do a second bottom snap
-    // once the textarea + actions exist to avoid landing midway down the list.
-    scrollElementToBottomThen(scrollRef.current, () => {
-      setAdding(true);
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          const scrollEl = scrollRef.current;
-          if (!scrollEl) return;
-          scrollEl.scrollTop = scrollEl.scrollHeight;
-          inputRef.current?.focus();
-        });
-      });
+  const scrollComposerIntoView = useCallback(() => {
+    const scrollEl = scrollRef.current;
+    const addCardEl = addCardRef.current;
+    if (!scrollEl || !addCardEl) {
+      inputRef.current?.focus();
+      return;
+    }
+    const margin = 8;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const cardRect = addCardEl.getBoundingClientRect();
+    // Stacked lists mix multiple statuses in one scroller, so keep the quick-add
+    // editor aligned with the end of the open block instead of jumping to list bottom.
+    if (cardRect.top < scrollRect.top + margin) {
+      scrollEl.scrollTop += cardRect.top - scrollRect.top - margin;
+    } else if (cardRect.bottom > scrollRect.bottom - margin) {
+      scrollEl.scrollTop += cardRect.bottom - scrollRect.bottom + margin;
+    }
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!adding) return;
+    const raf1 = window.requestAnimationFrame(() => {
+      scrollComposerIntoView();
+      window.requestAnimationFrame(scrollComposerIntoView);
     });
+    return () => window.cancelAnimationFrame(raf1);
+  }, [adding, scrollComposerIntoView]);
+
+  const openComposerAtQuickAddPosition = () => {
+    if (adding) {
+      scrollComposerIntoView();
+      return;
+    }
+    setAdding(true);
   };
 
-  const focusComposerAtBottom = () => {
-    // After creating another task, snap back to the list bottom before refocusing.
+  const focusComposerAtQuickAddPosition = () => {
     window.requestAnimationFrame(() => {
-      scrollElementToBottomThen(scrollRef.current, () => {
-        window.setTimeout(() => inputRef.current?.focus(), 0);
-      });
+      scrollComposerIntoView();
+      window.setTimeout(() => inputRef.current?.focus(), 0);
     });
   };
 
@@ -294,7 +404,7 @@ function ListStackedBody({
       {
         onSuccess: () => {
           setTitle("");
-          focusComposerAtBottom();
+          focusComposerAtQuickAddPosition();
         },
       },
     );
@@ -319,6 +429,18 @@ function ListStackedBody({
     workflowOrder.includes("open") ? "open" : (workflowOrder[0] ?? "open");
   const canAddOpen = visibleStatuses.includes(quickAddStatus);
 
+  const stackedBoardNav = useBoardKeyboardNavOptional();
+  const openComposerAtQuickAddPositionRef = useRef(openComposerAtQuickAddPosition);
+  openComposerAtQuickAddPositionRef.current = openComposerAtQuickAddPosition;
+  useEffect(() => {
+    // Stacked layout: register add-task composer for keyboard "t" (lanes use ListStatusBand).
+    if (!canAddOpen) return;
+    if (!stackedBoardNav) return;
+    return stackedBoardNav.registerAddTaskComposer(list.id, () => {
+      openComposerAtQuickAddPositionRef.current();
+    });
+  }, [canAddOpen, list.id, stackedBoardNav]);
+
   const staticTasks = useMemo(
     () =>
       taskContainerId != null
@@ -342,28 +464,74 @@ function ListStackedBody({
     ],
   );
 
-  // Show FAB whenever the add-task button is scrolled out of view.
-  // IntersectionObserver fires on every scroll/resize; no layout mutation needed.
-  const [addBtnVisible, setAddBtnVisible] = useState(true);
-
-  useEffect(() => {
-    if (!canAddOpen || adding || forDragOverlay) {
-      setAddBtnVisible(true);
-      return;
+  // Stacked lists now mirror lanes: use only the hover FAB so short columns
+  // still expose add-task from the bottom-right corner without an inline button.
+  const showFab = canAddOpen && !adding && !forDragOverlay;
+  const sortableQuickAddInsertIndex = useMemo(() => {
+    if (taskContainerId == null) return null;
+    let index = 0;
+    while (index < sortableIds.length) {
+      const taskId = parseTaskSortableId(sortableIds[index] ?? "");
+      const task = taskId != null ? taskMap.get(taskId) : undefined;
+      if (!task || task.status !== quickAddStatus) break;
+      index += 1;
     }
-    const target = addBtnRef.current;
-    const root = scrollRef.current;
-    if (!target || !root) return;
-
-    const io = new IntersectionObserver(
-      ([entry]) => setAddBtnVisible(entry.isIntersecting),
-      { root, threshold: 1.0 },
+    return index;
+  }, [taskContainerId, sortableIds, taskMap, quickAddStatus]);
+  const staticQuickAddInsertIndex = useMemo(() => {
+    if (staticTasks == null) return null;
+    const firstNonQuickAddIndex = staticTasks.findIndex(
+      (task) => task.status !== quickAddStatus,
     );
-    io.observe(target);
-    return () => io.disconnect();
-  }, [canAddOpen, adding, forDragOverlay]);
+    return firstNonQuickAddIndex >= 0 ? firstNonQuickAddIndex : staticTasks.length;
+  }, [staticTasks, quickAddStatus]);
 
-  const showFab = canAddOpen && !adding && !addBtnVisible && !forDragOverlay;
+  const quickAddComposer =
+    canAddOpen && adding ? (
+      <div
+        ref={addCardRef}
+        className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
+        <textarea
+          ref={inputRef}
+          rows={3}
+          className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
+          placeholder="Enter a title or paste a link"
+          value={title}
+          disabled={createTask.isPending}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={handleTextareaBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitTask();
+            }
+            if (e.key === "Escape") cancelAdd();
+          }}
+        />
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            disabled={createTask.isPending || !title.trim()}
+            onClick={() => submitTask()}
+          >
+            Add task
+          </button>
+          <button
+            type="button"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Cancel"
+            disabled={createTask.isPending}
+            onClick={cancelAdd}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   useEffect(() => {
     if (forDragOverlay) {
@@ -428,83 +596,37 @@ function ListStackedBody({
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
                 onEdit={handleEdit}
+                editingTitleTaskId={editingTitleTaskId}
+                editingTitleDraft={editingTitleDraft}
+                onTitleDraftChange={setEditingTitleDraft}
+                onTitleCommit={() => void commitInlineTitleEdit()}
+                onTitleCancel={cancelInlineTitleEdit}
+                titleEditBusy={updateTask.isPending}
+                quickAddInsertIndex={sortableQuickAddInsertIndex}
+                quickAddComposer={quickAddComposer}
               />
             ) : (
               <>
-                {staticTasks?.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    taskPriorities={board.taskPriorities}
-                    viewMode={taskCardViewMode}
-                    groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
-                    onOpen={() => setEditingTask(task)}
-                  />
+                {staticQuickAddInsertIndex === 0 ? quickAddComposer : null}
+                {staticTasks?.map((task, index) => (
+                  <div key={task.id} className="contents">
+                    <TaskCard
+                      task={task}
+                      taskPriorities={board.taskPriorities}
+                      viewMode={taskCardViewMode}
+                      groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                      onOpen={() => setEditingTask(task)}
+                      editingTitle={editingTitleTaskId === task.id}
+                      titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                      onTitleDraftChange={setEditingTitleDraft}
+                      onTitleCommit={() => void commitInlineTitleEdit()}
+                      onTitleCancel={cancelInlineTitleEdit}
+                      titleEditBusy={updateTask.isPending}
+                    />
+                    {staticQuickAddInsertIndex === index + 1 ? quickAddComposer : null}
+                  </div>
                 ))}
               </>
-            )}
-
-            {/* Add-task button — always rendered so IntersectionObserver can watch it */}
-            {canAddOpen && !adding && (
-              <button
-                ref={addBtnRef}
-                type="button"
-                className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openComposerAtBottom();
-                }}
-              >
-                <Plus className="size-3.5" aria-hidden />
-                Add task
-              </button>
-            )}
-
-            {/* Composer */}
-            {canAddOpen && adding && (
-              <div
-                ref={addCardRef}
-                className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
-                <textarea
-                  ref={inputRef}
-                  rows={3}
-                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
-                  placeholder="Enter a title or paste a link"
-                  value={title}
-                  disabled={createTask.isPending}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onBlur={handleTextareaBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submitTask();
-                    }
-                    if (e.key === "Escape") cancelAdd();
-                  }}
-                />
-                <div className="mt-2 flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                    disabled={createTask.isPending || !title.trim()}
-                    onClick={() => submitTask()}
-                  >
-                    Add task
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Cancel"
-                    disabled={createTask.isPending}
-                    onClick={cancelAdd}
-                  >
-                    <X className="size-4" aria-hidden />
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -526,7 +648,7 @@ function ListStackedBody({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              openComposerAtBottom();
+              openComposerAtQuickAddPosition();
             }}
           >
             <Plus className="size-6" strokeWidth={2.5} aria-hidden />
@@ -612,7 +734,21 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     listIndex,
   );
 
+  const boardNav = useBoardKeyboardNavOptional();
+  const listColumnShellRef = useRef<HTMLDivElement | null>(null);
   const list = board.lists.find((l) => l.id === listId);
+  const listKeyboardHighlight =
+    list != null &&
+    !isDragging &&
+    boardNav?.highlightedListId === list.id;
+
+  useLayoutEffect(() => {
+    if (!boardNav || list == null) return;
+    const el = listColumnShellRef.current;
+    boardNav.registerListElement(list.id, el);
+    return () => boardNav.registerListElement(list.id, null);
+  }, [boardNav, list]);
+
   if (!list) return null;
 
   return (
@@ -624,14 +760,28 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
       )}
       data-list-column={list.id}
       data-board-no-pan
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
+        // Remember the hovered list so Tab can select the list when the
+        // pointer is over empty column space instead of a specific task card.
+        boardNav.setHoveredListId(list.id);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse" || !boardNav) return;
+        boardNav.setHoveredListId(null);
+      }}
     >
       <div
+        ref={listColumnShellRef}
         className={cn(
           // Mirror lane columns so hover-only controls stay scoped to the active list.
           "group/list-col flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "min-h-0 flex-1 border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
+          // Full-column shell so the ring wraps the list title and body together.
+          listKeyboardHighlight &&
+            "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
       >
         {!isDragging && (

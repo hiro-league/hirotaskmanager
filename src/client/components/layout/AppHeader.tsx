@@ -1,9 +1,13 @@
-import { ChevronsLeft, ChevronsRight, Moon, Sun } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Command, Moon, Sun } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
 import { usePreferencesStore } from "@/store/preferences";
 import { resolveDark, useSystemDark } from "./ThemeRoot";
 
 export function AppHeader() {
+  const { pathname } = useLocation();
+  const shortcutHelpAvailable = pathname.startsWith("/board/");
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
   const toggleSidebar = usePreferencesStore((s) => s.toggleSidebarCollapsed);
   const themePreference = usePreferencesStore((s) => s.themePreference);
@@ -45,11 +49,35 @@ export function AppHeader() {
           decoding="async"
         />
         <span className="truncate text-sm font-semibold tracking-tight text-foreground">
-          Hiro Tasks
+          Hiro Task Manager
         </span>
       </div>
 
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={!shortcutHelpAvailable}
+          title={
+            shortcutHelpAvailable
+              ? "Keyboard shortcuts (H)"
+              : "Open a board to view keyboard shortcuts"
+          }
+          aria-label={
+            shortcutHelpAvailable
+              ? "Keyboard shortcuts"
+              : "Keyboard shortcuts — open a board first"
+          }
+          onClick={() => dispatchOpenShortcutHelp()}
+          className={cn(
+            "inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/70 text-foreground shadow-sm",
+            "transition-[color,background-color,box-shadow] hover:bg-muted hover:shadow",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
+            "active:translate-y-px active:shadow-sm",
+            !shortcutHelpAvailable && "cursor-not-allowed opacity-45 hover:bg-muted/70 hover:shadow-none",
+          )}
+        >
+          <Command className="size-5 shrink-0" aria-hidden />
+        </button>
         <button
           type="button"
           role="switch"

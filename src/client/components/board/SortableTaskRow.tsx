@@ -14,6 +14,12 @@ export interface SortableTaskRowProps {
   viewMode: TaskCardViewMode;
   groupLabel: string;
   onOpen: () => void;
+  editingTitle?: boolean;
+  titleDraft?: string;
+  onTitleDraftChange?: (value: string) => void;
+  onTitleCommit?: () => void;
+  onTitleCancel?: () => void;
+  titleEditBusy?: boolean;
   onCompleteFromCircle?: () => void;
 }
 
@@ -27,6 +33,12 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   viewMode,
   groupLabel,
   onOpen,
+  editingTitle = false,
+  titleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy = false,
   onCompleteFromCircle,
 }: SortableTaskRowProps) {
   const {
@@ -44,7 +56,11 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   return (
     <div
       ref={setNodeRef}
-      className="cursor-grab touch-none select-none active:cursor-grabbing"
+      className={
+        editingTitle
+          ? "touch-none"
+          : "cursor-grab touch-none select-none active:cursor-grabbing"
+      }
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging) return;
         nav?.setHoveredTaskId(task.id);
@@ -60,6 +76,12 @@ export const SortableTaskRow = memo(function SortableTaskRow({
         viewMode={viewMode}
         groupLabel={groupLabel}
         onOpen={onOpen}
+        editingTitle={editingTitle}
+        titleDraft={titleDraft}
+        onTitleDraftChange={onTitleDraftChange}
+        onTitleCommit={onTitleCommit}
+        onTitleCancel={onTitleCancel}
+        titleEditBusy={titleEditBusy}
         onCompleteFromCircle={onCompleteFromCircle}
         isDragging={isDragging}
         skipNavRegistration

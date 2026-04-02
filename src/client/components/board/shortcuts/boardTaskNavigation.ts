@@ -77,6 +77,18 @@ export function findFirstTaskId(
   return null;
 }
 
+/** First list in column order: its first visible task, or the list header if the column is empty. */
+export function initialHighlightForFirstList(
+  listIdsInOrder: number[],
+  columnMap: Map<number, number[]>,
+): { kind: "task"; taskId: number } | { kind: "list"; listId: number } | null {
+  const firstListId = listIdsInOrder[0];
+  if (firstListId === undefined) return null;
+  const ids = columnMap.get(firstListId) ?? [];
+  if (ids.length > 0) return { kind: "task", taskId: ids[0]! };
+  return { kind: "list", listId: firstListId };
+}
+
 export function findLastTaskId(
   listIdsInOrder: number[],
   columnMap: Map<number, number[]>,

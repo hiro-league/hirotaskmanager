@@ -2,6 +2,7 @@ import { memo, useLayoutEffect, useRef, type RefCallback } from "react";
 import type { Board, List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
+import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { cn } from "@/lib/utils";
 import { boardListColumnOverlayShellClass } from "./boardDragOverlayShell";
 import { laneBandContainerId } from "./dndIds";
@@ -157,7 +158,21 @@ export const BoardListColumn = memo(function BoardListColumn({
     listIndex,
   );
 
+  const boardNav = useBoardKeyboardNavOptional();
+  const listColumnShellRef = useRef<HTMLDivElement | null>(null);
   const list = board.lists.find((l) => l.id === listId);
+  const listKeyboardHighlight =
+    list != null &&
+    !isDragging &&
+    boardNav?.highlightedListId === list.id;
+
+  useLayoutEffect(() => {
+    if (!boardNav || list == null) return;
+    const el = listColumnShellRef.current;
+    boardNav.registerListElement(list.id, el);
+    return () => boardNav.registerListElement(list.id, null);
+  }, [boardNav, list]);
+
   if (!list) return null;
 
   return (
@@ -166,15 +181,29 @@ export const BoardListColumn = memo(function BoardListColumn({
       className="relative flex h-full min-h-0 w-72 shrink-0 flex-col"
       data-list-column={list.id}
       data-board-no-pan
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
+        // Remember the hovered list so Tab can select the list when the
+        // pointer is over empty column space instead of a specific task card.
+        boardNav.setHoveredListId(list.id);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse" || !boardNav) return;
+        boardNav.setHoveredListId(null);
+      }}
     >
       {/* group/list-col: FAB in the open band uses group-hover/list-col to
           appear only when the pointer is anywhere over this list column. */}
       <div
+        ref={listColumnShellRef}
         className={cn(
           "group/list-col flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
+          // Full-column shell (title + tasks): keyboard list selection matches the visible card border.
+          listKeyboardHighlight &&
+            "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
       >
         {!isDragging && (

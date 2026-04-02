@@ -9,7 +9,10 @@ import {
   weightsAfterVisibilityChange,
 } from "./boardStatusUtils";
 import { statusDotClass } from "./laneStatusTheme";
-import { boardHeaderToggleButtonClass } from "./boardHeaderButtonStyles";
+import {
+  BOARD_HEADER_FILTER_SECTION_LABEL_CLASS,
+  boardHeaderToggleButtonClass,
+} from "./boardHeaderButtonStyles";
 
 interface BoardStatusTogglesProps {
   board: Board;
@@ -60,7 +63,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
       role="group"
       aria-label="Show or hide task statuses"
     >
-      <span className="text-xs font-medium text-muted-foreground">Status</span>
+      <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Status</span>
       {workflowOrder.map((statusId) => {
         const active = visibleStatusesForBoard(board, workflowOrder).includes(
           statusId,

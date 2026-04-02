@@ -1,7 +1,10 @@
 import type { Board } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { usePreferencesStore } from "@/store/preferences";
-import { boardHeaderToggleButtonClass } from "./boardHeaderButtonStyles";
+import {
+  BOARD_HEADER_FILTER_SECTION_LABEL_CLASS,
+  boardHeaderToggleButtonClass,
+} from "./boardHeaderButtonStyles";
 
 interface TaskGroupSwitcherProps {
   board: Board;
@@ -30,7 +33,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
       role="group"
       aria-label="Task group filter"
     >
-      <span className="text-xs font-medium text-muted-foreground">Groups</span>
+      <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Groups</span>
       <button
         type="button"
         className={boardHeaderToggleButtonClass(resolved === ALL_TASK_GROUPS)}

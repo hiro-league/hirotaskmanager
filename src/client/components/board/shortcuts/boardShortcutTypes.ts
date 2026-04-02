@@ -11,28 +11,78 @@ export interface BoardShortcutActions {
   toggleFilters: () => void;
   /** S — cycle the board-local task card view mode. */
   cycleTaskCardViewMode: (board: Board) => void;
-  /** Cycle All → group1 → group2 → … → All. No-op if there are no groups. */
+  /** V — toggle lanes vs stacked board layout (same as header layout control). */
+  toggleBoardLayout: (board: Board) => void;
+  /** 1 / Num 1 — cycle All → group1 → group2 → … → All. No-op if there are no groups. */
   cycleTaskGroup: (board: Board) => void;
   allTaskGroups: (board: Board) => void;
-  /** Cycle All → priority1 → priority2 → … → All using board-local numeric order. */
+  /** 2 — cycle All → priority1 → priority2 → … → All using board-local numeric order. */
   cycleTaskPriority: (board: Board) => void;
+  /** Cycle the highlighted task's assigned group, debounced before persisting. */
+  cycleHighlightedTaskGroup: (board: Board) => void;
   /** Cycle the highlighted task's assigned priority, debounced before persisting. */
   cycleHighlightedTaskPriority: (board: Board) => void;
-  /** F — focus first task or scroll current highlight into view. */
+  /** Tab — focus the hovered task or list, else fall back to the current highlight. */
   focusOrScrollHighlight: () => void;
   moveHighlight: (dir: "up" | "down" | "left" | "right") => void;
   highlightHome: () => void;
   highlightEnd: () => void;
   highlightPage: (direction: -1 | 1) => void;
-  /** Enter — open highlighted task in the editor (keyboard bridge). */
+  /** Enter or Space — open highlighted task in the editor (keyboard bridge). */
   openHighlightedTask: () => void;
-  /** D — ask to delete highlighted task (board-level confirm). */
-  requestDeleteHighlightedTask: () => void;
+  /** F2 — start inline title-only edit for the highlighted task. */
+  editHighlightedTaskTitle: () => void;
+  /** Delete — delete highlighted task or list (board-level confirm; same as list ⋮ Delete for lists). */
+  requestDeleteHighlight: () => void;
+  /** T — open add-task composer for the highlighted task’s list or selected list. */
+  addTaskAtHighlight: () => void;
+  /** L — open the inline add-list composer after the highlighted list (task or list header). */
+  addListAfterHighlight: (board: Board) => void;
   /** C — complete highlighted task if not already closed. */
   completeHighlightedTask: (board: Board) => void;
-  /** O — reopen highlighted task to canonical open if closed. */
+  /** R — reopen highlighted task to canonical open if closed. */
   reopenHighlightedTask: (board: Board) => void;
 }
+
+/** Help dialog tab — must match {@link BoardShortcutDefinition.helpTab} on each registry entry. */
+export type ShortcutHelpTabId =
+  | "general"
+  | "tasks"
+  | "lists"
+  | "boards"
+  | "navigation";
+
+export const SHORTCUT_HELP_TABS: {
+  id: ShortcutHelpTabId;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "navigation",
+    label: "Navigation",
+    description: "Search, filters panel, and moving the highlight.",
+  },
+  {
+    id: "general",
+    label: "General",
+    description: "Help and board-wide display options.",
+  },
+  {
+    id: "tasks",
+    label: "Tasks",
+    description: "Shortcuts that act on the highlighted task.",
+  },
+  {
+    id: "lists",
+    label: "Lists",
+    description: "Move between lists on the board.",
+  },
+  {
+    id: "boards",
+    label: "Boards",
+    description: "Filters and grouping for what appears on this board.",
+  },
+];
 
 export interface BoardShortcutDefinition {
   id: string;
@@ -40,6 +90,12 @@ export interface BoardShortcutDefinition {
   /** Display labels, e.g. "H" */
   keys: string[];
   description: string;
+  /** Which tab shows this row in the shortcut help dialog (keeps help aligned with the registry). */
+  helpTab: ShortcutHelpTabId;
+  /** Short note on when the shortcut applies (e.g. task highlighted vs board focus only). */
+  helpContext?: string;
+  /** Sort order within the help tab (lower first). Omit to use registry order for that tab. */
+  helpOrder?: number;
   preventDefault?: boolean;
   /** Key from KeyboardEvent.key, lowercased for letters */
   matchKey: (key: string) => boolean;

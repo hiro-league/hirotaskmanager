@@ -1,7 +1,8 @@
-import { useCallback, useId } from "react";
+import { useCallback, useId, useRef } from "react";
 import { useDialogCloseRequest } from "./useDialogCloseRequest";
 import type { ShortcutScope } from "./shortcutScopeTypes";
 import { useShortcutOverlay } from "./ShortcutScopeContext";
+import { useModalFocusTrap } from "./useModalFocusTrap";
 import { cn } from "@/lib/utils";
 
 export interface ConfirmDialogProps {
@@ -10,7 +11,7 @@ export interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Scoped keyboard handling (Esc = cancel, Enter = confirm). */
+  /** Scoped keyboard handling for dialog-only shortcuts like Esc = cancel. */
   scope: ShortcutScope;
   onConfirm: () => void;
   onCancel: () => void;
@@ -33,6 +34,8 @@ export function ConfirmDialog({
   variant = "default",
 }: ConfirmDialogProps) {
   const titleId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const requestCancel = useDialogCloseRequest({
     busy: false,
     onClose: onCancel,
@@ -43,17 +46,19 @@ export function ConfirmDialog({
       if (e.key === "Escape") {
         e.preventDefault();
         requestCancel();
-        return;
       }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        onConfirm();
-      }
+      // Let focused buttons handle Enter natively so destructive dialogs
+      // follow the visible focus target instead of a hidden global default.
     },
-    [onConfirm, requestCancel],
+    [requestCancel],
   );
 
   useShortcutOverlay(open, scope, keyHandler);
+  useModalFocusTrap({
+    open,
+    containerRef,
+    initialFocusRef: cancelButtonRef,
+  });
 
   if (!open) return null;
 
@@ -67,6 +72,8 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={containerRef}
+        tabIndex={-1}
         className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
@@ -80,6 +87,7 @@ export function ConfirmDialog({
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
+            ref={cancelButtonRef}
             className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
             onClick={requestCancel}
           >

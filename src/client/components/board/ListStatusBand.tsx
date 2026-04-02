@@ -12,6 +12,7 @@ import { useStatuses } from "@/api/queries";
 import { TaskCard } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
+import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import {
   type TaskCardViewMode,
   useResolvedActiveTaskGroup,
@@ -81,10 +82,11 @@ export function ListStatusBand({
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const addCardRef = useRef<HTMLDivElement>(null);
-  const addBtnRef = useRef<HTMLButtonElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTitleTaskId, setEditingTitleTaskId] = useState<number | null>(null);
+  const [editingTitleDraft, setEditingTitleDraft] = useState("");
   createPendingRef.current = createTask.isPending;
 
   const resolvedEditTask =
@@ -123,16 +125,58 @@ export function ListStatusBand({
     setEditingTaskId(taskId);
   }, []);
 
-  const { registerOpenTaskEditor } = useBoardTaskKeyboardBridge();
+  const cancelInlineTitleEdit = useCallback(() => {
+    setEditingTitleTaskId(null);
+    setEditingTitleDraft("");
+  }, []);
+
+  const startInlineTitleEdit = useCallback(
+    (taskId: number) => {
+      const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+      if (!taskToEdit || taskToEdit.listId !== list.id) return false;
+      // F2 should only swap the title text into edit mode and keep the rest of the task card in place.
+      setEditingTask(null);
+      setEditingTaskId(null);
+      setEditingTitleTaskId(taskId);
+      setEditingTitleDraft(taskToEdit.title);
+      return true;
+    },
+    [list.id],
+  );
+
+  const commitInlineTitleEdit = useCallback(async () => {
+    const taskId = editingTitleTaskId;
+    if (taskId == null) return;
+    const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+    cancelInlineTitleEdit();
+    if (!taskToEdit) return;
+    const nextTitle = editingTitleDraft.trim() || "Untitled";
+    if (nextTitle === taskToEdit.title) return;
+    await updateTask.mutateAsync({
+      boardId: boardRef.current.id,
+      task: {
+        ...taskToEdit,
+        title: nextTitle,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }, [cancelInlineTitleEdit, editingTitleDraft, editingTitleTaskId, updateTask]);
+
+  const { registerOpenTaskEditor, registerEditTaskTitle } = useBoardTaskKeyboardBridge();
   // Enter on highlighted task: open editor in this list column if the task belongs here.
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
       const t = board.tasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
+      cancelInlineTitleEdit();
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, list.id, registerOpenTaskEditor]);
+  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
+
+  useEffect(() => {
+    return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
+  }, [registerEditTaskTitle, startInlineTitleEdit]);
 
   // Keep editingTask in sync for the TaskEditor
   const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
@@ -177,6 +221,18 @@ export function ListStatusBand({
     });
   };
 
+  const boardNav = useBoardKeyboardNavOptional();
+  const openComposerAtBottomRef = useRef(openComposerAtBottom);
+  openComposerAtBottomRef.current = openComposerAtBottom;
+  useEffect(() => {
+    // Register the open-band add-task flow so board shortcut "t" can open the composer.
+    if (status !== "open") return;
+    if (!boardNav) return;
+    return boardNav.registerAddTaskComposer(list.id, () => {
+      openComposerAtBottomRef.current();
+    });
+  }, [status, list.id, boardNav]);
+
   const submitCard = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -217,29 +273,10 @@ export function ListStatusBand({
     }, 0);
   };
 
-  // FAB for open band: show when add-task button is scrolled out of view.
-  // Uses IntersectionObserver — no layout mutation, no flicker.
   const isOpenBand = status === "open";
-  const [addBtnVisible, setAddBtnVisible] = useState(true);
-
-  useEffect(() => {
-    if (!isOpenBand || adding) {
-      setAddBtnVisible(true);
-      return;
-    }
-    const target = addBtnRef.current;
-    const root = scrollRef.current;
-    if (!target || !root) return;
-
-    const io = new IntersectionObserver(
-      ([entry]) => setAddBtnVisible(entry.isIntersecting),
-      { root, threshold: 1.0 },
-    );
-    io.observe(target);
-    return () => io.disconnect();
-  }, [isOpenBand, adding]);
-
-  const showFab = isOpenBand && !adding && !addBtnVisible;
+  // Keep one add affordance in lanes: the hover FAB stays anchored to the
+  // band's bottom edge even when the content is too short to scroll.
+  const showFab = isOpenBand && !adding;
 
   // Open band: own scroll container so the FAB sibling is anchored to the
   // band's visible bottom edge (not inside the scrollable content).
@@ -263,6 +300,12 @@ export function ListStatusBand({
                 sortableIds={sortableIds}
                 onComplete={handleComplete}
                 onEdit={handleEdit}
+                editingTitleTaskId={editingTitleTaskId}
+                editingTitleDraft={editingTitleDraft}
+                onTitleDraftChange={setEditingTitleDraft}
+                onTitleCommit={() => void commitInlineTitleEdit()}
+                onTitleCancel={cancelInlineTitleEdit}
+                titleEditBusy={updateTask.isPending}
               />
             ) : (
               <div className="flex flex-col gap-2">
@@ -274,26 +317,16 @@ export function ListStatusBand({
                     viewMode={taskCardViewMode}
                     groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}
+                    editingTitle={editingTitleTaskId === task.id}
+                    titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                    onTitleDraftChange={setEditingTitleDraft}
+                    onTitleCommit={() => void commitInlineTitleEdit()}
+                    onTitleCancel={cancelInlineTitleEdit}
+                    titleEditBusy={updateTask.isPending}
                     onCompleteFromCircle={() => completeFromList(task)}
                   />
                 ))}
               </div>
-            )}
-
-            {/* Add-task button — always in DOM so IntersectionObserver can watch it */}
-            {!adding && (
-              <button
-                ref={addBtnRef}
-                type="button"
-                className="mt-2 flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openComposerAtBottom();
-                }}
-              >
-                <Plus className="size-3.5" aria-hidden />
-                Add task
-              </button>
             )}
 
             {/* Composer */}
@@ -396,6 +429,12 @@ export function ListStatusBand({
             sortableIds={sortableIds}
             onComplete={handleComplete}
             onEdit={handleEdit}
+            editingTitleTaskId={editingTitleTaskId}
+            editingTitleDraft={editingTitleDraft}
+            onTitleDraftChange={setEditingTitleDraft}
+            onTitleCommit={() => void commitInlineTitleEdit()}
+            onTitleCancel={cancelInlineTitleEdit}
+            titleEditBusy={updateTask.isPending}
           />
         ) : (
           <div className="flex flex-col gap-2">
@@ -407,6 +446,12 @@ export function ListStatusBand({
                 viewMode={taskCardViewMode}
                 groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
                 onOpen={() => setEditingTask(task)}
+                editingTitle={editingTitleTaskId === task.id}
+                titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                onTitleDraftChange={setEditingTitleDraft}
+                onTitleCommit={() => void commitInlineTitleEdit()}
+                onTitleCancel={cancelInlineTitleEdit}
+                titleEditBusy={updateTask.isPending}
               />
             ))}
           </div>
@@ -435,6 +480,12 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   viewMode,
   onComplete,
   onEdit,
+  editingTitle,
+  titleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy,
 }: {
   sid: string;
   containerId: string;
@@ -445,6 +496,12 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
+  editingTitle: boolean;
+  titleDraft?: string;
+  onTitleDraftChange: (value: string) => void;
+  onTitleCommit: () => void;
+  onTitleCancel: () => void;
+  titleEditBusy: boolean;
 }) {
   const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
   const handleComplete = useCallback(
@@ -461,6 +518,12 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
       viewMode={viewMode}
       groupLabel={groupLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
+      editingTitle={editingTitle}
+      titleDraft={titleDraft}
+      onTitleDraftChange={onTitleDraftChange}
+      onTitleCommit={onTitleCommit}
+      onTitleCancel={onTitleCancel}
+      titleEditBusy={titleEditBusy}
       onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
     />
   );
@@ -478,6 +541,12 @@ const SortableBandContent = memo(function SortableBandContent({
   sortableIds,
   onComplete,
   onEdit,
+  editingTitleTaskId,
+  editingTitleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy,
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
@@ -489,6 +558,12 @@ const SortableBandContent = memo(function SortableBandContent({
   sortableIds: string[];
   onComplete: (taskId: number) => void;
   onEdit: (taskId: number) => void;
+  editingTitleTaskId: number | null;
+  editingTitleDraft: string;
+  onTitleDraftChange: (value: string) => void;
+  onTitleCommit: () => void;
+  onTitleCancel: () => void;
+  titleEditBusy: boolean;
 }) {
   const { ref, isDropTarget } = useBoardTaskContainerDroppableReact({
     containerId,
@@ -521,6 +596,12 @@ const SortableBandContent = memo(function SortableBandContent({
             viewMode={viewMode}
             onComplete={onComplete}
             onEdit={onEdit}
+            editingTitle={editingTitleTaskId === task.id}
+            titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+            onTitleDraftChange={onTitleDraftChange}
+            onTitleCommit={onTitleCommit}
+            onTitleCancel={onTitleCancel}
+            titleEditBusy={titleEditBusy}
           />
         );
       })}

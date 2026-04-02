@@ -7,7 +7,10 @@ import {
   usePreferencesStore,
   useResolvedActiveTaskPriorityIds,
 } from "@/store/preferences";
-import { boardHeaderToggleButtonClass } from "./boardHeaderButtonStyles";
+import {
+  BOARD_HEADER_FILTER_SECTION_LABEL_CLASS,
+  boardHeaderToggleButtonClass,
+} from "./boardHeaderButtonStyles";
 
 interface BoardPriorityTogglesProps {
   board: Board;
@@ -42,7 +45,7 @@ export function BoardPriorityToggles({ board }: BoardPriorityTogglesProps) {
       role="group"
       aria-label="Task priority filter"
     >
-      <span className="text-xs font-medium text-muted-foreground">Priority</span>
+      <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Priority</span>
       <button
         type="button"
         className={boardHeaderToggleButtonClass(activePriorityIds === null)}

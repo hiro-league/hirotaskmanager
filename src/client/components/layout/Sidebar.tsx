@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, MoreVertical, Plus, X } from "lucide-react";
 import { useBoard, useBoards } from "@/api/queries";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/api/mutations";
 import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
+import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { usePreferencesStore } from "@/store/preferences";
 import { useMatch, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -50,6 +51,8 @@ function SidebarConfirmDialog({
   onConfirm,
   onCancel,
 }: SidebarConfirmDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -67,6 +70,12 @@ function SidebarConfirmDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [busy, confirmDisabled, onCancel, onConfirm, open]);
 
+  useModalFocusTrap({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: cancelButtonRef,
+  });
+
   if (!open) return null;
 
   return (
@@ -81,6 +90,8 @@ function SidebarConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="sidebar-delete-board-title"
+        ref={dialogRef}
+        tabIndex={-1}
         className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
@@ -95,6 +106,7 @@ function SidebarConfirmDialog({
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
+            ref={cancelButtonRef}
             className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
             disabled={busy}
             onClick={onCancel}

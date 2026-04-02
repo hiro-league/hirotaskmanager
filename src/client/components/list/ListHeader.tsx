@@ -31,6 +31,7 @@ export function ListHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
   const boardDrag = dragHandleRef != null;
 
   const startRename = useCallback(() => {

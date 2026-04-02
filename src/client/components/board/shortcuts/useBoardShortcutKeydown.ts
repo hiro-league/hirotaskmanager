@@ -31,6 +31,8 @@ export function useBoardShortcutKeydown({
       if (!board) return;
       if (isEditableKeyboardTarget(e.target)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Shift+Tab keeps native reverse tab order; unmodified Tab establishes board highlight.
+      if (e.key === "Tab" && e.shiftKey) return;
 
       for (const def of boardShortcutRegistry) {
         if (!def.matchKey(e.key)) continue;

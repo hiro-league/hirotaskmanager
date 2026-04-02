@@ -24,6 +24,23 @@ function previewBody(body: string, max = 100): string {
   return plain.length > max ? `${plain.slice(0, max)}…` : plain;
 }
 
+function autoSizeInlineTitleTextarea(textarea: HTMLTextAreaElement | null): void {
+  if (!textarea) return;
+  textarea.style.height = "auto";
+  const computed = window.getComputedStyle(textarea);
+  const lineHeight = Number.parseFloat(computed.lineHeight) || 20;
+  const paddingY =
+    (Number.parseFloat(computed.paddingTop) || 0) +
+    (Number.parseFloat(computed.paddingBottom) || 0);
+  const borderY =
+    (Number.parseFloat(computed.borderTopWidth) || 0) +
+    (Number.parseFloat(computed.borderBottomWidth) || 0);
+  const maxHeight = lineHeight * 3 + paddingY + borderY;
+  const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
 function statusAriaLabel(status: TaskStatus): string {
   switch (status) {
     case "open":
@@ -94,6 +111,13 @@ interface TaskCardProps {
   /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
   onOpen: () => void;
+  /** When true, render an inline title-only editor instead of the normal task title. */
+  editingTitle?: boolean;
+  titleDraft?: string;
+  onTitleDraftChange?: (value: string) => void;
+  onTitleCommit?: () => void;
+  onTitleCancel?: () => void;
+  titleEditBusy?: boolean;
   /** When set, only for `open` tasks: click the empty circle to complete (does not open the editor). */
   onCompleteFromCircle?: () => void;
   /** When true, dim the card to indicate it's being dragged. */
@@ -138,6 +162,12 @@ function TaskCardContent({
   groupLabel,
   preview,
   onOpen,
+  editingTitle = false,
+  titleDraft = "",
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy = false,
 }: {
   task: Task;
   taskPriorities: TaskPriorityDefinition[];
@@ -145,6 +175,12 @@ function TaskCardContent({
   groupLabel: string;
   preview: string;
   onOpen: () => void;
+  editingTitle?: boolean;
+  titleDraft?: string;
+  onTitleDraftChange?: (value: string) => void;
+  onTitleCommit?: () => void;
+  onTitleCancel?: () => void;
+  titleEditBusy?: boolean;
 }) {
   const viewSpec = getTaskCardViewSpec(viewMode);
   const priorityLabel = priorityLabelForId(taskPriorities, task.priorityId);
@@ -152,11 +188,68 @@ function TaskCardContent({
     task.priorityId != null
       ? taskPriorities.find((priority) => priority.id === task.priorityId)?.color
       : undefined;
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
+  const titleBlurModeRef = useRef<"commit" | "cancel">("commit");
+
+  useLayoutEffect(() => {
+    if (!editingTitle) return;
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+    titleBlurModeRef.current = "commit";
+  }, [editingTitle, task.id]);
+
+  useLayoutEffect(() => {
+    if (!editingTitle) return;
+    autoSizeInlineTitleTextarea(titleInputRef.current);
+  }, [editingTitle, titleDraft]);
+
   return (
-    <div className="min-w-0 flex-1 text-left" onClick={onOpen}>
-      <div className={cn("font-medium", viewSpec.titleClassName)}>
-        {task.title || "Untitled"}
-      </div>
+    <div
+      className="min-w-0 flex-1 text-left"
+      onClick={editingTitle ? undefined : onOpen}
+    >
+      {editingTitle ? (
+        // Inline rename auto-fits up to three lines without reselecting text while typing.
+        <textarea
+          ref={titleInputRef}
+          rows={3}
+          className={cn(
+            "w-full resize-y rounded border border-input bg-background px-2 py-1 text-foreground select-text",
+            viewSpec.titleClassName,
+          )}
+          value={titleDraft}
+          disabled={titleEditBusy}
+          onChange={(e) => {
+            // Auto-grow up to three lines, then keep the native resize handle available.
+            autoSizeInlineTitleTextarea(e.currentTarget);
+            onTitleDraftChange?.(e.target.value);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={() => {
+            if (titleBlurModeRef.current === "cancel") {
+              titleBlurModeRef.current = "commit";
+              return;
+            }
+            onTitleCommit?.();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onTitleCommit?.();
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              titleBlurModeRef.current = "cancel";
+              onTitleCancel?.();
+            }
+          }}
+        />
+      ) : (
+        <div className={cn("font-medium", viewSpec.titleClassName)}>
+          {task.title || "Untitled"}
+        </div>
+      )}
       {viewMode !== "small" ? (
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
           <span className="uppercase tracking-wide text-muted-foreground/80">
@@ -207,6 +300,12 @@ export const TaskCard = memo(function TaskCard({
   viewMode,
   groupLabel,
   onOpen,
+  editingTitle = false,
+  titleDraft,
+  onTitleDraftChange,
+  onTitleCommit,
+  onTitleCancel,
+  titleEditBusy = false,
   onCompleteFromCircle,
   isDragging,
   skipNavRegistration = false,
@@ -251,7 +350,8 @@ export const TaskCard = memo(function TaskCard({
         task.color && "border-l-4",
         isDragging && "opacity-40",
         highlighted &&
-          "ring-2 ring-ring ring-offset-2 ring-offset-background shadow-md",
+          // Use board-specific selection color so the keyboard ring stands out from the app theme.
+          "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
       )}
       style={task.color ? { borderLeftColor: task.color } : undefined}
     >
@@ -293,6 +393,12 @@ export const TaskCard = memo(function TaskCard({
               groupLabel={groupLabel}
               preview={preview}
               onOpen={onOpen}
+              editingTitle={editingTitle}
+              titleDraft={titleDraft}
+              onTitleDraftChange={onTitleDraftChange}
+              onTitleCommit={onTitleCommit}
+              onTitleCancel={onTitleCancel}
+              titleEditBusy={titleEditBusy}
             />
           </div>
         </div>
@@ -309,6 +415,12 @@ export const TaskCard = memo(function TaskCard({
             groupLabel={groupLabel}
             preview={preview}
             onOpen={onOpen}
+            editingTitle={editingTitle}
+            titleDraft={titleDraft}
+            onTitleDraftChange={onTitleDraftChange}
+            onTitleCommit={onTitleCommit}
+            onTitleCancel={onTitleCancel}
+            titleEditBusy={titleEditBusy}
           />
         </div>
       )}

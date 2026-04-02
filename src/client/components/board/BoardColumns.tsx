@@ -1,12 +1,12 @@
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { Board } from "../../../shared/models";
 import {
   DragDropProvider,
   DragOverlay as ReactDragOverlay,
 } from "@dnd-kit/react";
-import type { Board } from "../../../shared/models";
-import { useCreateList, usePatchBoardViewPrefs } from "@/api/mutations";
+import { useCreateList, usePatchBoardViewPrefs, useReorderLists } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
 import {
@@ -25,16 +25,26 @@ interface BoardColumnsProps {
 
 export function AddListSlot({
   boardId,
+  open,
+  insertAfterListId,
+  onOpen,
+  onClose,
   stacked = false,
 }: {
   boardId: number;
+  open: boolean;
+  insertAfterListId: number | null;
+  onOpen: (insertAfterListId: number | null) => void;
+  onClose: () => void;
   /** Stacked layout: column-aligned, content height (no full-height lane). */
   stacked?: boolean;
 }) {
+  const qc = useQueryClient();
   const createList = useCreateList();
-  const [open, setOpen] = useState(false);
+  const reorderLists = useReorderLists();
   const [name, setName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -42,17 +52,47 @@ export function AddListSlot({
     inputRef.current?.select();
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    window.requestAnimationFrame(() => {
+      shellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }, [open, insertAfterListId]);
+
   const cancel = () => {
-    setOpen(false);
     setName("");
+    onClose();
   };
 
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const beforeBoard = qc.getQueryData<Board>(boardKeys.detail(boardId));
+    if (!beforeBoard) return;
+    const prevOrder = [...beforeBoard.lists]
+      .sort((x, y) => x.order - y.order)
+      .map((l) => l.id);
+    const prevSet = new Set(prevOrder);
+    const anchor = insertAfterListId;
+
     createList.mutate(
       { boardId, name: trimmed },
-      { onSuccess: () => cancel() },
+      {
+        onSuccess: (data) => {
+          setName("");
+          cancel();
+          const newList = data.lists.find((l) => !prevSet.has(l.id));
+          if (anchor == null || !newList) return;
+          const anchorIdx = prevOrder.indexOf(anchor);
+          if (anchorIdx < 0) return;
+          const nextOrder = [
+            ...prevOrder.slice(0, anchorIdx + 1),
+            newList.id,
+            ...prevOrder.slice(anchorIdx + 1),
+          ];
+          reorderLists.mutate({ boardId: data.id, orderedListIds: nextOrder });
+        },
+      },
     );
   };
 
@@ -62,11 +102,11 @@ export function AddListSlot({
 
   if (!open) {
     return (
-      <div className={shellClass} data-board-no-pan>
+      <div ref={shellRef} className={shellClass} data-board-no-pan>
         <button
           type="button"
           className="flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
-          onClick={() => setOpen(true)}
+          onClick={() => onOpen(null)}
         >
           <Plus className="size-4 shrink-0" aria-hidden />
           Add list
@@ -77,6 +117,7 @@ export function AddListSlot({
 
   return (
     <div
+      ref={shellRef}
       className={`${shellClass} rounded-lg border border-border bg-list-column p-2 shadow-sm`}
       data-board-no-pan
     >
@@ -138,9 +179,25 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
 
   const boardKeyboardNav = useBoardKeyboardNavOptional();
+  const [addListOpen, setAddListOpen] = useState(false);
+  const [insertAfterListId, setInsertAfterListId] = useState<number | null>(null);
   useEffect(() => {
     boardKeyboardNav?.setListColumnOrder(localListIds);
   }, [boardKeyboardNav, localListIds]);
+
+  useEffect(() => {
+    return boardKeyboardNav?.registerOpenAddListComposer((anchorListId) => {
+      // Render the inline composer in-place after the anchor list so keyboard `L`
+      // opens exactly where the new list will land.
+      setInsertAfterListId(anchorListId);
+      setAddListOpen(true);
+    });
+  }, [boardKeyboardNav]);
+
+  const closeAddList = useCallback(() => {
+    setAddListOpen(false);
+    setInsertAfterListId(null);
+  }, []);
 
   const [weights, setWeights] = useState<number[]>(() =>
     bandWeightsForBoard(board, workflowOrder),
@@ -219,25 +276,49 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               splittersDisabled={reorderPending}
             />
             <div className="flex min-h-0 flex-row gap-4">
-              {localListIds.map((id, index) => (
-                <BoardListColumn
-                  key={id}
-                  board={board}
-                  listId={id}
-                  listIndex={index}
-                  visibleStatuses={visibleStatuses}
-                  weights={weights}
-                  taskMap={Object.fromEntries(
-                    visibleStatuses.map((status) => [
-                      laneBandContainerId(id, status),
-                      displayTaskMap[laneBandContainerId(id, status)] ?? [],
-                    ]),
-                  )}
-                  isTaskDragActive={activeTaskId != null}
-                />
-              ))}
+              {localListIds.flatMap((id, index) => {
+                const items = [
+                  <BoardListColumn
+                    key={id}
+                    board={board}
+                    listId={id}
+                    listIndex={index}
+                    visibleStatuses={visibleStatuses}
+                    weights={weights}
+                    taskMap={Object.fromEntries(
+                      visibleStatuses.map((status) => [
+                        laneBandContainerId(id, status),
+                        displayTaskMap[laneBandContainerId(id, status)] ?? [],
+                      ]),
+                    )}
+                    isTaskDragActive={activeTaskId != null}
+                  />,
+                ];
+                if (addListOpen && insertAfterListId === id) {
+                  items.push(
+                    <AddListSlot
+                      key={`add-after-${id}`}
+                      boardId={board.id}
+                      open
+                      insertAfterListId={insertAfterListId}
+                      onOpen={setInsertAfterListId}
+                      onClose={closeAddList}
+                    />,
+                  );
+                }
+                return items;
+              })}
             </div>
-            <AddListSlot boardId={board.id} />
+            <AddListSlot
+              boardId={board.id}
+              open={addListOpen && insertAfterListId == null}
+              insertAfterListId={null}
+              onOpen={(anchorListId) => {
+                setInsertAfterListId(anchorListId);
+                setAddListOpen(true);
+              }}
+              onClose={closeAddList}
+            />
           </div>
         </div>
         <ReactDragOverlay dropAnimation={null} style={{ zIndex: 60 }}>

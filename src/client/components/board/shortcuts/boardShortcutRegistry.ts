@@ -15,14 +15,27 @@ function keyCode(code: string): (key: string) => boolean {
   return (key: string) => key === code;
 }
 
+/** Main row 1 or numpad 1 — matches KeyboardEvent.key. */
+function keyOne(key: string): boolean {
+  return key === "1" || key === "Numpad1";
+}
+
+function keyDigit(digit: string): (key: string) => boolean {
+  return (key: string) => key === digit;
+}
+
 /**
  * Board shortcuts: filters/help, highlight & navigation, task actions (Phase 4).
- * Keep the help dialog in sync with this list.
+ * Keep the help dialog in sync: each entry sets helpTab, optional helpContext, and optional helpOrder
+ * (sort key within that tab; omit to keep registry order) — see boardShortcutTypes.
  */
 export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "open-help",
     scope: "board",
+    helpTab: "general",
+    helpOrder: 0,
+    helpContext: "Board focused (not typing in a field)",
     keys: ["H"],
     description: "Open this keyboard shortcuts dialog",
     preventDefault: true,
@@ -34,21 +47,14 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "open-board-search",
     scope: "board",
-    keys: ["K"],
+    helpTab: "general",
+    helpOrder: 2,
+    helpContext: "Board focused (not typing in a field)",
+    keys: ["K", "F3"],
     description: "Search tasks on this board",
     preventDefault: true,
-    matchKey: letterKey("k"),
-    run: (_board, actions) => {
-      actions.openBoardSearch();
-    },
-  },
-  {
-    id: "open-board-search-f3",
-    scope: "board",
-    keys: ["F3"],
-    description: "Search tasks on this board (same as K)",
-    preventDefault: true,
-    matchKey: keyCode("F3"),
+    // Two alternate keys (help shows "K or F3"); either opens board search.
+    matchKey: (key: string) => letterKey("k")(key) || keyCode("F3")(key),
     run: (_board, actions) => {
       actions.openBoardSearch();
     },
@@ -56,8 +62,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "toggle-filters",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 90,
+    helpContext: "Board focused (not typing in a field)",
     keys: ["M"],
-    description: "Show or hide filters and compact header",
+    description: "Maximize/Minimize Board Header",
     preventDefault: true,
     matchKey: letterKey("m"),
     run: (_board, actions) => {
@@ -67,6 +76,9 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "cycle-task-card-view-mode",
     scope: "board",
+    helpTab: "general",
+    helpOrder: 1,
+    helpContext: "Board focused (not typing in a field)",
     keys: ["S"],
     description: "Cycle task card view mode",
     preventDefault: true,
@@ -76,12 +88,28 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     },
   },
   {
+    id: "toggle-board-layout",
+    scope: "board",
+    helpTab: "general",
+    helpOrder: 1.5,
+    helpContext: "Board focused (not typing in a field)",
+    keys: ["V"],
+    description: "Toggle board layout (lanes / stacked)",
+    preventDefault: true,
+    matchKey: letterKey("v"),
+    run: (board, actions) => {
+      actions.toggleBoardLayout(board);
+    },
+  },
+  {
     id: "cycle-group",
     scope: "board",
-    keys: ["G"],
+    helpTab: "boards",
+    helpContext: "Board focused; board has task groups",
+    keys: ["1", "Num 1"],
     description: "Cycle task group filter",
     preventDefault: true,
-    matchKey: letterKey("g"),
+    matchKey: keyOne,
     enabled: (board) => Boolean(board && board.taskGroups.length > 0),
     run: (board, actions) => {
       actions.cycleTaskGroup(board);
@@ -90,6 +118,8 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "all-groups",
     scope: "board",
+    helpTab: "boards",
+    helpContext: "Board focused (not typing in a field)",
     keys: ["A"],
     description: "Show all task groups",
     preventDefault: true,
@@ -101,18 +131,36 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "cycle-priority",
     scope: "board",
-    keys: ["R"],
+    helpTab: "boards",
+    helpContext: "Board focused; board has priorities",
+    keys: ["2"],
     description: "Cycle priority filter",
     preventDefault: true,
-    matchKey: letterKey("r"),
+    matchKey: keyDigit("2"),
     enabled: (board) => Boolean(board && board.taskPriorities.length > 0),
     run: (board, actions) => {
       actions.cycleTaskPriority(board);
     },
   },
   {
+    id: "cycle-highlighted-task-group",
+    scope: "board",
+    helpTab: "tasks",
+    helpContext: "Task highlighted",
+    keys: ["G"],
+    description: "Cycle the highlighted task group",
+    preventDefault: true,
+    matchKey: letterKey("g"),
+    enabled: (board) => Boolean(board && board.taskGroups.length > 0),
+    run: (board, actions) => {
+      actions.cycleHighlightedTaskGroup(board);
+    },
+  },
+  {
     id: "cycle-highlighted-task-priority",
     scope: "board",
+    helpTab: "tasks",
+    helpContext: "Task highlighted",
     keys: ["P"],
     description: "Cycle the highlighted task priority",
     preventDefault: true,
@@ -125,11 +173,15 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "focus-task",
     scope: "board",
-    keys: ["F"],
+    helpTab: "navigation",
+    helpOrder: 0,
+    helpContext: "Browser Window is Active",
+    keys: ["Tab"],
     description:
-      "Select the task under the mouse, or the first task if none is under the mouse",
+      "Focus on Task or List below the pointer",
     preventDefault: true,
-    matchKey: letterKey("f"),
+    // Unmodified Tab establishes board highlight instead of moving browser focus (Shift+Tab is native).
+    matchKey: (key: string) => key === "Tab",
     run: (_board, actions) => {
       actions.focusOrScrollHighlight();
     },
@@ -137,8 +189,12 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "move-up",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 13,
+    helpContext: "Task or List is Highlighted",
     keys: ["↑"],
-    description: "Move highlight to the previous task in this list",
+    description:
+      "Move to Previous Task Up",
     preventDefault: true,
     matchKey: keyCode("ArrowUp"),
     run: (_board, actions) => {
@@ -148,8 +204,12 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "move-down",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 14,
+    helpContext: "Task or List is Highlighted",
     keys: ["↓"],
-    description: "Move highlight to the next task in this list",
+    description:
+      "Move to Next Task Down",
     preventDefault: true,
     matchKey: keyCode("ArrowDown"),
     run: (_board, actions) => {
@@ -159,8 +219,12 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "move-left",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 11,
+    helpContext: "Task or List is Highlighted",
     keys: ["←"],
-    description: "Move highlight to the previous list column",
+    description:
+      "Move to the previous Task or List",
     preventDefault: true,
     matchKey: keyCode("ArrowLeft"),
     run: (_board, actions) => {
@@ -170,8 +234,12 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "move-right",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 12,
+    helpContext: "Task or List is Highlighted",
     keys: ["→"],
-    description: "Move highlight to the next list column",
+    description:
+      "Move to the next Task or List",
     preventDefault: true,
     matchKey: keyCode("ArrowRight"),
     run: (_board, actions) => {
@@ -181,8 +249,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "home",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 20,
+    helpContext: "Task is Highlighted",
     keys: ["Home"],
-    description: "First task in the current list (or first task on the board if none highlighted)",
+    description: "Move to First Task in the current list",
     preventDefault: true,
     matchKey: keyCode("Home"),
     run: (_board, actions) => {
@@ -192,8 +263,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "end",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 21,
+    helpContext: "Task is Highlighted",
     keys: ["End"],
-    description: "Last task in the current list (or last task on the board if none highlighted)",
+    description: "Move to Last Task in the current list",
     preventDefault: true,
     matchKey: keyCode("End"),
     run: (_board, actions) => {
@@ -203,8 +277,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "page-up",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 22,
+    helpContext: "Task is Highlighted",
     keys: ["PgUp"],
-    description: "Skip several tasks up in the current list",
+    description: "Jump up a few tasks in the current list",
     preventDefault: true,
     matchKey: keyCode("PageUp"),
     run: (_board, actions) => {
@@ -214,8 +291,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "page-down",
     scope: "board",
+    helpTab: "navigation",
+    helpOrder: 23,
+    helpContext: "Task is Highlighted",
     keys: ["PgDn"],
-    description: "Skip several tasks down in the current list",
+    description: "Jump down a few tasks in the current list",
     preventDefault: true,
     matchKey: keyCode("PageDown"),
     run: (_board, actions) => {
@@ -225,28 +305,77 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "open-highlighted-task",
     scope: "board",
-    keys: ["Enter"],
+    helpTab: "tasks",
+    helpContext: "Task is Highlighted",
+    keys: ["Enter", "Space"],
     description: "Open the highlighted task",
     preventDefault: true,
-    matchKey: keyCode("Enter"),
+    // Match both activation keys so keyboard selection mirrors native button behavior.
+    matchKey: (key: string) => keyCode("Enter")(key) || key === " ",
     run: (_board, actions) => {
       actions.openHighlightedTask();
     },
   },
   {
+    id: "edit-highlighted-task-title",
+    scope: "board",
+    helpTab: "tasks",
+    helpContext: "Task is Highlighted",
+    keys: ["F2"],
+    description: "Edit the highlighted task title in place",
+    preventDefault: true,
+    matchKey: keyCode("F2"),
+    run: (_board, actions) => {
+      actions.editHighlightedTaskTitle();
+    },
+  },
+  {
     id: "delete-highlighted-task",
     scope: "board",
-    keys: ["D"],
-    description: "Delete the highlighted task (confirmation)",
+    helpTab: "tasks",
+    helpContext: "Task or List is Highlighted",
+    keys: ["Delete"],
+    description: "Delete the highlighted task or list (confirmation)",
     preventDefault: true,
-    matchKey: letterKey("d"),
+    matchKey: keyCode("Delete"),
     run: (_board, actions) => {
-      actions.requestDeleteHighlightedTask();
+      actions.requestDeleteHighlight();
+    },
+  },
+  {
+    id: "add-task-shortcut",
+    scope: "board",
+    helpTab: "lists",
+    helpOrder: 12,
+    helpContext: "Task or List is Highlighted",
+    keys: ["T"],
+    description: "Open add-task for the highlighted list",
+    preventDefault: true,
+    matchKey: letterKey("t"),
+    run: (_board, actions) => {
+      actions.addTaskAtHighlight();
+    },
+  },
+  {
+    id: "add-list-shortcut",
+    scope: "board",
+    helpTab: "lists",
+    helpOrder: 13,
+    helpContext: "Task or list highlighted",
+    keys: ["L"],
+    description:
+      "Open add-list after the current list (type the name, same as the dashed control)",
+    preventDefault: true,
+    matchKey: letterKey("l"),
+    run: (board, actions) => {
+      actions.addListAfterHighlight(board);
     },
   },
   {
     id: "complete-highlighted-task",
     scope: "board",
+    helpTab: "tasks",
+    helpContext: "Task highlighted",
     keys: ["C"],
     description: "Complete the highlighted task (if not already done)",
     preventDefault: true,
@@ -258,10 +387,12 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
   {
     id: "reopen-highlighted-task",
     scope: "board",
-    keys: ["O"],
+    helpTab: "tasks",
+    helpContext: "Task highlighted",
+    keys: ["R"],
     description: "Reopen the highlighted task (if done)",
     preventDefault: true,
-    matchKey: letterKey("o"),
+    matchKey: letterKey("r"),
     run: (board, actions) => {
       actions.reopenHighlightedTask(board);
     },

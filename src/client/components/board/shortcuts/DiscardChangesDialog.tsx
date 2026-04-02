@@ -1,6 +1,7 @@
-import { useCallback, useId } from "react";
+import { useCallback, useId, useRef } from "react";
 import { useDialogCloseRequest } from "./useDialogCloseRequest";
 import { useShortcutOverlay } from "./ShortcutScopeContext";
+import { useModalFocusTrap } from "./useModalFocusTrap";
 
 interface DiscardChangesDialogProps {
   open: boolean;
@@ -19,6 +20,8 @@ export function DiscardChangesDialog({
   onCancel,
 }: DiscardChangesDialogProps) {
   const titleId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const requestCancel = useDialogCloseRequest({
     busy: false,
     onClose: onCancel,
@@ -40,6 +43,11 @@ export function DiscardChangesDialog({
   );
 
   useShortcutOverlay(open, "discard-dialog", keyHandler);
+  useModalFocusTrap({
+    open,
+    containerRef,
+    initialFocusRef: cancelButtonRef,
+  });
 
   if (!open) return null;
 
@@ -53,6 +61,8 @@ export function DiscardChangesDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={containerRef}
+        tabIndex={-1}
         className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
@@ -68,6 +78,7 @@ export function DiscardChangesDialog({
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
+            ref={cancelButtonRef}
             className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
             onClick={requestCancel}
           >

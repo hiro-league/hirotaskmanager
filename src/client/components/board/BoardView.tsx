@@ -6,12 +6,13 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
+  type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Search, Settings2 } from "lucide-react";
 import { boardKeys, useBoard } from "@/api/queries";
-import { usePatchBoardName } from "@/api/mutations";
+import { usePatchBoardName, usePatchBoardViewPrefs } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
   ALL_TASK_GROUPS,
@@ -45,6 +46,7 @@ import {
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useUpdateTask } from "@/api/mutations";
 import { BoardTaskKeyboardBridgeProvider } from "./shortcuts/BoardTaskKeyboardBridge";
+import { BoardListDeleteConfirm } from "./shortcuts/BoardListDeleteConfirm";
 import { BoardTaskDeleteConfirm } from "./shortcuts/BoardTaskDeleteConfirm";
 import {
   cycleTaskCardViewModeForBoard,
@@ -62,9 +64,38 @@ import { cn } from "@/lib/utils";
 import { useBoardSearch } from "@/context/BoardSearchContext";
 import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
 import { BoardSearchDialog } from "./BoardSearchDialog";
+import { OPEN_SHORTCUT_HELP_EVENT } from "@/lib/shortcutHelpEvents";
 
 interface BoardViewProps {
   boardId: string | null;
+}
+
+interface BoardScrollMetrics {
+  hasOverflow: boolean;
+  scrollLeft: number;
+  scrollWidth: number;
+  clientWidth: number;
+}
+
+const HEADER_SCROLL_TRACK_WIDTH = 176;
+const HEADER_SCROLL_MIN_THUMB_WIDTH = 40;
+const EMPTY_BOARD_SCROLL_METRICS: BoardScrollMetrics = {
+  hasOverflow: false,
+  scrollLeft: 0,
+  scrollWidth: 0,
+  clientWidth: 0,
+};
+
+function readBoardScrollMetrics(scroller: HTMLDivElement | null): BoardScrollMetrics {
+  if (!scroller) return EMPTY_BOARD_SCROLL_METRICS;
+  const clientWidth = scroller.clientWidth;
+  const scrollWidth = scroller.scrollWidth;
+  return {
+    hasOverflow: scrollWidth - clientWidth > 1,
+    scrollLeft: scroller.scrollLeft,
+    scrollWidth,
+    clientWidth,
+  };
 }
 
 /** Lives inside BoardKeyboardNavProvider — merges board shortcuts with highlight navigation and task actions. */
@@ -74,12 +105,14 @@ function BoardShortcutBindings({
   openBoardSearch,
   toggleFilters,
   setTaskDeleteConfirmId,
+  setListDeleteConfirmId,
 }: {
   board: Board;
   openHelp: () => void;
   openBoardSearch: () => void;
   toggleFilters: () => void;
   setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
+  setListDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
 }) {
   const setActiveTaskGroupForBoard = usePreferencesStore(
     (s) => s.setActiveTaskGroupForBoard,
@@ -100,14 +133,24 @@ function BoardShortcutBindings({
     new Map<number, ReturnType<typeof setTimeout>>(),
   );
   const pendingPriorityTasksRef = useRef(new Map<number, Board["tasks"][number]>());
+  const pendingGroupSavesRef = useRef(
+    new Map<number, ReturnType<typeof setTimeout>>(),
+  );
+  const pendingGroupTasksRef = useRef(new Map<number, Board["tasks"][number]>());
+  const patchViewPrefs = usePatchBoardViewPrefs();
 
   useEffect(() => {
     return () => {
       for (const timeoutId of pendingPrioritySavesRef.current.values()) {
         clearTimeout(timeoutId);
       }
+      for (const timeoutId of pendingGroupSavesRef.current.values()) {
+        clearTimeout(timeoutId);
+      }
       pendingPrioritySavesRef.current.clear();
       pendingPriorityTasksRef.current.clear();
+      pendingGroupSavesRef.current.clear();
+      pendingGroupTasksRef.current.clear();
     };
   }, []);
 
@@ -118,12 +161,68 @@ function BoardShortcutBindings({
       toggleFilters,
       cycleTaskCardViewMode: (b) =>
         cycleTaskCardViewModeForBoard(b, setTaskCardViewModeForBoard),
+      toggleBoardLayout: (b) => {
+        const current = resolvedBoardLayout(b);
+        const next = current === "lanes" ? "stacked" : "lanes";
+        // Same PATCH as BoardLayoutToggle — keeps server and React Query cache in sync.
+        patchViewPrefs.mutate({ boardId: b.id, patch: { boardLayout: next } });
+      },
       cycleTaskGroup: (b) =>
         cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
       allTaskGroups: (b) =>
         setActiveTaskGroupForBoard(b.id, ALL_TASK_GROUPS),
       cycleTaskPriority: (b) =>
         cycleTaskPriorityForBoard(b, setActiveTaskPriorityIdsForBoard),
+      cycleHighlightedTaskGroup: (b) => {
+        const highlightedTaskId = nav?.highlightedTaskId;
+        if (highlightedTaskId == null) return;
+        const currentBoard =
+          queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
+        const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
+        if (!task || currentBoard.taskGroups.length === 0) return;
+        const groupOrder = currentBoard.taskGroups.map((group) => group.id);
+        const currentIndex = Math.max(0, groupOrder.indexOf(task.groupId));
+        const nextGroupId = groupOrder[(currentIndex + 1) % groupOrder.length];
+        if (nextGroupId == null || nextGroupId === task.groupId) return;
+        const nextTask = {
+          ...task,
+          groupId: nextGroupId,
+          updatedAt: new Date().toISOString(),
+        };
+        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.id), {
+          ...currentBoard,
+          tasks: currentBoard.tasks.map((entry) =>
+            entry.id === nextTask.id ? nextTask : entry,
+          ),
+          updatedAt: nextTask.updatedAt,
+        });
+        pendingGroupTasksRef.current.set(nextTask.id, nextTask);
+        const existingTimeout = pendingGroupSavesRef.current.get(nextTask.id);
+        if (existingTimeout !== undefined) {
+          clearTimeout(existingTimeout);
+        }
+        // Delay the PATCH so rapid G presses only persist the final group choice.
+        const timeoutId = setTimeout(() => {
+          const pendingTask = pendingGroupTasksRef.current.get(nextTask.id);
+          pendingGroupTasksRef.current.delete(nextTask.id);
+          pendingGroupSavesRef.current.delete(nextTask.id);
+          if (!pendingTask) return;
+          const latestBoard =
+            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.id)) ??
+            currentBoard;
+          const latestTask =
+            latestBoard.tasks.find((entry) => entry.id === pendingTask.id) ?? pendingTask;
+          updateTask.mutate({
+            boardId: latestBoard.id,
+            task: {
+              ...latestTask,
+              groupId: pendingTask.groupId,
+              updatedAt: pendingTask.updatedAt,
+            },
+          });
+        }, 1000);
+        pendingGroupSavesRef.current.set(nextTask.id, timeoutId);
+      },
       cycleHighlightedTaskPriority: (b) => {
         const highlightedTaskId = nav?.highlightedTaskId;
         if (highlightedTaskId == null) return;
@@ -192,9 +291,36 @@ function BoardShortcutBindings({
         const id = nav?.highlightedTaskId;
         if (id != null) bridge?.requestOpenTaskEditor(id);
       },
-      requestDeleteHighlightedTask: () => {
+      editHighlightedTaskTitle: () => {
+        const id = nav?.highlightedTaskId;
+        if (id != null) bridge?.requestEditTaskTitle(id);
+      },
+      requestDeleteHighlight: () => {
+        if (nav?.highlightedListId != null) {
+          setListDeleteConfirmId(nav.highlightedListId);
+          return;
+        }
         const id = nav?.highlightedTaskId;
         if (id != null) setTaskDeleteConfirmId(id);
+      },
+      addTaskAtHighlight: () => {
+        const listId =
+          nav?.highlightedListId ??
+          (nav?.highlightedTaskId != null
+            ? board.tasks.find((t) => t.id === nav.highlightedTaskId)?.listId
+            : null);
+        if (listId == null) return;
+        nav?.openAddTaskForList(listId);
+      },
+      addListAfterHighlight: (b) => {
+        const anchorListId =
+          nav?.highlightedListId ??
+          (nav?.highlightedTaskId != null
+            ? b.tasks.find((t) => t.id === nav.highlightedTaskId)?.listId
+            : null);
+        if (anchorListId == null) return;
+        // Opens the same inline “Add list” composer as the dashed control; user types the name first.
+        nav?.openAddListComposerAfter(anchorListId);
       },
       completeHighlightedTask: (b) => {
         const id = nav?.highlightedTaskId;
@@ -241,15 +367,18 @@ function BoardShortcutBindings({
       openBoardSearch,
       toggleFilters,
       setTaskCardViewModeForBoard,
+      patchViewPrefs,
       setActiveTaskGroupForBoard,
       setActiveTaskPriorityIdsForBoard,
       nav,
       bridge,
       queryClient,
       setTaskDeleteConfirmId,
+      setListDeleteConfirmId,
       statuses,
       workflowOrder,
       updateTask,
+      board,
     ],
   );
 
@@ -267,6 +396,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   const themePreference = usePreferencesStore((s) => s.themePreference);
   const systemDark = useSystemDark();
   const dark = resolveDark(themePreference, systemDark);
+  const stackedLayout = data ? resolvedBoardLayout(data) === "stacked" : false;
 
   const filterCollapsed = usePreferencesStore(
     (s) => s.boardFilterStripCollapsed,
@@ -286,20 +416,166 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [editingBoardName, setEditingBoardName] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
+  const [headerHovered, setHeaderHovered] = useState(false);
+  const [headerScrollDragging, setHeaderScrollDragging] = useState(false);
+  const [boardScrollMetrics, setBoardScrollMetrics] = useState<BoardScrollMetrics>(
+    EMPTY_BOARD_SCROLL_METRICS,
+  );
   /** Whether the help dialog was opened automatically (on board open) vs via H. */
   const [helpOpenReason, setHelpOpenReason] = useState<
     "none" | "auto" | "manual"
   >("none");
   const boardNameInputRef = useRef<HTMLInputElement>(null);
   const boardNameBlurModeRef = useRef<"commit" | "cancel">("commit");
+  const headerScrollTrackRef = useRef<HTMLDivElement>(null);
+  const headerScrollDragRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startScrollLeft: number;
+    maxScrollLeft: number;
+    trackWidth: number;
+    thumbWidth: number;
+  } | null>(null);
 
   const openHelp = useCallback(() => {
     setHelpOpenReason("manual");
     setShortcutHelpOpen(true);
   }, []);
 
+  useEffect(() => {
+    const onOpenFromHeader = () => {
+      setHelpOpenReason("manual");
+      setShortcutHelpOpen(true);
+    };
+    window.addEventListener(OPEN_SHORTCUT_HELP_EVENT, onOpenFromHeader);
+    return () => window.removeEventListener(OPEN_SHORTCUT_HELP_EVENT, onOpenFromHeader);
+  }, []);
+
   const { scrollRef, panning, boardCanvasPanHandlers } =
     useBoardCanvasPanScroll();
+
+  const syncBoardScrollMetrics = useCallback(() => {
+    const next = readBoardScrollMetrics(scrollRef.current);
+    setBoardScrollMetrics((prev) =>
+      prev.hasOverflow === next.hasOverflow &&
+      prev.scrollLeft === next.scrollLeft &&
+      prev.scrollWidth === next.scrollWidth &&
+      prev.clientWidth === next.clientWidth
+        ? prev
+        : next,
+    );
+  }, [scrollRef]);
+
+  useEffect(() => {
+    syncBoardScrollMetrics();
+  });
+
+  useEffect(() => {
+    syncBoardScrollMetrics();
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const content = scroller.firstElementChild;
+    const onScroll = () => syncBoardScrollMetrics();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => syncBoardScrollMetrics());
+    resizeObserver?.observe(scroller);
+    if (content instanceof Element) resizeObserver?.observe(content);
+
+    window.addEventListener("resize", syncBoardScrollMetrics);
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncBoardScrollMetrics);
+    };
+  }, [data?.id, scrollRef, syncBoardScrollMetrics, stackedLayout]);
+
+  const startHeaderScrollDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const scroller = scrollRef.current;
+      const track = headerScrollTrackRef.current;
+      if (!scroller || !track) return;
+
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+      if (maxScrollLeft <= 0) return;
+
+      const trackWidth = track.clientWidth;
+      const thumbWidth = Math.max(
+        HEADER_SCROLL_MIN_THUMB_WIDTH,
+        (trackWidth * scroller.clientWidth) / scroller.scrollWidth,
+      );
+      const travel = Math.max(1, trackWidth - thumbWidth);
+      const clickedThumb = (e.target as Element).closest("[data-board-scroll-thumb]");
+
+      if (!clickedThumb) {
+        const rect = track.getBoundingClientRect();
+        const pointerX = e.clientX - rect.left;
+        const nextThumbOffset = Math.min(
+          Math.max(pointerX - thumbWidth / 2, 0),
+          travel,
+        );
+        scroller.scrollLeft = (nextThumbOffset / travel) * maxScrollLeft;
+        syncBoardScrollMetrics();
+      }
+
+      headerScrollDragRef.current = {
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startScrollLeft: scroller.scrollLeft,
+        maxScrollLeft,
+        trackWidth,
+        thumbWidth,
+      };
+      setHeaderScrollDragging(true);
+      try {
+        track.setPointerCapture(e.pointerId);
+      } catch {
+        /* already captured or unsupported */
+      }
+      e.preventDefault();
+    },
+    [scrollRef, syncBoardScrollMetrics],
+  );
+
+  const moveHeaderScrollDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = headerScrollDragRef.current;
+      const scroller = scrollRef.current;
+      if (!drag || !scroller || e.pointerId !== drag.pointerId) return;
+
+      const travel = Math.max(1, drag.trackWidth - drag.thumbWidth);
+      const startThumbOffset = (drag.startScrollLeft / drag.maxScrollLeft) * travel;
+      const nextThumbOffset = Math.min(
+        Math.max(startThumbOffset + (e.clientX - drag.startClientX), 0),
+        travel,
+      );
+      scroller.scrollLeft = (nextThumbOffset / travel) * drag.maxScrollLeft;
+      syncBoardScrollMetrics();
+      e.preventDefault();
+    },
+    [scrollRef, syncBoardScrollMetrics],
+  );
+
+  const endHeaderScrollDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = headerScrollDragRef.current;
+      const track = headerScrollTrackRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      try {
+        track?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not captured */
+      }
+      headerScrollDragRef.current = null;
+      setHeaderScrollDragging(false);
+      syncBoardScrollMetrics();
+    },
+    [syncBoardScrollMetrics],
+  );
 
   useEffect(() => {
     closeSearch();
@@ -344,6 +620,9 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [taskDeleteConfirmId, setTaskDeleteConfirmId] = useState<number | null>(
     null,
   );
+  const [listDeleteConfirmId, setListDeleteConfirmId] = useState<number | null>(
+    null,
+  );
   const activeTaskGroup = useResolvedActiveTaskGroup(
     data?.id ?? boardId ?? "",
     data?.taskGroups ?? [],
@@ -384,6 +663,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     ...getBoardThemeStyle(resolvedBoardColor(data ?? {}), dark),
     background: "var(--board-canvas-image)",
   };
+  const boardSurfaceId = data ? `board-surface-${data.id}` : null;
 
   if (!boardId) {
     return (
@@ -414,7 +694,6 @@ export function BoardView({ boardId }: BoardViewProps) {
       </div>
     );
   }
-  const stackedLayout = resolvedBoardLayout(data) === "stacked";
   const activeGroupLabel =
     activeTaskGroup !== ALL_TASK_GROUPS
       ? groupLabelForId(data.taskGroups, Number(activeTaskGroup))
@@ -439,6 +718,28 @@ export function BoardView({ boardId }: BoardViewProps) {
           (priority) => String(priority.id) === activeTaskPriorityIds[0],
         )?.color
       : undefined;
+  const headerScrollVisible =
+    boardScrollMetrics.hasOverflow && (headerHovered || headerScrollDragging);
+  const headerScrollMaxLeft = Math.max(
+    0,
+    boardScrollMetrics.scrollWidth - boardScrollMetrics.clientWidth,
+  );
+  const headerScrollThumbWidth = boardScrollMetrics.hasOverflow
+    ? Math.max(
+        HEADER_SCROLL_MIN_THUMB_WIDTH,
+        (HEADER_SCROLL_TRACK_WIDTH * boardScrollMetrics.clientWidth) /
+          boardScrollMetrics.scrollWidth,
+      )
+    : HEADER_SCROLL_TRACK_WIDTH;
+  const headerScrollThumbTravel = Math.max(
+    0,
+    HEADER_SCROLL_TRACK_WIDTH - headerScrollThumbWidth,
+  );
+  const headerScrollThumbOffset =
+    headerScrollMaxLeft > 0
+      ? (boardScrollMetrics.scrollLeft / headerScrollMaxLeft) *
+        headerScrollThumbTravel
+      : 0;
 
   return (
     <ShortcutScopeProvider>
@@ -453,6 +754,7 @@ export function BoardView({ boardId }: BoardViewProps) {
         openBoardSearch={openSearch}
         toggleFilters={toggleFilterStrip}
         setTaskDeleteConfirmId={setTaskDeleteConfirmId}
+        setListDeleteConfirmId={setListDeleteConfirmId}
       />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
@@ -460,6 +762,8 @@ export function BoardView({ boardId }: BoardViewProps) {
       >
       <div
         className="relative shrink-0 border-b"
+        onMouseEnter={() => setHeaderHovered(true)}
+        onMouseLeave={() => setHeaderHovered(false)}
         // Keep board identity on the top strip only; the controls inside it
         // still use the shared app theme so the rest of the UI stays familiar.
         style={{
@@ -565,6 +869,46 @@ export function BoardView({ boardId }: BoardViewProps) {
             </div>
             {!filterCollapsed ? (
               <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 justify-self-center">
+                {/* Keep horizontal scrolling next to board-level appearance controls, not at the far edge of the header. */}
+                <div
+                  ref={headerScrollTrackRef}
+                  role="scrollbar"
+                  aria-controls={boardSurfaceId ?? undefined}
+                  aria-orientation="horizontal"
+                  aria-valuemin={0}
+                  aria-valuemax={headerScrollMaxLeft}
+                  aria-valuenow={Math.round(boardScrollMetrics.scrollLeft)}
+                  aria-label="Scroll board lists"
+                  data-board-no-pan
+                  className={cn(
+                    "relative h-8 rounded-full border border-border/70 bg-muted/35 transition-opacity",
+                    headerScrollVisible
+                      ? "pointer-events-auto opacity-100"
+                      : "pointer-events-none opacity-0",
+                  )}
+                  style={{ width: `${HEADER_SCROLL_TRACK_WIDTH}px` }}
+                  onPointerDown={startHeaderScrollDrag}
+                  onPointerMove={moveHeaderScrollDrag}
+                  onPointerUp={endHeaderScrollDrag}
+                  onPointerCancel={endHeaderScrollDrag}
+                  onLostPointerCapture={() => {
+                    headerScrollDragRef.current = null;
+                    setHeaderScrollDragging(false);
+                  }}
+                >
+                  <div className="pointer-events-none absolute inset-x-2 top-1/2 h-1 -translate-y-1/2 rounded-full bg-border/70" />
+                  <div
+                    data-board-scroll-thumb
+                    className={cn(
+                      "absolute top-1/2 h-5 -translate-y-1/2 rounded-full border border-border bg-background/95 shadow-sm",
+                      headerScrollDragging && "cursor-grabbing",
+                    )}
+                    style={{
+                      left: `${headerScrollThumbOffset}px`,
+                      width: `${headerScrollThumbWidth}px`,
+                    }}
+                  />
+                </div>
                 <BoardColorMenu board={data} compact swatchOnly />
                 <BoardLayoutToggle board={data} iconsOnly />
                 <BoardTaskCardSizeToggle board={data} />
@@ -608,16 +952,21 @@ export function BoardView({ boardId }: BoardViewProps) {
 
           {!filterCollapsed ? (
             <div
-              className="pointer-events-auto flex flex-col gap-2 pt-1"
+              className="pointer-events-auto pt-1"
               data-board-no-pan
             >
-              {/* Keep the two task-metadata filters on one row so they read as peers. */}
-              <div className="flex min-w-0 flex-wrap items-start gap-4">
-                <TaskGroupSwitcher board={data} />
-                <BoardPriorityToggles board={data} />
-              </div>
-              <div className="flex min-w-0 flex-wrap items-start">
-                <BoardStatusToggles board={data} />
+              {/* 2×2 grid: row1 = priority + status, row2 = groups + reserved cell. */}
+              <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3">
+                <div className="min-w-0">
+                  <BoardPriorityToggles board={data} />
+                </div>
+                <div className="min-w-0">
+                  <BoardStatusToggles board={data} />
+                </div>
+                <div className="min-w-0">
+                  <TaskGroupSwitcher board={data} />
+                </div>
+                <div className="min-w-0" aria-hidden />
               </div>
             </div>
           ) : null}
@@ -626,6 +975,7 @@ export function BoardView({ boardId }: BoardViewProps) {
 
       {/* Prevent native selection on the board surface so drag gestures do not highlight task text. */}
       <div
+        id={boardSurfaceId ?? undefined}
         ref={scrollRef}
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-4 pb-4 pt-4 select-none",
@@ -672,6 +1022,12 @@ export function BoardView({ boardId }: BoardViewProps) {
         board={data}
         taskId={taskDeleteConfirmId}
         onClose={() => setTaskDeleteConfirmId(null)}
+      />
+
+      <BoardListDeleteConfirm
+        board={data}
+        listId={listDeleteConfirmId}
+        onClose={() => setListDeleteConfirmId(null)}
       />
     </div>
     </BoardKeyboardNavProvider>

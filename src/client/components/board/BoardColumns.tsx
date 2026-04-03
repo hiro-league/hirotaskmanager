@@ -43,6 +43,7 @@ export function AddListSlot({
   const qc = useQueryClient();
   const createList = useCreateList();
   const reorderLists = useReorderLists();
+  const boardKeyboardNav = useBoardKeyboardNavOptional();
   const [name, setName] = useState("");
   const [listEmoji, setListEmoji] = useState<string | null>(null);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
@@ -84,8 +85,11 @@ export function AddListSlot({
       { boardId, name: trimmed, emoji: listEmoji ?? null },
       {
         onSuccess: (data) => {
-          cancel();
           const newList = data.lists.find((l) => !prevSet.has(l.id));
+          cancel();
+          // After creating a list, make it current so the board follows the
+          // user's last action instead of leaving the old selection in place.
+          if (newList) boardKeyboardNav?.selectList(newList.id);
           if (anchor == null || !newList) return;
           const anchorIdx = prevOrder.indexOf(anchor);
           if (anchorIdx < 0) return;

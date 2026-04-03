@@ -11,6 +11,13 @@ import {
   printSearchTable,
 } from "./lib/output";
 import { readServerStatus, startServer } from "./lib/process";
+import {
+  runBoardsAdd,
+  runListsAdd,
+  runTasksAdd,
+  runTasksMove,
+  runTasksUpdate,
+} from "./lib/writeCommands";
 
 function addPortOption(command: Command): Command {
   return command.option("-p, --port <port>", "Port for the local TaskManager API");
@@ -103,6 +110,207 @@ addPortOption(
     exitWithError(error);
   }
 });
+
+addPortOption(
+  boardsCommand
+    .command("add")
+    .description("Create a board")
+    .argument("[name]", "Board name (default from server)")
+    .option("--emoji <text>", "Optional emoji before the board name"),
+).action(async (name: string | undefined, options: { port?: string; emoji?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runBoardsAdd({ port, name, emoji: options.emoji });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+const listsCommand = program
+  .command("lists")
+  .description("Create and manage lists on boards");
+
+addPortOption(
+  listsCommand
+    .command("add")
+    .description("Create a list on a board (appended to the end)")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("[name]", "List name (default from server)")
+    .option("--emoji <text>", "Optional emoji before the list name"),
+).action(
+  async (
+    name: string | undefined,
+    options: { port?: string; board: string; emoji?: string },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runListsAdd({
+        port,
+        board: options.board,
+        name,
+        emoji: options.emoji,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+const tasksCommand = program
+  .command("tasks")
+  .description("Create and update tasks on boards");
+
+addPortOption(
+  tasksCommand
+    .command("add")
+    .description("Create a task")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .requiredOption("--list <id>", "Destination list id")
+    .requiredOption("--group <id>", "Task group id")
+    .option("--title <text>", 'Title (default "Untitled")')
+    .option("--status <id>", "Workflow status id (default open)")
+    .option("--priority <id>", "Task priority id for this board")
+    .option("--no-priority", "Store task with no priority")
+    .option("--emoji <text>", "Optional emoji before the title")
+    .option("--clear-emoji", "Clear task emoji")
+    .option("--body <text>", "Task body (Markdown)")
+    .option("--body-file <path>", "Read body from a UTF-8 file")
+    .option("--body-stdin", "Read body from stdin until EOF"),
+).action(
+  async (options: {
+    port?: string;
+    board: string;
+    list: string;
+    group: string;
+    title?: string;
+    status?: string;
+    priority?: string;
+    noPriority?: boolean;
+    emoji?: string;
+    clearEmoji?: boolean;
+    body?: string;
+    bodyFile?: string;
+    bodyStdin?: boolean;
+  }) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runTasksAdd({
+        port,
+        board: options.board,
+        list: options.list,
+        group: options.group,
+        title: options.title,
+        status: options.status,
+        priority: options.priority,
+        noPriority: options.noPriority,
+        emoji: options.emoji,
+        clearEmoji: options.clearEmoji,
+        body: options.body,
+        bodyFile: options.bodyFile,
+        bodyStdin: options.bodyStdin,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  tasksCommand
+    .command("update")
+    .description("Patch fields on a task")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<task-id>", "Numeric task id")
+    .option("--title <text>", "Task title")
+    .option("--body <text>", "Task body (Markdown)")
+    .option("--body-file <path>", "Read body from a UTF-8 file")
+    .option("--body-stdin", "Read body from stdin until EOF")
+    .option("--status <id>", "Workflow status id")
+    .option("--list <id>", "List id")
+    .option("--group <id>", "Task group id")
+    .option("--priority <id>", "Task priority id")
+    .option("--no-priority", "Clear priority")
+    .option("--color <css>", "Card color (CSS)")
+    .option("--clear-color", "Clear card color")
+    .option("--emoji <text>", "Emoji before the title")
+    .option("--clear-emoji", "Clear emoji"),
+).action(
+  async (
+    taskId: string,
+    options: {
+      port?: string;
+      board: string;
+      title?: string;
+      body?: string;
+      bodyFile?: string;
+      bodyStdin?: boolean;
+      status?: string;
+      list?: string;
+      group?: string;
+      priority?: string;
+      noPriority?: boolean;
+      color?: string;
+      clearColor?: boolean;
+      emoji?: string;
+      clearEmoji?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runTasksUpdate({
+        port,
+        board: options.board,
+        taskId,
+        title: options.title,
+        body: options.body,
+        bodyFile: options.bodyFile,
+        bodyStdin: options.bodyStdin,
+        status: options.status,
+        list: options.list,
+        group: options.group,
+        priority: options.priority,
+        noPriority: options.noPriority,
+        color: options.color,
+        clearColor: options.clearColor,
+        emoji: options.emoji,
+        clearEmoji: options.clearEmoji,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  tasksCommand
+    .command("move")
+    .description("Move a task to another list (append to end of band)")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .requiredOption("--to-list <id>", "Destination list id")
+    .argument("<task-id>", "Numeric task id")
+    .option(
+      "--to-status <id>",
+      "Workflow status in the destination (default: keep current)",
+    ),
+).action(
+  async (
+    taskId: string,
+    options: { port?: string; board: string; toList: string; toStatus?: string },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runTasksMove({
+        port,
+        board: options.board,
+        taskId,
+        toList: options.toList,
+        toStatus: options.toStatus,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
 
 const statusesCommand = program
   .command("statuses")

@@ -16,6 +16,7 @@ import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChange
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
 import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
+import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 
 interface TaskEditorProps {
   board: Board;
@@ -50,6 +51,7 @@ export function TaskEditor({
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
   const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const completion = useBoardTaskCompletionCelebrationOptional();
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -226,6 +228,13 @@ export function TaskEditor({
       const isClosing =
         target?.isClosed === true ||
         (target === undefined && nextStatusId === closedStatusId);
+      const wasClosed =
+        statuses?.find((s) => s.id === task.status)?.isClosed === true;
+      if (isClosing && !wasClosed) {
+        completion?.celebrateTaskCompletion({
+          anchorEl: dialogRef.current ?? undefined,
+        });
+      }
       const nextClosedAt = isClosing ? (task.closedAt ?? now) : null;
       await updateTask.mutateAsync({
         boardId: board.id,
@@ -237,7 +246,7 @@ export function TaskEditor({
         },
       });
     },
-    [mode, task, statuses, board.id, updateTask, closedStatusId],
+    [mode, task, statuses, board.id, updateTask, closedStatusId, completion],
   );
 
   const runDelete = useCallback(async () => {

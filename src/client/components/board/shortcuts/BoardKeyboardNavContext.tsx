@@ -15,7 +15,10 @@ import {
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
-import { visibleStatusesForBoard } from "../boardStatusUtils";
+import {
+  visibleStatusesForBoard,
+  type BoardTaskFilterState,
+} from "../boardStatusUtils";
 import {
   buildListColumnTaskIds,
   findFirstTaskId,
@@ -80,9 +83,13 @@ interface BoardKeyboardNavContextValue {
   highlightedTaskId: number | null;
   /** Clears list highlight when selecting a task. */
   setHighlightedTaskId: (id: number | null) => void;
+  /** Semantic helper for user/task interactions that should make a task current. */
+  selectTask: (taskId: number | null) => void;
   /** List header selection (mutually exclusive with task highlight). */
   highlightedListId: number | null;
   setHighlightedListId: (id: number | null) => void;
+  /** Semantic helper for user/list interactions that should make a list current. */
+  selectList: (listId: number | null) => void;
   hoveredTaskId: number | null;
   setHoveredTaskId: (id: number | null) => void;
   /** Pointer hover fallback for Tab when the mouse is over list chrome, not a task. */
@@ -147,6 +154,23 @@ export function BoardKeyboardNavProvider({
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
+  const taskFilter = useMemo<BoardTaskFilterState>(
+    () => ({
+      // Keyboard navigation should traverse the exact same filtered task set the board renders.
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilter: dateFilterResolved,
+    }),
+    [
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilterResolved,
+    ],
+  );
 
   const [listColumnOrder, setListColumnOrder] = useState<number[]>(() =>
     [...board.lists].sort((a, b) => a.order - b.order).map((l) => l.id),
@@ -168,10 +192,22 @@ export function BoardKeyboardNavProvider({
     if (id != null) setListIdState(null);
   }, []);
 
+  const selectTask = useCallback((taskId: number | null) => {
+    // Pointer/edit/create flows should reuse the same highlight state that keyboard
+    // navigation already owns, instead of inventing a parallel "selected" model.
+    setHighlightedTaskId(taskId);
+  }, [setHighlightedTaskId]);
+
   const setHighlightedListId = useCallback((id: number | null) => {
     setListIdState(id);
     if (id != null) setTaskIdState(null);
   }, []);
+
+  const selectList = useCallback((listId: number | null) => {
+    // Keep list interactions on the shared highlight state so canceling an edit
+    // or dropping back in place still leaves the last-touched list current.
+    setHighlightedListId(listId);
+  }, [setHighlightedListId]);
 
   const columnMap = useMemo(
     () =>
@@ -179,21 +215,13 @@ export function BoardKeyboardNavProvider({
         board,
         layout,
         listColumnOrder,
-        visibleStatuses,
-        workflowOrder,
-        activeGroup,
-        activePriorityIds,
-        dateFilterResolved,
+        taskFilter,
       ),
     [
       board,
       layout,
       listColumnOrder,
-      visibleStatuses,
-      workflowOrder,
-      activeGroup,
-      activePriorityIds,
-      dateFilterResolved,
+      taskFilter,
     ],
   );
 
@@ -355,7 +383,7 @@ export function BoardKeyboardNavProvider({
   useEffect(() => {
     if (highlightedTaskId == null) return;
     const el = taskElementsRef.current.get(highlightedTaskId);
-    scrollTaskIntoViewWithMargin(el);
+    scrollTaskIntoViewWithMargin(el ?? null);
   }, [highlightedTaskId]);
 
   useEffect(() => {
@@ -383,7 +411,7 @@ export function BoardKeyboardNavProvider({
     if (hoveredTaskId != null && all.includes(hoveredTaskId)) {
       setHighlightedTaskId(hoveredTaskId);
       const hoveredEl = taskElementsRef.current.get(hoveredTaskId);
-      scrollTaskIntoViewWithMargin(hoveredEl);
+      scrollTaskIntoViewWithMargin(hoveredEl ?? null);
       return;
     }
     const pointerListId =
@@ -409,7 +437,7 @@ export function BoardKeyboardNavProvider({
       return;
     }
     const el = taskElementsRef.current.get(highlightedTaskId);
-    scrollTaskIntoViewWithMargin(el);
+    scrollTaskIntoViewWithMargin(el ?? null);
   }, [
     hoveredTaskId,
     hoveredListId,
@@ -559,8 +587,10 @@ export function BoardKeyboardNavProvider({
     (): BoardKeyboardNavContextValue => ({
       highlightedTaskId,
       setHighlightedTaskId,
+      selectTask,
       highlightedListId,
       setHighlightedListId,
+      selectList,
       hoveredTaskId,
       setHoveredTaskId,
       hoveredListId,
@@ -583,8 +613,10 @@ export function BoardKeyboardNavProvider({
     [
       highlightedTaskId,
       setHighlightedTaskId,
+      selectTask,
       highlightedListId,
       setHighlightedListId,
+      selectList,
       hoveredTaskId,
       hoveredListId,
       registerTaskElement,

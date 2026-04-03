@@ -21,7 +21,11 @@ import {
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
-import { taskMatchesDateFilter } from "./boardStatusUtils";
+import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
+import {
+  listStatusTasksSorted,
+  type BoardTaskFilterState,
+} from "./boardStatusUtils";
 import { parseTaskSortableId } from "./dndIds";
 import { SortableTaskRow } from "./SortableTaskRow";
 import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
@@ -54,6 +58,8 @@ export function ListStatusBand({
   );
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
+  const boardNav = useBoardKeyboardNavOptional();
+  const completion = useBoardTaskCompletionCelebrationOptional();
 
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
   const taskMap = useMemo(() => {
@@ -62,36 +68,20 @@ export function ListStatusBand({
     return m;
   }, [board.tasks]);
 
+  const taskFilter = useMemo<
+    Pick<BoardTaskFilterState, "activeGroup" | "activePriorityIds" | "dateFilter">
+  >(
+    () => ({
+      activeGroup,
+      activePriorityIds,
+      dateFilter: dateFilterResolved,
+    }),
+    [activeGroup, activePriorityIds, dateFilterResolved],
+  );
+
   const tasks = useMemo(() => {
-    let listTasks = board.tasks.filter(
-      (t) => t.listId === list.id && t.status === status,
-    );
-    if (activeGroup !== ALL_TASK_GROUPS) {
-      listTasks = listTasks.filter(
-        (t) => String(t.groupId) === activeGroup,
-      );
-    }
-    if (activePriorityIds !== null) {
-      listTasks = listTasks.filter(
-        (t) =>
-          t.priorityId != null &&
-          activePriorityIds.includes(String(t.priorityId)),
-      );
-    }
-    if (dateFilterResolved != null) {
-      listTasks = listTasks.filter((t) =>
-        taskMatchesDateFilter(t, dateFilterResolved),
-      );
-    }
-    return listTasks.sort((a, b) => a.order - b.order);
-  }, [
-    board.tasks,
-    list.id,
-    status,
-    activeGroup,
-    activePriorityIds,
-    dateFilterResolved,
-  ]);
+    return listStatusTasksSorted(board, list.id, status, taskFilter);
+  }, [board, list.id, status, taskFilter]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -116,12 +106,13 @@ export function ListStatusBand({
   statusesRef.current = statuses;
 
   const handleComplete = useCallback(
-    (taskId: number) => {
+    (taskId: number, anchorEl?: HTMLElement) => {
       const t = boardRef.current.tasks.find((x) => x.id === taskId);
       if (!t) return;
       const closedId =
         statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
       const now = new Date().toISOString();
+      completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
         boardId: boardRef.current.id,
         task: {
@@ -132,13 +123,16 @@ export function ListStatusBand({
         },
       });
     },
-    [updateTask],
+    [completion, updateTask],
   );
 
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const handleEdit = useCallback((taskId: number) => {
+    // Task-open flows should reuse the shared board selection state so canceling
+    // the editor leaves the last-opened task current.
+    boardNav?.selectTask(taskId);
     setEditingTaskId(taskId);
-  }, []);
+  }, [boardNav]);
 
   const cancelInlineTitleEdit = useCallback(() => {
     setEditingTitleTaskId(null);
@@ -184,10 +178,11 @@ export function ListStatusBand({
       const t = board.tasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
       cancelInlineTitleEdit();
+      boardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
+  }, [board.tasks, boardNav, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -197,8 +192,8 @@ export function ListStatusBand({
   const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
 
   // Legacy completeFromList for static (non-sortable) task cards
-  const completeFromList = (t: Task) => {
-    handleComplete(t.id);
+  const completeFromList = (t: Task, anchorEl?: HTMLElement) => {
+    handleComplete(t.id, anchorEl);
   };
 
   useEffect(() => {
@@ -236,7 +231,6 @@ export function ListStatusBand({
     });
   };
 
-  const boardNav = useBoardKeyboardNavOptional();
   const openComposerAtBottomRef = useRef(openComposerAtBottom);
   openComposerAtBottomRef.current = openComposerAtBottom;
   useEffect(() => {
@@ -251,6 +245,7 @@ export function ListStatusBand({
   const submitCard = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
     const defaultGroupId =
       activeGroup !== ALL_TASK_GROUPS
         ? Number(activeGroup)
@@ -265,8 +260,17 @@ export function ListStatusBand({
         groupId: defaultGroupId,
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
           setTitle("");
+          const createdTask = data.tasks.find(
+            (task) =>
+              !existingTaskIds.has(task.id) &&
+              task.listId === list.id &&
+              task.status === status,
+          );
+          // After creating a task, move selection to the new task instead of
+          // leaving the highlight behind on an older interaction.
+          if (createdTask) boardNav?.selectTask(createdTask.id);
           focusComposerAtBottom();
         },
       },
@@ -338,7 +342,9 @@ export function ListStatusBand({
                     onTitleCommit={() => void commitInlineTitleEdit()}
                     onTitleCancel={cancelInlineTitleEdit}
                     titleEditBusy={updateTask.isPending}
-                    onCompleteFromCircle={() => completeFromList(task)}
+                    onCompleteFromCircle={(anchorEl) =>
+                      completeFromList(task, anchorEl)
+                    }
                   />
                 ))}
               </div>
@@ -509,7 +515,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
-  onComplete: (taskId: number) => void;
+  onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
   editingTitle: boolean;
   titleDraft?: string;
@@ -519,8 +525,8 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   titleEditBusy: boolean;
 }) {
   const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
-  const handleComplete = useCallback(
-    () => onComplete(task.id),
+  const handleCompleteFromCircle = useCallback(
+    (anchorEl: HTMLElement) => onComplete(task.id, anchorEl),
     [onComplete, task.id],
   );
   return (
@@ -539,7 +545,9 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
       onTitleCommit={onTitleCommit}
       onTitleCancel={onTitleCancel}
       titleEditBusy={titleEditBusy}
-      onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
+      onCompleteFromCircle={
+        task.status === "open" ? handleCompleteFromCircle : undefined
+      }
     />
   );
 });
@@ -571,7 +579,7 @@ const SortableBandContent = memo(function SortableBandContent({
   status: string;
   containerId: string;
   sortableIds: string[];
-  onComplete: (taskId: number) => void;
+  onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
   editingTitleTaskId: number | null;
   editingTitleDraft: string;

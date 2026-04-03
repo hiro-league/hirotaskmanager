@@ -81,9 +81,12 @@ export function ListHeader({
   const emojiChar = list.emoji?.trim() || null;
 
   const startRename = useCallback(() => {
+    // Keep the list current when rename is entered so canceling leaves the
+    // user's last-touched list selected.
+    boardNav?.selectList(list.id);
     setEditing(true);
     setEditValue(list.name);
-  }, [list.name]);
+  }, [boardNav, list.id, list.name]);
 
   // F2 on a keyboard-selected list calls the same entry point as click / ⋮ Rename.
   useEffect(() => {
@@ -182,6 +185,10 @@ export function ListHeader({
         "group/list-header relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
         boardDrag ? "border-b border-border/80" : "rounded-t-md border border-b-0",
       )}
+      onPointerDown={() => {
+        // Any direct interaction with the header should make this list current.
+        boardNav?.selectList(list.id);
+      }}
     >
       {emojiFieldError ? (
         <p className="absolute left-2 top-full z-20 mt-0.5 max-w-[min(100%,12rem)] text-[10px] text-destructive">

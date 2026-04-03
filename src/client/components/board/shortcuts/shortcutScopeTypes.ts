@@ -8,6 +8,7 @@ export type ShortcutScope =
   | "board-search-dialog"
   | "task-editor"
   | "task-groups-editor"
+  | "board-edit-dialog"
   | "task-priorities-editor"
   | "discard-dialog"
   | "task-delete-confirmation"

@@ -1,0 +1,123 @@
+import {
+  ALL_TASK_GROUPS,
+  DEFAULT_STATUS_IDS,
+  type Board,
+  type Task,
+} from "./models";
+
+export type ActiveTaskPriorityIds = string[] | null;
+
+/** Which timestamps participate in the inclusive calendar-day range. */
+export type TaskDateFilterMode = "opened" | "closed" | "any";
+
+/** Normalized active filter (store may hold invalid ranges until resolved). */
+export interface TaskDateFilterResolved {
+  mode: TaskDateFilterMode;
+  /** Local calendar days as `YYYY-MM-DD`, inclusive. */
+  startDate: string;
+  endDate: string;
+}
+
+/** Local calendar day for an ISO instant (for inclusive date-only filtering). */
+export function localCalendarDateKeyFromIso(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function todayDateKeyLocal(): string {
+  return localCalendarDateKeyFromIso(new Date().toISOString());
+}
+
+export function isValidYmd(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = new Date(`${s}T12:00:00`).getTime();
+  return Number.isFinite(t);
+}
+
+function dateKeyInInclusiveRange(key: string, start: string, end: string): boolean {
+  return key >= start && key <= end;
+}
+
+/**
+ * Opened: `createdAt` in range. Closed: `closedAt` in range (no close → no match).
+ * Any: `createdAt` in range OR `closedAt` in range.
+ */
+export function taskMatchesDateFilter(
+  task: Task,
+  filter: TaskDateFilterResolved,
+): boolean {
+  const { mode, startDate, endDate } = filter;
+  const createdKey = localCalendarDateKeyFromIso(task.createdAt);
+  const closedKey =
+    task.closedAt != null ? localCalendarDateKeyFromIso(task.closedAt) : null;
+
+  if (mode === "opened") {
+    return dateKeyInInclusiveRange(createdKey, startDate, endDate);
+  }
+  if (mode === "closed") {
+    if (closedKey == null) return false;
+    return dateKeyInInclusiveRange(closedKey, startDate, endDate);
+  }
+  if (dateKeyInInclusiveRange(createdKey, startDate, endDate)) return true;
+  if (closedKey != null && dateKeyInInclusiveRange(closedKey, startDate, endDate)) {
+    return true;
+  }
+  return false;
+}
+
+/** `null` = All priorities, `[]` = explicit empty filter, otherwise selected ids. */
+export function taskMatchesPriorityFilter(
+  task: Task,
+  activePriorityIds: ActiveTaskPriorityIds | undefined,
+): boolean {
+  if (activePriorityIds == null) return true;
+  if (activePriorityIds.length === 0) return false;
+  return (
+    task.priorityId != null &&
+    activePriorityIds.includes(String(task.priorityId))
+  );
+}
+
+export interface BoardFilterGroupPriorityDate {
+  activeGroup: string;
+  activePriorityIds: ActiveTaskPriorityIds;
+  dateFilter: TaskDateFilterResolved | null;
+}
+
+// Keep board filtering in one shared place so rendering, keyboard nav, DnD,
+// and server-side stats do not drift as new filter types get added.
+export function taskMatchesBoardFilter(
+  task: Task,
+  filter: Pick<
+    BoardFilterGroupPriorityDate,
+    "activeGroup" | "activePriorityIds" | "dateFilter"
+  >,
+): boolean {
+  const { activeGroup, activePriorityIds, dateFilter } = filter;
+  if (activeGroup !== ALL_TASK_GROUPS && String(task.groupId) !== activeGroup) {
+    return false;
+  }
+  if (!taskMatchesPriorityFilter(task, activePriorityIds)) {
+    return false;
+  }
+  if (dateFilter != null && !taskMatchesDateFilter(task, dateFilter)) {
+    return false;
+  }
+  return true;
+}
+
+/** Statuses shown on the board, in workflow order (`GET /api/statuses`). */
+export function visibleStatusesForBoard(
+  board: Board,
+  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
+): string[] {
+  const valid = new Set(workflowOrder);
+  const vis = board.visibleStatuses.filter((s) => valid.has(s));
+  if (vis.length > 0) {
+    return workflowOrder.filter((s) => vis.includes(s));
+  }
+  return [...workflowOrder];
+}

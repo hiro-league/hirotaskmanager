@@ -120,7 +120,7 @@ interface TaskCardProps {
   onTitleCancel?: () => void;
   titleEditBusy?: boolean;
   /** When set, only for `open` tasks: click the empty circle to complete (does not open the editor). */
-  onCompleteFromCircle?: () => void;
+  onCompleteFromCircle?: (anchorEl: HTMLElement) => void;
   /** When true, dim the card to indicate it's being dragged. */
   isDragging?: boolean;
   /**
@@ -347,6 +347,8 @@ export const TaskCard = memo(function TaskCard({
   return (
     <div
       ref={rootRef}
+      data-task-card-root
+      data-task-id={task.id}
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
         nav.setHoveredTaskId(task.id);
@@ -354,6 +356,11 @@ export const TaskCard = memo(function TaskCard({
       onPointerLeave={(e) => {
         if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
         nav.setHoveredTaskId(null);
+      }}
+      onPointerDown={() => {
+        if (editingTitle) return;
+        // Clicking into a task should make it current before any editor/dialog opens.
+        nav?.selectTask(task.id);
       }}
       className={cn(
         "group/task-card relative w-full overflow-hidden rounded-md border border-border bg-task-card text-sm text-task-card-foreground shadow-sm transition-colors select-none",
@@ -374,6 +381,7 @@ export const TaskCard = memo(function TaskCard({
           {canCompleteFromCircle ? (
             <button
               type="button"
+              data-task-complete-button
               className={cn(
                 "absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start rounded-sm opacity-0 outline-none transition-opacity duration-150 ring-offset-background pointer-events-none group-hover/task-card:pointer-events-auto group-hover/task-card:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
               )}
@@ -382,7 +390,10 @@ export const TaskCard = memo(function TaskCard({
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                onCompleteFromCircle();
+                // Completing from the card is still a task interaction, so keep
+                // this task current before applying the status change.
+                nav?.selectTask(task.id);
+                onCompleteFromCircle(e.currentTarget);
               }}
             >
               <OpenStatusCircle />

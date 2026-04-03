@@ -27,7 +27,7 @@ export function BoardListDeleteConfirm({
   return (
     <ConfirmDialog
       open={open}
-      scope="list-delete-keyboard-confirmation"
+      scope="list-delete-confirmation"
       title="Delete this list?"
       message={
         list

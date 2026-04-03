@@ -133,7 +133,7 @@ interface Board {
   taskGroups: GroupDefinition[];
   visibleStatuses: string[];
   statusBandWeights?: number[];
-  showCounts: boolean;
+  showStats: boolean;
   lists: List[];
   tasks: Task[];
   createdAt: string;

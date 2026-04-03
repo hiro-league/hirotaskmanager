@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { SearchHit } from "../../shared/models";
+import { cliBoardAccessError, isCliRequest } from "../cliBoardGuard";
 import { entryByIdOrSlug } from "../storage/board";
 import { searchTasks } from "../storage/search";
 
@@ -19,6 +20,8 @@ searchRoute.get("/", async (c) => {
     return c.json({ error: "Query required" }, 400);
   }
 
+  const cli = isCliRequest(c);
+
   let limit = 20;
   const limitRaw = c.req.query("limit");
   if (limitRaw !== undefined && limitRaw !== "") {
@@ -36,6 +39,8 @@ searchRoute.get("/", async (c) => {
     if (!entry) {
       return c.json({ error: "Board not found" }, 404);
     }
+    const blocked = cliBoardAccessError(c, entry, "read");
+    if (blocked) return blocked;
     boardId = entry.id;
   }
 
@@ -49,6 +54,7 @@ searchRoute.get("/", async (c) => {
       boardId,
       limit,
       prefixFinalToken,
+      excludeCliNoneBoards: cli,
     });
   } catch {
     // Malformed FTS5 MATCH syntax (e.g. unmatched quotes) surfaces as a SQLite error.

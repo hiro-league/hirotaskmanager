@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { Board } from "../../../shared/models";
-import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
-import { useStatusWorkflowOrder } from "@/api/queries";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
+import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import {
   laneBandContainerId,
@@ -14,8 +15,9 @@ import {
   sortableTaskId,
 } from "./dndIds";
 import {
-  taskMatchesPriorityFilter,
+  listStatusTasksSorted,
   visibleStatusesForBoard,
+  type BoardTaskFilterState,
 } from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
@@ -25,28 +27,20 @@ import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 /**
  * Build one container per (list, status) band. Each container holds the
- * sortable task IDs for that band, filtered by the active group.
+ * sortable task IDs for that band, filtered by the shared board task predicate.
  */
 function buildLanesTaskContainerMap(
   board: Board,
   listIds: number[],
-  visibleStatuses: string[],
-  activeGroup: string,
-  activePriorityIds: string[] | null,
+  filter: BoardTaskFilterState,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
-    for (const status of visibleStatuses) {
+    for (const status of filter.visibleStatuses) {
       const key = laneBandContainerId(listId, status);
-      let tasks = board.tasks
-        .filter((t) => t.listId === listId && t.status === status)
-        .sort((a, b) => a.order - b.order);
-      if (activeGroup !== ALL_TASK_GROUPS) {
-        tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
-      }
-      tasks = tasks.filter((t) =>
-        taskMatchesPriorityFilter(t, activePriorityIds),
-      );
+      // Route lanes through the shared board predicate so date/group/priority
+      // filters stay consistent with the visible cards and keyboard navigation.
+      const tasks = listStatusTasksSorted(board, listId, status, filter);
       out[key] = tasks.map((t) => sortableTaskId(t.id));
     }
   }
@@ -58,12 +52,19 @@ function buildLanesTaskContainerMap(
  * changes the task's status (and possibly list). The `updateTask` call
  * handles closedAt/openedAt via the server's PATCH logic.
  */
+export interface PersistLanesChangesOpts {
+  /** From workflow `status` rows — used to detect first transition into a closed status (celebration). */
+  closedStatusIds: ReadonlySet<string>;
+  onTaskClosed?: (taskId: number) => void;
+}
+
 async function persistLanesChanges(
   board: Board,
   prev: Record<string, string[]>,
   next: Record<string, string[]>,
   updateTask: ReturnType<typeof useUpdateTask>,
   reorderBand: ReturnType<typeof useReorderTasksInBand>,
+  opts?: PersistLanesChangesOpts,
 ): Promise<void> {
   let b = board;
 
@@ -85,6 +86,11 @@ async function persistLanesChanges(
   for (const { taskId, listId, status } of patchNeeded) {
     const t = b.tasks.find((x) => x.id === taskId);
     if (!t) continue;
+    if (opts?.closedStatusIds.size && opts.onTaskClosed) {
+      const wasClosed = opts.closedStatusIds.has(t.status);
+      const willClose = opts.closedStatusIds.has(status);
+      if (!wasClosed && willClose) opts.onTaskClosed(taskId);
+    }
     b = await updateTask.mutateAsync({
       boardId: b.id,
       task: { ...t, listId, status },
@@ -133,6 +139,12 @@ async function persistLanesChanges(
 
 export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
   const list = useHorizontalListReorderReact(board);
+  const celebration = useBoardTaskCompletionCelebrationOptional();
+  const { data: statuses } = useStatuses();
+  const closedStatusIds = useMemo(
+    () => new Set(statuses?.filter((s) => s.isClosed).map((s) => s.id) ?? []),
+    [statuses],
+  );
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
@@ -143,6 +155,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     board.id,
     board.taskPriorities,
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
 
   const listIds = listIdsOverride ?? list.localListIds;
 
@@ -159,30 +172,60 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
 
   const prioritySig =
     activePriorityIds === null ? "__all__" : activePriorityIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}`;
+  const dateSig =
+    dateFilterResolved == null
+      ? "__nodate__"
+      : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}|${dateSig}`;
+
+  const taskFilter = useMemo<BoardTaskFilterState>(
+    () => ({
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilter: dateFilterResolved,
+    }),
+    [
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilterResolved,
+    ],
+  );
 
   const serverTaskMap = useMemo(
-    () =>
-      buildLanesTaskContainerMap(
-        board,
-        listIds,
-        visibleStatuses,
-        activeGroup,
-        activePriorityIds,
-      ),
+    () => buildLanesTaskContainerMap(board, listIds, taskFilter),
     [
       containerMapDeps,
       board,
       listIds,
-      visibleStatuses,
-      activeGroup,
-      activePriorityIds,
+      taskFilter,
     ],
+  );
+
+  const persistChanges = useCallback(
+    async (
+      b: Board,
+      prev: Record<string, string[]>,
+      next: Record<string, string[]>,
+      updateTask: ReturnType<typeof useUpdateTask>,
+      reorderBand: ReturnType<typeof useReorderTasksInBand>,
+    ) => {
+      await persistLanesChanges(b, prev, next, updateTask, reorderBand, {
+        closedStatusIds,
+        onTaskClosed: celebration
+          ? (taskId) => celebration.celebrateTaskCompletion({ taskId })
+          : undefined,
+      });
+    },
+    [closedStatusIds, celebration],
   );
 
   const core = useBoardTaskDndReact(board, list, {
     buildContainerMap: () => serverTaskMap,
-    persistChanges: persistLanesChanges,
+    persistChanges,
     containerMapDeps,
   });
 

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_BOARD_COLOR } from "../../../shared/boardColor";
+import type { BoardCliAccess } from "../../../shared/boardCliAccess";
 import {
   createDefaultTaskGroups,
   createDefaultTaskPriorities,
@@ -22,12 +23,15 @@ function buildOptimisticBoard(id: number, name: string): Board {
     id,
     name,
     emoji: null,
+    description: "",
+    cliAccess: "none",
     taskGroups,
     taskPriorities,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
     boardLayout: "stacked",
     boardColor: DEFAULT_BOARD_COLOR,
-    showCounts: true,
+    showStats: false,
+    muteCelebrationSounds: false,
     lists: [],
     tasks: [],
     createdAt: now,
@@ -61,6 +65,7 @@ export function useCreateBoard() {
         slug: "",
         name,
         emoji: null,
+        cliAccess: "none",
         createdAt: new Date().toISOString(),
       };
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) => [
@@ -94,6 +99,7 @@ export function useCreateBoard() {
                   slug: data.slug ?? e.slug,
                   name: data.name,
                   emoji: data.emoji ?? null,
+                  cliAccess: data.cliAccess ?? "none",
                   createdAt: data.createdAt,
                 }
               : e,
@@ -106,7 +112,7 @@ export function useCreateBoard() {
   });
 }
 
-/** PATCH `/api/boards/:id` — send `name` and/or `emoji` (omit a key to leave it unchanged). */
+/** PATCH `/api/boards/:id` — board metadata and optional theme color. */
 export function usePatchBoard() {
   const qc = useQueryClient();
   return useMutation({
@@ -114,10 +120,16 @@ export function usePatchBoard() {
       boardId: number;
       name?: string;
       emoji?: string | null;
+      cliAccess?: BoardCliAccess;
+      description?: string | null;
+      boardColor?: Board["boardColor"];
     }) => {
       const body: Record<string, unknown> = {};
       if (input.name !== undefined) body.name = input.name;
       if (input.emoji !== undefined) body.emoji = input.emoji;
+      if (input.cliAccess !== undefined) body.cliAccess = input.cliAccess;
+      if (input.description !== undefined) body.description = input.description;
+      if (input.boardColor !== undefined) body.boardColor = input.boardColor;
       return fetchJson<Board>(`/api/boards/${input.boardId}`, {
         method: "PATCH",
         headers: jsonHeaders,
@@ -137,6 +149,9 @@ export function usePatchBoard() {
                 ...e,
                 ...(trimmed !== undefined ? { name: trimmed } : {}),
                 ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
+                ...(input.cliAccess !== undefined
+                  ? { cliAccess: input.cliAccess }
+                  : {}),
               }
             : e,
         ),
@@ -146,6 +161,15 @@ export function usePatchBoard() {
           ...prevDetail,
           ...(trimmed !== undefined ? { name: trimmed } : {}),
           ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
+          ...(input.cliAccess !== undefined
+            ? { cliAccess: input.cliAccess }
+            : {}),
+          ...(input.description !== undefined
+            ? { description: input.description ?? "" }
+            : {}),
+          ...(input.boardColor !== undefined
+            ? { boardColor: input.boardColor ?? undefined }
+            : {}),
           updatedAt: new Date().toISOString(),
         });
       }
@@ -168,6 +192,7 @@ export function usePatchBoard() {
                 name: data.name,
                 slug: data.slug ?? e.slug,
                 emoji: data.emoji ?? null,
+                cliAccess: data.cliAccess,
               }
             : e,
         ),
@@ -191,7 +216,10 @@ export function usePatchBoardViewPrefs() {
         boardLayout?: Board["boardLayout"];
         boardColor?: Board["boardColor"];
         backgroundImage?: string | null;
+        showStats?: boolean;
+        /** @deprecated Use `showStats`; still accepted by the API for older callers. */
         showCounts?: boolean;
+        muteCelebrationSounds?: boolean;
       };
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/view-prefs`, {
@@ -224,8 +252,13 @@ export function usePatchBoardViewPrefs() {
           next.backgroundImage =
             p.backgroundImage === null ? undefined : p.backgroundImage;
         }
-        if (p.showCounts !== undefined) {
-          next.showCounts = p.showCounts;
+        if (p.showStats !== undefined) {
+          next.showStats = p.showStats;
+        } else if (p.showCounts !== undefined) {
+          next.showStats = p.showCounts;
+        }
+        if (p.muteCelebrationSounds !== undefined) {
+          next.muteCelebrationSounds = p.muteCelebrationSounds;
         }
         qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
       }

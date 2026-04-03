@@ -10,8 +10,21 @@ import {
   type SetStateAction,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Search, Settings2 } from "lucide-react";
-import { boardKeys, useBoard } from "@/api/queries";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
+  Search,
+  Terminal,
+} from "lucide-react";
+import {
+  boardKeys,
+  useBoard,
+  useBoardStats,
+  useStatuses,
+  useStatusWorkflowOrder,
+} from "@/api/queries";
 import { usePatchBoard, usePatchBoardViewPrefs } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
@@ -40,13 +53,13 @@ import { BoardPriorityToggles } from "./BoardPriorityToggles";
 import { BoardTaskCardSizeToggle } from "./BoardTaskCardSizeToggle";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
 import { BoardTaskDateFilter } from "./BoardTaskDateFilter";
+import { BoardEditDialog } from "./BoardEditDialog";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
 import { TaskPrioritiesEditorDialog } from "./TaskPrioritiesEditorDialog";
 import {
   BoardKeyboardNavProvider,
   useBoardKeyboardNavOptional,
 } from "./shortcuts/BoardKeyboardNavContext";
-import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useUpdateTask } from "@/api/mutations";
 import { BoardTaskKeyboardBridgeProvider } from "./shortcuts/BoardTaskKeyboardBridge";
 import { BoardListDeleteConfirm } from "./shortcuts/BoardListDeleteConfirm";
@@ -61,14 +74,30 @@ import { ShortcutScopeProvider } from "./shortcuts/ShortcutScopeContext";
 import { useBoardShortcutKeydown } from "./shortcuts/useBoardShortcutKeydown";
 import { useBoardTaskKeyboardBridgeOptional } from "./shortcuts/BoardTaskKeyboardBridge";
 import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
+import {
+  rootCanConsumeVerticalWheel,
+  verticalScrollChainCanConsumeWheel,
+  verticalScrollChainCanConsumeWheelWithin,
+} from "./boardSurfaceWheel";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
 import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
 import { useBoardSearch } from "@/context/BoardSearchContext";
-import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
+import type { BoardStatsFilter } from "../../../shared/boardStats";
+import { BoardStatsChipsRow } from "./BoardStatsChips";
+import {
+  BoardStatsDisplayProvider,
+  type BoardStatsDisplayValue,
+} from "./BoardStatsContext";
+import { BoardCelebrationSoundToggle } from "./BoardCelebrationSoundToggle";
+import { BoardStatsVisibilityToggle } from "./BoardStatsVisibilityToggle";
 import type { TaskDateFilterMode } from "./boardStatusUtils";
 import { BoardSearchDialog } from "./BoardSearchDialog";
 import { OPEN_SHORTCUT_HELP_EVENT } from "@/lib/shortcutHelpEvents";
+import {
+  BoardTaskCompletionCelebrationProvider,
+  useBoardTaskCompletionCelebrationOptional,
+} from "@/gamification";
 
 interface BoardViewProps {
   boardId: string | null;
@@ -159,6 +188,7 @@ function BoardShortcutBindings({
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
   const updateTask = useUpdateTask();
+  const completion = useBoardTaskCompletionCelebrationOptional();
   const queryClient = useQueryClient();
   const pendingPrioritySavesRef = useRef(
     new Map<number, ReturnType<typeof setTimeout>>(),
@@ -367,6 +397,7 @@ function BoardShortcutBindings({
         if (meta?.isClosed) return;
         const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
         const now = new Date().toISOString();
+        completion?.celebrateTaskCompletion({ taskId: id });
         updateTask.mutate({
           boardId: b.id,
           task: {
@@ -375,6 +406,12 @@ function BoardShortcutBindings({
             updatedAt: now,
             closedAt: task.closedAt ?? now,
           },
+        });
+      },
+      toggleBoardStats: (b) => {
+        patchViewPrefs.mutate({
+          boardId: b.id,
+          patch: { showStats: !b.showStats },
         });
       },
       reopenHighlightedTask: (b) => {
@@ -415,6 +452,7 @@ function BoardShortcutBindings({
       workflowOrder,
       updateTask,
       board,
+      completion,
     ],
   );
 
@@ -447,6 +485,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     (s) => s.setBoardShortcutHelpDismissed,
   );
 
+  const [boardEditOpen, setBoardEditOpen] = useState(false);
   const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
   const [prioritiesEditorOpen, setPrioritiesEditorOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -461,12 +500,15 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [helpOpenReason, setHelpOpenReason] = useState<
     "none" | "auto" | "manual"
   >("none");
+  const [statsEntryToken, setStatsEntryToken] = useState(0);
   const boardNameInputRef = useRef<HTMLInputElement>(null);
   const boardNameBlurModeRef = useRef<"commit" | "cancel">("commit");
   const [boardEmojiFieldError, setBoardEmojiFieldError] = useState<
     string | null
   >(null);
   const headerScrollTrackRef = useRef<HTMLDivElement>(null);
+  /** Top board strip (title, filters): wheel translates to horizontal canvas scroll. */
+  const boardHeaderRef = useRef<HTMLDivElement>(null);
   const headerScrollDragRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -531,6 +573,53 @@ export function BoardView({ boardId }: BoardViewProps) {
       window.removeEventListener("resize", syncBoardScrollMetrics);
     };
   }, [data?.id, scrollRef, syncBoardScrollMetrics, stackedLayout]);
+
+  // Vertical wheel over list bodies keeps native scroll; elsewhere (gaps, list chrome,
+  // status rail) translate wheel to horizontal board scroll. Board header uses the same
+  // horizontal mapping (with a subtree-only vertical check so we do not hit app shell).
+  // Stacked layout: when the board surface can still scroll vertically, keep that behavior
+  // on the canvas; on the header we apply vertical scroll to the canvas manually.
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    const header = boardHeaderRef.current;
+    if (!scroller) return;
+
+    const applyHorizontal = (e: WheelEvent) => {
+      const maxLeft = scroller.scrollWidth - scroller.clientWidth;
+      if (maxLeft <= 1) return;
+      e.preventDefault();
+      scroller.scrollLeft += e.deltaY + e.deltaX;
+      syncBoardScrollMetrics();
+    };
+
+    const onWheelBoard = (e: WheelEvent) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (verticalScrollChainCanConsumeWheel(t, e.deltaY, scroller)) return;
+      if (stackedLayout && rootCanConsumeVerticalWheel(scroller, e.deltaY)) return;
+      applyHorizontal(e);
+    };
+
+    const onWheelHeader = (e: WheelEvent) => {
+      const t = e.target;
+      if (!(t instanceof Element) || !header) return;
+      if (verticalScrollChainCanConsumeWheelWithin(t, e.deltaY, header)) return;
+      if (stackedLayout && rootCanConsumeVerticalWheel(scroller, e.deltaY)) {
+        e.preventDefault();
+        scroller.scrollTop += e.deltaY;
+        syncBoardScrollMetrics();
+        return;
+      }
+      applyHorizontal(e);
+    };
+
+    scroller.addEventListener("wheel", onWheelBoard, { passive: false });
+    header?.addEventListener("wheel", onWheelHeader, { passive: false });
+    return () => {
+      scroller.removeEventListener("wheel", onWheelBoard);
+      header?.removeEventListener("wheel", onWheelHeader);
+    };
+  }, [scrollRef, stackedLayout, syncBoardScrollMetrics]);
 
   const startHeaderScrollDrag = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -673,6 +762,68 @@ export function BoardView({ boardId }: BoardViewProps) {
   const dateFilterResolved = useResolvedTaskDateFilter(
     data?.id ?? boardId ?? "",
   );
+  const prevStatsVisibleRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    const visible = Boolean(data?.showStats);
+    if (prevStatsVisibleRef.current === null) {
+      prevStatsVisibleRef.current = visible;
+      return;
+    }
+    // Run entry motion when stats are revealed, even if cached numbers skip the spinner.
+    if (visible && !prevStatsVisibleRef.current) {
+      setStatsEntryToken((n) => n + 1);
+    }
+    prevStatsVisibleRef.current = visible;
+  }, [data?.showStats]);
+
+  // Stats scope uses group / priority / date only — not status visibility (T/O/C already split by open vs closed).
+  const statsFilter = useMemo((): BoardStatsFilter | null => {
+    if (!data) return null;
+    return {
+      activeGroupId: activeTaskGroup,
+      activePriorityIds: activeTaskPriorityIds,
+      dateFilter: dateFilterResolved,
+    };
+  }, [data, activeTaskGroup, activeTaskPriorityIds, dateFilterResolved]);
+
+  const boardStatsQuery = useBoardStats(data?.id ?? null, statsFilter, {
+    enabled: Boolean(data?.showStats),
+  });
+
+  const boardStatsDisplay = useMemo((): BoardStatsDisplayValue => {
+    if (!data?.showStats) {
+      const empty = { total: 0, open: 0, closed: 0 };
+      return {
+        board: null,
+        listStat: () => empty,
+        entryToken: statsEntryToken,
+        fetching: false,
+        pending: false,
+        showChipSpinner: false,
+        statsError: false,
+      };
+    }
+    const q = boardStatsQuery;
+    const statsError = q.isError;
+    return {
+      board: statsError ? null : (q.data?.board ?? null),
+      listStat: (listId: number) =>
+        statsError
+          ? { total: 0, open: 0, closed: 0 }
+          : (q.data?.lists.find((l) => l.listId === listId)?.stats ?? {
+              total: 0,
+              open: 0,
+              closed: 0,
+            }),
+      entryToken: statsEntryToken,
+      fetching: q.isFetching,
+      pending: q.isPending,
+      showChipSpinner:
+        q.isPending || (q.isFetching && q.isPlaceholderData),
+      statsError,
+    };
+  }, [data?.showStats, boardStatsQuery, statsEntryToken]);
 
   const cancelBoardRename = useCallback(() => {
     boardNameBlurModeRef.current = "cancel";
@@ -808,11 +959,15 @@ export function BoardView({ boardId }: BoardViewProps) {
 
   return (
     <ShortcutScopeProvider>
+    <BoardStatsDisplayProvider value={boardStatsDisplay}>
     <BoardTaskKeyboardBridgeProvider>
     <BoardKeyboardNavProvider
       board={data}
       layout={stackedLayout ? "stacked" : "lanes"}
     >
+      <BoardTaskCompletionCelebrationProvider
+        celebrationSoundsMuted={data.muteCelebrationSounds}
+      >
       <BoardShortcutBindings
         board={data}
         openHelp={openHelp}
@@ -826,6 +981,7 @@ export function BoardView({ boardId }: BoardViewProps) {
         style={boardThemeStyle}
       >
       <div
+        ref={boardHeaderRef}
         className="relative shrink-0 border-b"
         onMouseEnter={() => setHeaderHovered(true)}
         onMouseLeave={() => setHeaderHovered(false)}
@@ -852,6 +1008,53 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <p className="absolute left-0 top-full z-20 mt-0.5 max-w-[min(100%,12rem)] text-[10px] text-destructive">
                   {boardEmojiFieldError}
                 </p>
+              ) : null}
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
+                    title="Board menu"
+                    aria-label="Board menu"
+                  >
+                    <MoreHorizontal className="size-4 shrink-0" aria-hidden />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="z-[100] min-w-[12rem] rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+                    sideOffset={4}
+                    align="start"
+                  >
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setBoardEditOpen(true)}
+                    >
+                      Edit board…
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setGroupsEditorOpen(true)}
+                    >
+                      Task groups
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setPrioritiesEditorOpen(true)}
+                    >
+                      Task priorities
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+              {data.cliAccess === "none" ? (
+                <span
+                  className="inline-flex shrink-0 text-muted-foreground"
+                  title="CLI access off — hirotm cannot open this board until access is enabled in Edit board"
+                  aria-label="CLI access disabled for this board"
+                >
+                  <Terminal className="size-4" strokeWidth={2} aria-hidden />
+                </span>
               ) : null}
               <EmojiPickerMenuButton
                 emoji={data.emoji}
@@ -921,15 +1124,18 @@ export function BoardView({ boardId }: BoardViewProps) {
                   {data.name.trim() || "Untitled"}
                 </button>
               )}
-              <button
-                type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
-                title="Search tasks (K or F3)"
-                aria-label="Search tasks on this board"
-                onClick={() => openSearch()}
-              >
-                <Search className="size-4 shrink-0" aria-hidden />
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
+                  title="Search tasks (K or F3)"
+                  aria-label="Search tasks on this board"
+                  onClick={() => openSearch()}
+                >
+                  <Search className="size-4 shrink-0" aria-hidden />
+                </button>
+                <BoardCelebrationSoundToggle board={data} />
+              </div>
               {activeGroupLabel ? (
                 // Surface the active group near the title so expanded filters read at a glance.
                 <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
@@ -964,6 +1170,29 @@ export function BoardView({ boardId }: BoardViewProps) {
                     {activeDateSummary}
                   </span>
                 </div>
+              ) : null}
+              {data.showStats ? (
+                boardStatsDisplay.statsError ? (
+                  <span
+                    className="inline-flex items-center text-xs text-destructive"
+                    role="alert"
+                  >
+                    Stats unavailable
+                  </span>
+                ) : (
+                  <BoardStatsChipsRow
+                    listCount={data.lists.length}
+                    stats={
+                      boardStatsQuery.data?.board ?? {
+                        total: 0,
+                        open: 0,
+                        closed: 0,
+                      }
+                    }
+                    showSpinner={boardStatsDisplay.showChipSpinner}
+                    entryToken={boardStatsDisplay.entryToken}
+                  />
+                )
               ) : null}
             </div>
             {!filterCollapsed ? (
@@ -1011,24 +1240,7 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <BoardColorMenu board={data} compact swatchOnly />
                 <BoardLayoutToggle board={data} iconsOnly />
                 <BoardTaskCardSizeToggle board={data} />
-                <button
-                  type="button"
-                  className={boardHeaderActionButtonClass()}
-                  title="Edit task groups for this board"
-                  onClick={() => setGroupsEditorOpen(true)}
-                >
-                  <Settings2 className="size-3.5 shrink-0" aria-hidden />
-                  Task groups
-                </button>
-                <button
-                  type="button"
-                  className={boardHeaderActionButtonClass()}
-                  title="Edit task priorities for this board"
-                  onClick={() => setPrioritiesEditorOpen(true)}
-                >
-                  <Settings2 className="size-3.5 shrink-0" aria-hidden />
-                  Task priorities
-                </button>
+                <BoardStatsVisibilityToggle board={data} />
               </div>
             ) : (
               <div />
@@ -1107,6 +1319,12 @@ export function BoardView({ boardId }: BoardViewProps) {
         showOnboardingExtras={helpOpenReason === "auto"}
       />
 
+      <BoardEditDialog
+        board={data}
+        open={boardEditOpen}
+        onClose={() => setBoardEditOpen(false)}
+      />
+
       <TaskGroupsEditorDialog
         board={data}
         open={groupsEditorOpen}
@@ -1131,8 +1349,10 @@ export function BoardView({ boardId }: BoardViewProps) {
         onClose={() => setListDeleteConfirmId(null)}
       />
     </div>
+      </BoardTaskCompletionCelebrationProvider>
     </BoardKeyboardNavProvider>
     </BoardTaskKeyboardBridgeProvider>
+    </BoardStatsDisplayProvider>
     </ShortcutScopeProvider>
   );
 }

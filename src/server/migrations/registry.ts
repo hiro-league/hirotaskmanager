@@ -7,6 +7,8 @@ import { migration006 } from "./006_task_group_emoji";
 import { migration007 } from "./007_task_emoji";
 import { migration008 } from "./008_list_emoji";
 import { migration009 } from "./009_board_emoji";
+import { migration010 } from "./010_celebration_sounds_muted";
+import { migration011 } from "./011_board_cli_access";
 import type { Migration } from "./types";
 
 /** Numbered migrations, ascending by version. */
@@ -20,4 +22,6 @@ export const migrations: Migration[] = [
   migration007,
   migration008,
   migration009,
+  migration010,
+  migration011,
 ];

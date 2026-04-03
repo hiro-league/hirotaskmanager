@@ -33,13 +33,17 @@ import {
   useResolvedTaskCardViewMode,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
+import { ListStatsChipsRow } from "@/components/board/BoardStatsChips";
+import { useBoardStatsDisplayOptional } from "@/components/board/BoardStatsContext";
 import { cn } from "@/lib/utils";
+import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
   boardListColumnOverlayShellClass,
   stackedListColumnMinHeightClass,
 } from "./boardDragOverlayShell";
 import { parseTaskSortableId } from "./dndIds";
 import {
+  type BoardTaskFilterState,
   listTasksMergedSorted,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
@@ -88,7 +92,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   viewMode: TaskCardViewMode;
-  onComplete: (taskId: number) => void;
+  onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
   editingTitle: boolean;
   titleDraft?: string;
@@ -98,8 +102,8 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   titleEditBusy: boolean;
 }) {
   const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
-  const handleComplete = useCallback(
-    () => onComplete(task.id),
+  const handleCompleteFromCircle = useCallback(
+    (anchorEl: HTMLElement) => onComplete(task.id, anchorEl),
     [onComplete, task.id],
   );
   return (
@@ -118,7 +122,9 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
       onTitleCommit={onTitleCommit}
       onTitleCancel={onTitleCancel}
       titleEditBusy={titleEditBusy}
-      onCompleteFromCircle={task.status === "open" ? handleComplete : undefined}
+      onCompleteFromCircle={
+        task.status === "open" ? handleCompleteFromCircle : undefined
+      }
     />
   );
 });
@@ -150,7 +156,7 @@ const StackedSortableList = memo(function StackedSortableList({
   listId: number;
   containerId: string;
   sortableIds: string[];
-  onComplete: (taskId: number) => void;
+  onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
   editingTitleTaskId: number | null;
   editingTitleDraft: string;
@@ -229,6 +235,9 @@ function ListStackedBody({
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
+  const boardStatsDisplay = useBoardStatsDisplayOptional();
+  const stackedBoardNav = useBoardKeyboardNavOptional();
+  const completion = useBoardTaskCompletionCelebrationOptional();
 
   // O(1) task lookup map
   const taskMap = useMemo(() => {
@@ -264,12 +273,13 @@ function ListStackedBody({
   statusesRef.current = statuses;
 
   const handleComplete = useCallback(
-    (taskId: number) => {
+    (taskId: number, anchorEl?: HTMLElement) => {
       const t = boardRef.current.tasks.find((x) => x.id === taskId);
       if (!t) return;
       const closedId =
         statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
       const now = new Date().toISOString();
+      completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
         boardId: boardRef.current.id,
         task: {
@@ -280,12 +290,15 @@ function ListStackedBody({
         },
       });
     },
-    [updateTask],
+    [completion, updateTask],
   );
 
   const handleEdit = useCallback((taskId: number) => {
+    // Task-open flows should reuse the shared board selection state so canceling
+    // the editor leaves the last-opened task current.
+    stackedBoardNav?.selectTask(taskId);
     setEditingTaskId(taskId);
-  }, []);
+  }, [stackedBoardNav]);
 
   const cancelInlineTitleEdit = useCallback(() => {
     setEditingTitleTaskId(null);
@@ -330,10 +343,11 @@ function ListStackedBody({
       const t = board.tasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
       cancelInlineTitleEdit();
+      stackedBoardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
+  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor, stackedBoardNav]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -391,6 +405,7 @@ function ListStackedBody({
   const submitTask = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
     const defaultGroupId =
       activeGroup !== ALL_TASK_GROUPS
         ? Number(activeGroup)
@@ -405,8 +420,17 @@ function ListStackedBody({
         groupId: defaultGroupId,
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
           setTitle("");
+          const createdTask = data.tasks.find(
+            (task) =>
+              !existingTaskIds.has(task.id) &&
+              task.listId === list.id &&
+              task.status === quickAddStatus,
+          );
+          // After creating a task, move selection to the new task instead of
+          // leaving the highlight behind on an older interaction.
+          if (createdTask) stackedBoardNav?.selectTask(createdTask.id);
           focusComposerAtQuickAddPosition();
         },
       },
@@ -432,7 +456,24 @@ function ListStackedBody({
     workflowOrder.includes("open") ? "open" : (workflowOrder[0] ?? "open");
   const canAddOpen = visibleStatuses.includes(quickAddStatus);
 
-  const stackedBoardNav = useBoardKeyboardNavOptional();
+  const taskFilter = useMemo<BoardTaskFilterState>(
+    () => ({
+      // Reuse the same normalized board filter shape as other board consumers.
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilter: dateFilterResolved,
+    }),
+    [
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilterResolved,
+    ],
+  );
+
   const openComposerAtQuickAddPositionRef = useRef(openComposerAtQuickAddPosition);
   openComposerAtQuickAddPositionRef.current = openComposerAtQuickAddPosition;
   useEffect(() => {
@@ -448,24 +489,12 @@ function ListStackedBody({
     () =>
       taskContainerId != null
         ? null
-        : listTasksMergedSorted(
-            board,
-            listId,
-            visibleStatuses,
-            activeGroup,
-            activePriorityIds,
-            workflowOrder,
-            dateFilterResolved,
-          ),
+        : listTasksMergedSorted(board, listId, taskFilter),
     [
       taskContainerId,
       board,
       listId,
-      visibleStatuses,
-      activeGroup,
-      activePriorityIds,
-      workflowOrder,
-      dateFilterResolved,
+      taskFilter,
     ],
   );
 
@@ -538,6 +567,12 @@ function ListStackedBody({
       </div>
     ) : null;
 
+  const hasListStatsRow =
+    !forDragOverlay &&
+    board.showStats &&
+    boardStatsDisplay != null &&
+    !boardStatsDisplay.statsError;
+
   useEffect(() => {
     if (forDragOverlay) {
       setBodyMaxHeight(null);
@@ -561,7 +596,13 @@ function ListStackedBody({
       window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", updateBodyMaxHeight);
     };
-  }, [forDragOverlay, headerCollapsed]);
+  }, [
+    forDragOverlay,
+    headerCollapsed,
+    // Keep long stacked lists pinned to the viewport when the optional stats row
+    // appears or disappears, just like the board header collapse/expand recalc.
+    hasListStatsRow,
+  ]);
 
   const outerClass = cn(
     "relative flex flex-col overflow-hidden bg-muted/20",
@@ -573,6 +614,14 @@ function ListStackedBody({
       ? { maxHeight: `${bodyMaxHeight}px` }
       : undefined;
 
+  const listStatsRow = hasListStatsRow ? (
+      <ListStatsChipsRow
+        stats={boardStatsDisplay.listStat(listId)}
+        showSpinner={boardStatsDisplay.showChipSpinner}
+        entryToken={boardStatsDisplay.entryToken}
+      />
+    ) : null;
+
   const main = (
     <>
       <ListHeader
@@ -580,6 +629,7 @@ function ListStackedBody({
         list={list}
         dragHandleRef={dragHandleRef}
       />
+      {listStatsRow}
       <div ref={outerRef} className={outerClass} style={outerStyle}>
         {/* Scroll container — FAB lives outside this div so it never scrolls */}
         <div
@@ -788,6 +838,16 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
           listKeyboardHighlight &&
             "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
+        onPointerDown={(e) => {
+          if (!boardNav || isDragging) return;
+          const target = e.target;
+          if (!(target instanceof Element)) return;
+          if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
+            return;
+          }
+          // Blank list chrome should still count as interacting with this list.
+          boardNav.selectList(list.id);
+        }}
       >
         {!isDragging && (
           <ListStackedBody

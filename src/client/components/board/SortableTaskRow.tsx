@@ -20,7 +20,7 @@ export interface SortableTaskRowProps {
   onTitleCommit?: () => void;
   onTitleCancel?: () => void;
   titleEditBusy?: boolean;
-  onCompleteFromCircle?: () => void;
+  onCompleteFromCircle?: (anchorEl: HTMLElement) => void;
 }
 
 // Memoized: only re-renders when its own props change, not on sibling reorders

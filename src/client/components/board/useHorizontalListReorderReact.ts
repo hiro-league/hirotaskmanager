@@ -12,6 +12,7 @@ import {
   type BoardReactDragStartEvent,
 } from "./dndReactOps";
 import { isBoardColumnDragData } from "./dndReactModel";
+import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 
 export function sortedListIds(board: Board): number[] {
   return [...board.lists]
@@ -25,6 +26,7 @@ export function sortedListIds(board: Board): number[] {
  * replacement path without destabilizing the existing runtime yet.
  */
 export function useHorizontalListReorderReact(board: Board) {
+  const boardNav = useBoardKeyboardNavOptional();
   const reorder = useReorderLists();
 
   const serverListIds = useMemo(() => sortedListIds(board), [board]);
@@ -51,6 +53,8 @@ export function useHorizontalListReorderReact(board: Board) {
     if (isBoardColumnDragData(sourceData)) {
       isDraggingRef.current = true;
       setActiveId(sourceData.listId);
+      // A list drag should keep that list current even if it lands back in place.
+      boardNav?.selectList(sourceData.listId);
       lastLoggedTargetIdRef.current = null;
       // Temporary Phase 2 logging so manual testing can confirm provider events
       // are firing before the task-path migration is complete.
@@ -68,13 +72,14 @@ export function useHorizontalListReorderReact(board: Board) {
     if (sourceId != null) {
       isDraggingRef.current = true;
       setActiveId(sourceId);
+      boardNav?.selectList(sourceId);
       lastLoggedTargetIdRef.current = null;
       console.debug("[board-list-dnd-react] dragstart", {
         sourceId: event.operation.source?.id ?? null,
         sourceData,
       });
     }
-  }, []);
+  }, [boardNav]);
 
   const onDragOver = useCallback((event: BoardReactDragOverEvent) => {
     const sourceData = getOperationSourceData(event);

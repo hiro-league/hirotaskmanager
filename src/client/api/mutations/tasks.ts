@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Board, Task } from "../../../shared/models";
-import { boardKeys, fetchJson } from "../queries";
+import { boardKeys, fetchJson, invalidateBoardStatsQueries } from "../queries";
 import { tempNumericId } from "./shared";
 
 const jsonHeaders = { "Content-Type": "application/json" } as const;
@@ -68,6 +68,7 @@ export function useCreateTask() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -134,6 +135,7 @@ export function useUpdateTask() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -189,6 +191,7 @@ export function useReorderTasksInBand() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -221,6 +224,7 @@ export function useDeleteTask() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }

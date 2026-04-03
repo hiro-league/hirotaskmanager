@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import type { Database } from "bun:sqlite";
 import { DEFAULT_BOARD_COLOR, parseBoardColor } from "../../shared/boardColor";
+import type { BoardCliAccess } from "../../shared/boardCliAccess";
+import { normalizeBoardCliAccessColumn } from "../../shared/boardCliAccess";
 import {
   DEFAULT_STATUS_IDS,
   createDefaultTaskGroups,
@@ -54,6 +56,7 @@ function mapIndexRow(row: {
   slug: string;
   name: string;
   emoji: string | null;
+  cli_access: string | null;
   created_at: string;
 }): BoardIndexEntry {
   return {
@@ -64,6 +67,7 @@ function mapIndexRow(row: {
       row.emoji != null && String(row.emoji).trim() !== ""
         ? String(row.emoji).trim()
         : null,
+    cliAccess: normalizeBoardCliAccessColumn(row.cli_access),
     createdAt: row.created_at,
   };
 }
@@ -72,13 +76,14 @@ export async function readBoardIndex(): Promise<BoardIndexEntry[]> {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, slug, name, emoji, created_at FROM board ORDER BY name COLLATE NOCASE",
+      "SELECT id, slug, name, emoji, cli_access, created_at FROM board ORDER BY name COLLATE NOCASE",
     )
     .all() as {
     id: number;
     slug: string;
     name: string;
     emoji: string | null;
+    cli_access: string | null;
     created_at: string;
   }[];
   return rows.map(mapIndexRow);
@@ -92,26 +97,28 @@ export async function entryByIdOrSlug(
   if (/^\d+$/.test(ref)) {
     const row = db
       .query(
-        "SELECT id, slug, name, emoji, created_at FROM board WHERE id = ?",
+        "SELECT id, slug, name, emoji, cli_access, created_at FROM board WHERE id = ?",
       )
       .get(Number(ref)) as {
       id: number;
       slug: string;
       name: string;
       emoji: string | null;
+      cli_access: string | null;
       created_at: string;
     } | null;
     if (row) return mapIndexRow(row);
   }
   const row2 = db
     .query(
-      "SELECT id, slug, name, emoji, created_at FROM board WHERE slug = ?",
+      "SELECT id, slug, name, emoji, cli_access, created_at FROM board WHERE slug = ?",
     )
     .get(ref) as {
     id: number;
     slug: string;
     name: string;
     emoji: string | null;
+    cli_access: string | null;
     created_at: string;
   } | null;
   return row2 ? mapIndexRow(row2) : null;
@@ -121,7 +128,7 @@ export function loadBoard(boardId: number): Board | null {
   const db = getDb();
   const boardRow = db
     .query(
-      "SELECT id, name, slug, emoji, created_at, updated_at FROM board WHERE id = ?",
+      "SELECT id, name, slug, emoji, cli_access, description, created_at, updated_at FROM board WHERE id = ?",
     )
     .get(boardId) as
     | {
@@ -129,6 +136,8 @@ export function loadBoard(boardId: number): Board | null {
         name: string;
         slug: string;
         emoji: string | null;
+        cli_access: string | null;
+        description: string | null;
         created_at: string;
         updated_at: string;
       }
@@ -137,7 +146,7 @@ export function loadBoard(boardId: number): Board | null {
 
   const prefs = db
     .query(
-      "SELECT visible_statuses, status_band_weights, board_layout, board_color, background_image, show_counts FROM board_view_prefs WHERE board_id = ?",
+      "SELECT visible_statuses, status_band_weights, board_layout, board_color, background_image, show_counts, celebration_sounds_muted FROM board_view_prefs WHERE board_id = ?",
     )
     .get(boardId) as
     | {
@@ -147,6 +156,7 @@ export function loadBoard(boardId: number): Board | null {
         board_color: string | null;
         background_image: string | null;
         show_counts: number | null;
+        celebration_sounds_muted: number | null;
       }
     | null;
 
@@ -273,6 +283,8 @@ export function loadBoard(boardId: number): Board | null {
       boardRow.emoji != null && String(boardRow.emoji).trim() !== ""
         ? String(boardRow.emoji).trim()
         : null,
+    description: boardRow.description ?? "",
+    cliAccess: normalizeBoardCliAccessColumn(boardRow.cli_access),
     backgroundImage: prefs?.background_image ?? undefined,
     boardColor: parseBoardColor(prefs?.board_color ?? undefined),
     taskGroups,
@@ -283,7 +295,11 @@ export function loadBoard(boardId: number): Board | null {
       prefs?.board_layout === "lanes" || prefs?.board_layout === "stacked"
         ? prefs.board_layout
         : undefined,
-    showCounts: prefs ? Boolean(prefs.show_counts) : true,
+    // Default hidden when no prefs row; new boards insert `show_counts = 0`.
+    showStats: prefs ? Boolean(prefs.show_counts) : false,
+    muteCelebrationSounds: prefs
+      ? Boolean(prefs.celebration_sounds_muted)
+      : false,
     lists,
     tasks,
     createdAt: boardRow.created_at,
@@ -356,8 +372,8 @@ export async function createBoardWithDefaults(
     db.run(
       `INSERT INTO board_view_prefs
          (board_id, visible_statuses, status_band_weights,
-          board_layout, board_color, background_image, show_counts)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          board_layout, board_color, background_image, show_counts, celebration_sounds_muted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         JSON.stringify([...DEFAULT_STATUS_IDS]),
@@ -366,7 +382,9 @@ export async function createBoardWithDefaults(
         // Persist explicit default so DB matches client `DEFAULT_BOARD_COLOR` (neutral stone).
         DEFAULT_BOARD_COLOR,
         null,
-        1,
+        // Stats chips off by default (product: board-level T/O/C hidden until user opts in).
+        0,
+        0,
       ],
     );
     return id;
@@ -545,16 +563,25 @@ function applyTaskGroupChanges(
 }
 
 /**
- * Patch board name and/or emoji. Omitted keys leave those fields unchanged.
- * (Phase 4 emoji icons: same PATCH semantics as lists — omit field to preserve, null clears.)
+ * Patch board metadata and/or theme color. Omitted keys leave those fields unchanged.
+ * `boardColor` updates `board_view_prefs` (same as PATCH /view-prefs).
  */
 export async function patchBoard(
   boardId: number,
-  patch: { name?: string; emoji?: string | null },
+  patch: {
+    name?: string;
+    emoji?: string | null;
+    cliAccess?: BoardCliAccess;
+    description?: string | null;
+    boardColor?: Board["boardColor"];
+  },
 ): Promise<Board | null> {
   const hasName = "name" in patch;
   const hasEmoji = "emoji" in patch;
-  if (!hasName && !hasEmoji) return null;
+  const hasCli = "cliAccess" in patch;
+  const hasDesc = "description" in patch;
+  const hasColor = "boardColor" in patch;
+  if (!hasName && !hasEmoji && !hasCli && !hasDesc && !hasColor) return null;
 
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
@@ -578,19 +605,38 @@ export async function patchBoard(
     nextEmoji = patch.emoji ?? null;
   }
 
-  const unchanged =
-    (!hasName || nextName === existing.name) &&
-    (!hasEmoji || (nextEmoji ?? null) === (existing.emoji ?? null)) &&
-    (!hasName || nextSlug === (existing.slug ?? ""));
-  if (unchanged) return existing;
+  const nextCli: BoardCliAccess = hasCli
+    ? patch.cliAccess!
+    : (existing.cliAccess ?? "none");
+
+  const nextDesc = hasDesc
+    ? (patch.description ?? "").trim()
+    : (existing.description ?? "");
+
+  const colorChanged =
+    hasColor && (patch.boardColor ?? null) !== (existing.boardColor ?? null);
+
+  const metaChanged =
+    (hasName && nextName !== existing.name) ||
+    (hasEmoji && (nextEmoji ?? null) !== (existing.emoji ?? null)) ||
+    (hasCli && nextCli !== (existing.cliAccess ?? "none")) ||
+    (hasDesc && nextDesc !== (existing.description ?? ""));
+
+  if (!metaChanged && !colorChanged) return existing;
 
   const now = new Date().toISOString();
-  withTransaction(db, () => {
-    db.run(
-      "UPDATE board SET name = ?, slug = ?, emoji = ?, updated_at = ? WHERE id = ?",
-      [nextName, nextSlug, nextEmoji, now, boardId],
-    );
-  });
+  if (metaChanged) {
+    withTransaction(db, () => {
+      db.run(
+        "UPDATE board SET name = ?, slug = ?, emoji = ?, cli_access = ?, description = ?, updated_at = ? WHERE id = ?",
+        [nextName, nextSlug, nextEmoji, nextCli, nextDesc, now, boardId],
+      );
+    });
+  }
+
+  if (colorChanged) {
+    return patchBoardViewPrefs(boardId, { boardColor: patch.boardColor });
+  }
   return loadBoard(boardId);
 }
 
@@ -602,7 +648,8 @@ export function patchBoardViewPrefs(
     boardLayout?: Board["boardLayout"];
     boardColor?: Board["boardColor"];
     backgroundImage?: string | null;
-    showCounts?: boolean;
+    showStats?: boolean;
+    muteCelebrationSounds?: boolean;
   },
 ): Board | null {
   const db = getDb();
@@ -610,7 +657,7 @@ export function patchBoardViewPrefs(
 
   const row = db
     .query(
-      "SELECT visible_statuses, status_band_weights, board_layout, board_color, background_image, show_counts FROM board_view_prefs WHERE board_id = ?",
+      "SELECT visible_statuses, status_band_weights, board_layout, board_color, background_image, show_counts, celebration_sounds_muted FROM board_view_prefs WHERE board_id = ?",
     )
     .get(boardId) as {
     visible_statuses: string | null;
@@ -619,6 +666,7 @@ export function patchBoardViewPrefs(
     board_color: string | null;
     background_image: string | null;
     show_counts: number | null;
+    celebration_sounds_muted: number | null;
   } | null;
 
   if (!row) return null;
@@ -643,10 +691,14 @@ export function patchBoardViewPrefs(
     patch.backgroundImage !== undefined
       ? patch.backgroundImage
       : row.background_image;
-  const showCounts =
-    patch.showCounts !== undefined
-      ? patch.showCounts
+  const showStats =
+    patch.showStats !== undefined
+      ? patch.showStats
       : Boolean(row.show_counts);
+  const muteCelebrationSounds =
+    patch.muteCelebrationSounds !== undefined
+      ? patch.muteCelebrationSounds
+      : Boolean(row.celebration_sounds_muted);
 
   const view = normalizeBoardViewState(db, nextVis, nextWeights);
   nextVis = view.visibleStatuses;
@@ -657,8 +709,8 @@ export function patchBoardViewPrefs(
     db.run(
       `INSERT OR REPLACE INTO board_view_prefs
          (board_id, visible_statuses, status_band_weights,
-          board_layout, board_color, background_image, show_counts)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          board_layout, board_color, background_image, show_counts, celebration_sounds_muted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         boardId,
         JSON.stringify(nextVis),
@@ -666,7 +718,8 @@ export function patchBoardViewPrefs(
         layout ?? null,
         boardColor ?? null,
         bg ?? null,
-        showCounts ? 1 : 0,
+        showStats ? 1 : 0,
+        muteCelebrationSounds ? 1 : 0,
       ],
     );
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);

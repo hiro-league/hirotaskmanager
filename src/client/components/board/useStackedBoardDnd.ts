@@ -14,9 +14,9 @@ import {
   stackedListContainerId,
 } from "./dndIds";
 import {
+  type BoardTaskFilterState,
   listTasksMergedSorted,
   visibleStatusesForBoard,
-  type TaskDateFilterResolved,
 } from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
@@ -27,24 +27,12 @@ import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 function buildStackedTaskContainerMap(
   board: Board,
   listIds: number[],
-  visibleStatuses: string[],
-  activeGroup: string,
-  activePriorityIds: string[] | null,
-  workflowOrder: readonly string[],
-  dateFilter: TaskDateFilterResolved | null,
+  filter: BoardTaskFilterState,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
     const key = stackedListContainerId(listId);
-    const tasks = listTasksMergedSorted(
-      board,
-      listId,
-      visibleStatuses,
-      activeGroup,
-      activePriorityIds,
-      workflowOrder,
-      dateFilter,
-    );
+    const tasks = listTasksMergedSorted(board, listId, filter);
     out[key] = tasks.map((t) => sortableTaskId(t.id));
   }
   return out;
@@ -176,26 +164,31 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
   const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}|${dateSig}`;
 
+  const taskFilter = useMemo<BoardTaskFilterState>(
+    () => ({
+      // Shared filter state keeps stacked DnD aligned with the rendered board and nav.
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilter: dateFilterResolved,
+    }),
+    [
+      visibleStatuses,
+      workflowOrder,
+      activeGroup,
+      activePriorityIds,
+      dateFilterResolved,
+    ],
+  );
+
   const serverTaskMap = useMemo(
-    () =>
-      buildStackedTaskContainerMap(
-        board,
-        listIds,
-        visibleStatuses,
-        activeGroup,
-        activePriorityIds,
-        workflowOrder,
-        dateFilterResolved,
-      ),
+    () => buildStackedTaskContainerMap(board, listIds, taskFilter),
     [
       containerMapDeps,
       board,
       listIds,
-      visibleStatuses,
-      activeGroup,
-      activePriorityIds,
-      workflowOrder,
-      dateFilterResolved,
+      taskFilter,
     ],
   );
 

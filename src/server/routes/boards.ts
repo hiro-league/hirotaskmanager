@@ -1,6 +1,12 @@
 import { Hono } from "hono";
+import { parseBoardCliAccess } from "../../shared/boardCliAccess";
 import { parseEmojiField } from "../../shared/emojiField";
 import type { Board, GroupDefinition, TaskPriorityDefinition } from "../../shared/models";
+import {
+  closedStatusIdsFromStatuses,
+  computeBoardStats,
+  parseBoardStatsFilter,
+} from "../../shared/boardStats";
 import {
   createBoardWithDefaults,
   createListOnBoard,
@@ -10,6 +16,7 @@ import {
   deleteTaskOnBoard,
   entryByIdOrSlug,
   generateSlug,
+  listStatuses,
   loadBoard,
   patchBoard,
   patchBoardTaskPriorities,
@@ -21,6 +28,7 @@ import {
   reorderListsOnBoard,
   reorderTasksInBand,
 } from "../storage";
+import { cliBoardAccessError } from "../cliBoardGuard";
 
 export const boardsRoute = new Hono();
 
@@ -65,6 +73,8 @@ boardsRoute.post("/", async (c) => {
 boardsRoute.patch("/:id/view-prefs", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
@@ -87,8 +97,14 @@ boardsRoute.patch("/:id/view-prefs", async (c) => {
   if (typeof body.backgroundImage === "string" || body.backgroundImage === null) {
     patch.backgroundImage = body.backgroundImage as string | null;
   }
-  if (typeof body.showCounts === "boolean") {
-    patch.showCounts = body.showCounts;
+  // Prefer `showStats`; accept legacy `showCounts` for older clients.
+  if (typeof body.showStats === "boolean") {
+    patch.showStats = body.showStats;
+  } else if (typeof (body as { showCounts?: unknown }).showCounts === "boolean") {
+    patch.showStats = (body as { showCounts: boolean }).showCounts;
+  }
+  if (typeof body.muteCelebrationSounds === "boolean") {
+    patch.muteCelebrationSounds = body.muteCelebrationSounds;
   }
   const saved = patchBoardViewPrefs(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
@@ -98,6 +114,8 @@ boardsRoute.patch("/:id/view-prefs", async (c) => {
 boardsRoute.patch("/:id/groups", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: { taskGroups?: unknown };
   try {
     body = (await c.req.json()) as { taskGroups?: unknown };
@@ -150,6 +168,8 @@ boardsRoute.patch("/:id/groups", async (c) => {
 boardsRoute.patch("/:id/priorities", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: { taskPriorities?: unknown };
   try {
     body = (await c.req.json()) as { taskPriorities?: unknown };
@@ -190,6 +210,8 @@ boardsRoute.patch("/:id/priorities", async (c) => {
 boardsRoute.post("/:id/lists", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
     const text = await c.req.text();
@@ -223,6 +245,8 @@ boardsRoute.post("/:id/lists", async (c) => {
 boardsRoute.patch("/:id/lists/:listId", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   const listId = Number(c.req.param("listId"));
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
@@ -264,6 +288,8 @@ boardsRoute.patch("/:id/lists/:listId", async (c) => {
 boardsRoute.delete("/:id/lists/:listId", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   const listId = Number(c.req.param("listId"));
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
@@ -276,6 +302,8 @@ boardsRoute.delete("/:id/lists/:listId", async (c) => {
 boardsRoute.put("/:id/lists/order", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: { orderedListIds?: unknown };
   try {
     body = (await c.req.json()) as { orderedListIds?: unknown };
@@ -297,6 +325,8 @@ boardsRoute.put("/:id/lists/order", async (c) => {
 boardsRoute.post("/:id/tasks", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
@@ -350,6 +380,8 @@ boardsRoute.post("/:id/tasks", async (c) => {
 boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   const taskId = Number(c.req.param("taskId"));
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
@@ -396,6 +428,8 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
 boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   const taskId = Number(c.req.param("taskId"));
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
@@ -408,6 +442,8 @@ boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
 boardsRoute.put("/:id/tasks/reorder", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: {
     listId?: unknown;
     status?: unknown;
@@ -438,16 +474,36 @@ boardsRoute.put("/:id/tasks/reorder", async (c) => {
 boardsRoute.patch("/:id", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  if (!("name" in body) && !("emoji" in body)) {
-    return c.json({ error: "name or emoji required" }, 400);
+  if (
+    !("name" in body) &&
+    !("emoji" in body) &&
+    !("cliAccess" in body) &&
+    !("description" in body) &&
+    !("boardColor" in body)
+  ) {
+    return c.json(
+      {
+        error:
+          "At least one of name, emoji, cliAccess, description, or boardColor is required",
+      },
+      400,
+    );
   }
-  const patch: { name?: string; emoji?: string | null } = {};
+  const patch: {
+    name?: string;
+    emoji?: string | null;
+    cliAccess?: Board["cliAccess"];
+    description?: string | null;
+    boardColor?: Board["boardColor"];
+  } = {};
   if ("name" in body) {
     if (typeof body.name !== "string") {
       return c.json({ error: "name must be a string" }, 400);
@@ -472,15 +528,54 @@ boardsRoute.patch("/:id", async (c) => {
       return c.json({ error: "Invalid emoji" }, 400);
     }
   }
+  if ("cliAccess" in body) {
+    const parsed = parseBoardCliAccess(body.cliAccess);
+    if (!parsed) {
+      return c.json({ error: "Invalid cliAccess" }, 400);
+    }
+    patch.cliAccess = parsed;
+  }
+  if ("description" in body) {
+    if (body.description !== null && typeof body.description !== "string") {
+      return c.json({ error: "description must be a string or null" }, 400);
+    }
+    patch.description =
+      body.description === null ? "" : String(body.description);
+  }
+  if ("boardColor" in body) {
+    if (typeof body.boardColor === "string" || body.boardColor === null) {
+      patch.boardColor = body.boardColor as Board["boardColor"];
+    } else {
+      return c.json({ error: "Invalid boardColor" }, 400);
+    }
+  }
   const saved = await patchBoard(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
   return c.json(saved);
+});
+
+// Registered before `GET /:id` so `:id` does not capture the literal `stats`.
+boardsRoute.get("/:id/stats", async (c) => {
+  const param = c.req.param("id");
+  const entry = await entryByIdOrSlug(param);
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "read");
+  if (blocked) return blocked;
+  const board = loadBoard(entry.id);
+  if (!board) return c.json({ error: "Board not found" }, 404);
+  const statuses = listStatuses();
+  const filter = parseBoardStatsFilter(new URL(c.req.url).searchParams);
+  const closedIds = closedStatusIdsFromStatuses(statuses);
+  const stats = computeBoardStats(board, closedIds, filter);
+  return c.json(stats);
 });
 
 boardsRoute.get("/:id", async (c) => {
   const param = c.req.param("id");
   const entry = await entryByIdOrSlug(param);
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "read");
+  if (blocked) return blocked;
   const board = loadBoard(entry.id);
   if (!board) return c.json({ error: "Board not found" }, 404);
   return c.json(board);
@@ -490,6 +585,8 @@ boardsRoute.delete("/:id", async (c) => {
   const param = c.req.param("id");
   const entry = await entryByIdOrSlug(param);
   if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
   if (!loadBoard(entry.id)) return c.json({ error: "Board not found" }, 404);
   await deleteBoardById(entry.id);
   return c.body(null, 204);

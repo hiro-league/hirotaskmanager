@@ -1,4 +1,7 @@
 import type { BoardColorPreset } from "./boardColor";
+import type { BoardCliAccess } from "./boardCliAccess";
+
+export type { BoardCliAccess } from "./boardCliAccess";
 
 /** Workflow status row from `GET /api/statuses` / `status` table. */
 export interface Status {
@@ -175,6 +178,8 @@ export interface BoardIndexEntry {
   name: string;
   /** Optional emoji before the board name; not indexed for search. */
   emoji?: string | null;
+  /** Access level for hirotm CLI (`X-TaskManager-Client`); default `none`. */
+  cliAccess: BoardCliAccess;
   createdAt: string;
 }
 
@@ -203,6 +208,10 @@ export interface Board {
   name: string;
   /** Optional emoji before the board name; not indexed for search. */
   emoji?: string | null;
+  /** Plain-text notes for humans; not indexed for search yet. */
+  description?: string;
+  /** Access level for hirotm CLI; default `none`. */
+  cliAccess: BoardCliAccess;
   backgroundImage?: string;
   /** Canvas color preset for the main column area; omitted reads as default (cyan) in UI. */
   boardColor?: BoardColorPreset;
@@ -215,7 +224,10 @@ export interface Board {
   statusBandWeights?: number[];
   /** How lists are laid out in the board body. Defaults to stacked when omitted; use `"lanes"` for status bands. */
   boardLayout?: BoardLayout;
-  showCounts: boolean;
+  /** When true, board and list T/O/C chips are shown (persisted in `board_view_prefs.show_counts`). */
+  showStats: boolean;
+  /** When true, task-completion celebration sounds are not played (persisted in `board_view_prefs.celebration_sounds_muted`). */
+  muteCelebrationSounds: boolean;
   lists: List[];
   tasks: Task[];
   createdAt: string;

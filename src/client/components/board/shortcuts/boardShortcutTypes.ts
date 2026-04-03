@@ -40,6 +40,8 @@ export interface BoardShortcutActions {
   addListAfterHighlight: (board: Board) => void;
   /** C — complete highlighted task if not already closed. */
   completeHighlightedTask: (board: Board) => void;
+  /** N — show/hide board task statistics (T / O / C chips). */
+  toggleBoardStats: (board: Board) => void;
   /** R — reopen highlighted task to canonical open if closed. */
   reopenHighlightedTask: (board: Board) => void;
 }
@@ -60,7 +62,8 @@ export const SHORTCUT_HELP_TABS: {
   {
     id: "navigation",
     label: "Navigation",
-    description: "Search, filters panel, and moving the highlight.",
+    description:
+      "Search, filters panel, moving the highlight, and scrolling the board view.",
   },
   {
     id: "general",

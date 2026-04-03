@@ -1,6 +1,6 @@
 ---
 name: hirotm-cli
-description: Use the hirotm CLI to inspect TaskManager boards, tasks, lists, statuses, and FTS search hits through the local HTTP API. Use when working on TaskManager data, validating live board state, or when the user asks about boards, tasks, lists, statuses, search, or the local server.
+description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks, and lists, list workflow statuses, and run FTS search through the local HTTP API. Use when working on TaskManager data, validating live board state, or when the user asks about boards, tasks, lists, statuses, search, or the local server.
 ---
 
 # hirotm CLI
@@ -16,7 +16,7 @@ Use this skill when:
 
 ## Core Rules
 
-- Use `hirotm` instead of direct SQLite access for normal TaskManager operations.
+- Use `hirotm` instead of direct SQLite access for normal TaskManager operations (reads and writes).
 - Prefer CLI JSON output as the source of truth for current board/task data.
 - Do not write SQL or edit database files unless the user explicitly asks for database-level work.
 - If a query command fails with `Server not reachable`, run the exact `hirotm start ...` hint from the error output and retry.
@@ -27,6 +27,11 @@ Use this skill when:
 hirotm status
 hirotm boards list
 hirotm boards show <id-or-slug>
+hirotm boards add [name] [--emoji <text>]
+hirotm lists add --board <id-or-slug> [name] [--emoji <text>]
+hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks update --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm statuses list
 hirotm search "<query>"
 hirotm search "<query>" --board <id-or-slug>

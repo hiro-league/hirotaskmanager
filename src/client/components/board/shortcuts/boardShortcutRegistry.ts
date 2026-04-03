@@ -187,6 +187,21 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     },
   },
   {
+    id: "wheel-pan-board-horizontal",
+    scope: "board",
+    helpTab: "navigation",
+    helpOrder: 15,
+    helpContext:
+      "Anywhere without vertical scroll",
+    keys: ["Scroll wheel"],
+    description:
+      "Scroll Across the Lists",
+    helpOnly: true,
+    // Help dialog only — implemented via wheel listeners on the board surface and header.
+    matchKey: (_key: string) => false,
+    run: () => {},
+  },
+  {
     id: "move-up",
     scope: "board",
     helpTab: "navigation",
@@ -383,6 +398,20 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     matchKey: letterKey("l"),
     run: (board, actions) => {
       actions.addListAfterHighlight(board);
+    },
+  },
+  {
+    id: "toggle-board-stats",
+    scope: "board",
+    helpTab: "general",
+    helpOrder: 1.25,
+    helpContext: "Board focused (not typing in a field)",
+    keys: ["N"],
+    description: "Show/hide board statistics",
+    preventDefault: true,
+    matchKey: letterKey("n"),
+    run: (board, actions) => {
+      actions.toggleBoardStats(board);
     },
   },
   {

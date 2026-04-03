@@ -52,6 +52,8 @@ export function searchTasks(options: {
   limit?: number;
   /** Default true: last token gets a `*` prefix suffix for partial matches. */
   prefixFinalToken?: boolean;
+  /** When true, omit hits on boards whose CLI access is `none` (hirotm global search). */
+  excludeCliNoneBoards?: boolean;
 }): SearchHit[] {
   const db = getDb();
   const matchQuery = buildFtsMatchQuery(options.q, {
@@ -64,7 +66,9 @@ export function searchTasks(options: {
     Math.max(1, options.limit ?? DEFAULT_LIMIT),
   );
 
-  return runSearch(db, matchQuery, options.boardId, limit);
+  return runSearch(db, matchQuery, options.boardId, limit, {
+    excludeCliNoneBoards: options.excludeCliNoneBoards === true,
+  });
 }
 
 function runSearch(
@@ -72,6 +76,7 @@ function runSearch(
   matchQuery: string,
   boardId: number | undefined,
   limit: number,
+  opts: { excludeCliNoneBoards: boolean },
 ): SearchHit[] {
   const bm25Expr = `bm25(task_search, ${BM25_W.join(", ")})`;
   const snipCols = `
@@ -80,6 +85,7 @@ function runSearch(
            snippet(task_search, 4, '«', '»', ' … ', 28) AS snip_list,
            snippet(task_search, 5, '«', '»', ' … ', 28) AS snip_group,
            snippet(task_search, 6, '«', '»', ' … ', 20) AS snip_status`;
+  const cliFilter = opts.excludeCliNoneBoards ? "AND b.cli_access != 'none'" : "";
 
   if (boardId !== undefined) {
     const rows = db
@@ -97,7 +103,7 @@ function runSearch(
          INNER JOIN board AS b ON b.id = task_search.board_id
          INNER JOIN task AS t ON t.id = task_search.task_id
          INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-         WHERE task_search MATCH ? AND task_search.board_id = ?
+         WHERE task_search MATCH ? AND task_search.board_id = ? ${cliFilter}
          ORDER BY score
          LIMIT ?`,
       )
@@ -120,7 +126,7 @@ function runSearch(
        INNER JOIN board AS b ON b.id = task_search.board_id
        INNER JOIN task AS t ON t.id = task_search.task_id
        INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-       WHERE task_search MATCH ?
+       WHERE task_search MATCH ? ${cliFilter}
        ORDER BY score
        LIMIT ?`,
     )

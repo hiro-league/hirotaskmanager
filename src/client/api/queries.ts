@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+import {
+  boardStatsFilterSignature,
+  buildBoardStatsSearchParams,
+  type BoardStatsFilter,
+  type BoardStatsResponse,
+} from "../../shared/boardStats";
 import {
   DEFAULT_STATUS_IDS,
   statusIdsInWorkflowOrder,
@@ -84,3 +90,50 @@ export function useStatusWorkflowOrder(): readonly string[] {
     [statuses],
   );
 }
+
+export async function fetchBoardStats(
+  boardId: number,
+  filter: BoardStatsFilter,
+): Promise<BoardStatsResponse> {
+  const q = buildBoardStatsSearchParams(filter).toString();
+  return fetchJson<BoardStatsResponse>(
+    `/api/boards/${boardId}/stats${q ? `?${q}` : ""}`,
+  );
+}
+
+/** Invalidate every stats query for a board (any filter); call after task/list/board mutations. */
+export function invalidateBoardStatsQueries(
+  qc: QueryClient,
+  boardId: number,
+): void {
+  void qc.invalidateQueries({
+    queryKey: [...boardKeys.all, boardId, "stats"],
+  });
+}
+
+/**
+ * Canonical server stats for the board page; key is board id + filter signature (not `updatedAt`,
+ * so optimistic board cache bumps do not churn this query — mutations invalidate stats instead).
+ * Uses previous data while filters change so chips stay stable with a subtle in-chip loading state.
+ */
+export function useBoardStats(
+  boardId: number | null,
+  filter: BoardStatsFilter | null,
+  opts: { enabled: boolean },
+) {
+  const filterSig = filter ? boardStatsFilterSignature(filter) : "";
+
+  return useQuery({
+    queryKey: [...boardKeys.all, boardId, "stats", filterSig],
+    queryFn: () => {
+      if (boardId == null || filter == null) {
+        throw new Error("useBoardStats: missing board id or filter");
+      }
+      return fetchBoardStats(boardId, filter);
+    },
+    enabled: boardId != null && filter != null && opts.enabled,
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export type { BoardStatsFilter, BoardStatsResponse };

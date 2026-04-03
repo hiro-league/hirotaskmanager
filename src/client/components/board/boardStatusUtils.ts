@@ -1,71 +1,30 @@
+import { DEFAULT_STATUS_IDS, type Board, type Task } from "../../../shared/models";
 import {
-  ALL_TASK_GROUPS,
-  DEFAULT_STATUS_IDS,
-  type Board,
-  type Task,
-} from "../../../shared/models";
+  taskMatchesBoardFilter as taskMatchesBoardFilterShared,
+  visibleStatusesForBoard as visibleStatusesForBoardShared,
+  type TaskDateFilterResolved,
+} from "../../../shared/boardFilters";
 
-export type ActiveTaskPriorityIds = string[] | null;
+export type {
+  ActiveTaskPriorityIds,
+  TaskDateFilterMode,
+  TaskDateFilterResolved,
+} from "../../../shared/boardFilters";
+export {
+  isValidYmd,
+  localCalendarDateKeyFromIso,
+  taskMatchesDateFilter,
+  todayDateKeyLocal,
+} from "../../../shared/boardFilters";
 
-/** Which timestamps participate in the inclusive calendar-day range. */
-export type TaskDateFilterMode = "opened" | "closed" | "any";
+export { taskMatchesPriorityFilter } from "../../../shared/boardFilters";
 
-/** Normalized active filter (store may hold invalid ranges until resolved). */
-export interface TaskDateFilterResolved {
-  mode: TaskDateFilterMode;
-  /** Local calendar days as `YYYY-MM-DD`, inclusive. */
-  startDate: string;
-  endDate: string;
-}
-
-/** Local calendar day for an ISO instant (for inclusive date-only filtering). */
-export function localCalendarDateKeyFromIso(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-export function todayDateKeyLocal(): string {
-  return localCalendarDateKeyFromIso(new Date().toISOString());
-}
-
-export function isValidYmd(s: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const t = new Date(`${s}T12:00:00`).getTime();
-  return Number.isFinite(t);
-}
-
-function dateKeyInInclusiveRange(key: string, start: string, end: string): boolean {
-  return key >= start && key <= end;
-}
-
-/**
- * Opened: `createdAt` in range. Closed: `closedAt` in range (no close → no match).
- * Any: `createdAt` in range OR `closedAt` in range.
- */
-export function taskMatchesDateFilter(
-  task: Task,
-  filter: TaskDateFilterResolved,
-): boolean {
-  const { mode, startDate, endDate } = filter;
-  const createdKey = localCalendarDateKeyFromIso(task.createdAt);
-  const closedKey =
-    task.closedAt != null ? localCalendarDateKeyFromIso(task.closedAt) : null;
-
-  if (mode === "opened") {
-    return dateKeyInInclusiveRange(createdKey, startDate, endDate);
-  }
-  if (mode === "closed") {
-    if (closedKey == null) return false;
-    return dateKeyInInclusiveRange(closedKey, startDate, endDate);
-  }
-  if (dateKeyInInclusiveRange(createdKey, startDate, endDate)) return true;
-  if (closedKey != null && dateKeyInInclusiveRange(closedKey, startDate, endDate)) {
-    return true;
-  }
-  return false;
+export interface BoardTaskFilterState {
+  visibleStatuses: readonly string[];
+  workflowOrder: readonly string[];
+  activeGroup: string;
+  activePriorityIds: import("../../../shared/boardFilters").ActiveTaskPriorityIds;
+  dateFilter: TaskDateFilterResolved | null;
 }
 
 /** Statuses shown on the board, in workflow order (`GET /api/statuses`). */
@@ -73,19 +32,14 @@ export function visibleStatusesForBoard(
   board: Board,
   workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): string[] {
-  const valid = new Set(workflowOrder);
-  const vis = board.visibleStatuses.filter((s) => valid.has(s));
-  if (vis.length > 0) {
-    return workflowOrder.filter((s) => vis.includes(s));
-  }
-  return [...workflowOrder];
+  return visibleStatusesForBoardShared(board, workflowOrder);
 }
 
 export function bandWeightsForBoard(
   board: Board,
   workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): number[] {
-  const vis = visibleStatusesForBoard(board, workflowOrder);
+  const vis = visibleStatusesForBoardShared(board, workflowOrder);
   const stored = board.statusBandWeights;
   if (
     stored &&
@@ -120,17 +74,34 @@ function statusOrderIndex(
   return i >= 0 ? i : 0;
 }
 
-/** `null` = All priorities, `[]` = explicit empty filter, otherwise selected ids. */
-export function taskMatchesPriorityFilter(
+// Re-export shared implementation under the name used by board components.
+export function taskMatchesBoardFilter(
   task: Task,
-  activePriorityIds: ActiveTaskPriorityIds | undefined,
+  filter: Pick<
+    BoardTaskFilterState,
+    "activeGroup" | "activePriorityIds" | "dateFilter"
+  >,
 ): boolean {
-  if (activePriorityIds == null) return true;
-  if (activePriorityIds.length === 0) return false;
-  return (
-    task.priorityId != null &&
-    activePriorityIds.includes(String(task.priorityId))
-  );
+  return taskMatchesBoardFilterShared(task, filter);
+}
+
+export function listStatusTasksSorted(
+  board: Board,
+  listId: number,
+  status: string,
+  filter: Pick<
+    BoardTaskFilterState,
+    "activeGroup" | "activePriorityIds" | "dateFilter"
+  >,
+): Task[] {
+  return board.tasks
+    .filter(
+      (task) =>
+        task.listId === listId &&
+        task.status === status &&
+        taskMatchesBoardFilterShared(task, filter),
+    )
+    .sort((a, b) => a.order - b.order);
 }
 
 /**
@@ -140,27 +111,33 @@ export function taskMatchesPriorityFilter(
 export function listTasksMergedSorted(
   board: Board,
   listId: number,
-  visibleStatuses: string[],
-  activeGroup: string,
-  activePriorityIds: ActiveTaskPriorityIds,
-  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
-  dateFilter: TaskDateFilterResolved | null = null,
+  filter: BoardTaskFilterState,
 ): Task[] {
-  const vis = new Set(visibleStatuses);
-  let tasks = board.tasks.filter(
-    (t) => t.listId === listId && vis.has(t.status),
+  const vis = new Set(filter.visibleStatuses);
+  const tasks = board.tasks.filter(
+    (task) =>
+      task.listId === listId &&
+      vis.has(task.status) &&
+      taskMatchesBoardFilterShared(task, filter),
   );
-  if (activeGroup !== ALL_TASK_GROUPS) {
-    tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
-  }
-  tasks = tasks.filter((t) => taskMatchesPriorityFilter(t, activePriorityIds));
-  if (dateFilter != null) {
-    tasks = tasks.filter((t) => taskMatchesDateFilter(t, dateFilter));
-  }
   return [...tasks].sort((a, b) => {
-    const da = statusOrderIndex(a.status, workflowOrder);
-    const db = statusOrderIndex(b.status, workflowOrder);
+    const da = statusOrderIndex(a.status, filter.workflowOrder);
+    const db = statusOrderIndex(b.status, filter.workflowOrder);
     if (da !== db) return da - db;
     return a.order - b.order;
   });
+}
+
+export function listColumnTasksSorted(
+  board: Board,
+  layout: "lanes" | "stacked",
+  listId: number,
+  filter: BoardTaskFilterState,
+): Task[] {
+  if (layout === "stacked") {
+    return listTasksMergedSorted(board, listId, filter);
+  }
+  return filter.visibleStatuses.flatMap((status) =>
+    listStatusTasksSorted(board, listId, status, filter),
+  );
 }

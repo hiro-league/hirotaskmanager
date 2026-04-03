@@ -1,5 +1,7 @@
 import { memo, useLayoutEffect, useRef, type RefCallback } from "react";
 import { listDisplayName, type Board, type List } from "../../../shared/models";
+import { ListStatsChipsRow } from "@/components/board/BoardStatsChips";
+import { useBoardStatsDisplayOptional } from "@/components/board/BoardStatsContext";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
@@ -32,6 +34,7 @@ function ListColumnBody({
 }: ListColumnBodyProps) {
   const bandsRef = useRef<HTMLDivElement>(null);
   const bandHeightsRef = useRef<number[]>([]);
+  const boardStatsDisplay = useBoardStatsDisplayOptional();
 
   // Snapshot band heights after every non-dragging paint so we can freeze
   // them the moment a task drag begins, preventing flex-grow reflow from
@@ -44,6 +47,17 @@ function ListColumnBody({
     }
   });
 
+  const listStatsRow =
+    board.showStats &&
+    boardStatsDisplay != null &&
+    !boardStatsDisplay.statsError ? (
+      <ListStatsChipsRow
+        stats={boardStatsDisplay.listStat(listId)}
+        showSpinner={boardStatsDisplay.showChipSpinner}
+        entryToken={boardStatsDisplay.entryToken}
+      />
+    ) : null;
+
   return (
     <>
       <ListHeader
@@ -51,6 +65,7 @@ function ListColumnBody({
         list={list}
         dragHandleRef={dragHandleRef}
       />
+      {listStatsRow}
       <div ref={bandsRef} className="flex min-h-0 flex-1 flex-col bg-transparent">
         {visibleStatuses.map((status, i) => {
           const containerId = laneBandContainerId(listId, status);
@@ -205,6 +220,16 @@ export const BoardListColumn = memo(function BoardListColumn({
           listKeyboardHighlight &&
             "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
+        onPointerDown={(e) => {
+          if (!boardNav || isDragging) return;
+          const target = e.target;
+          if (!(target instanceof Element)) return;
+          if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
+            return;
+          }
+          // Blank list chrome should still count as interacting with this list.
+          boardNav.selectList(list.id);
+        }}
       >
         {!isDragging && (
           <ListColumnBody

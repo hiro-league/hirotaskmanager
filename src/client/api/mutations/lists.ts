@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Board, List } from "../../../shared/models";
-import { boardKeys, fetchJson } from "../queries";
+import { boardKeys, fetchJson, invalidateBoardStatsQueries } from "../queries";
 import { tempNumericId } from "./shared";
 
 const jsonHeaders = { "Content-Type": "application/json" } as const;
@@ -49,6 +49,7 @@ export function useCreateList() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -97,6 +98,7 @@ export function usePatchList() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -129,6 +131,7 @@ export function useDeleteList() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }
@@ -176,6 +179,7 @@ export function useReorderLists() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateBoardStatsQueries(qc, data.id);
     },
   });
 }

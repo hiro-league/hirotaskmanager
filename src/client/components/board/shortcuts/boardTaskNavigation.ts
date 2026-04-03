@@ -1,11 +1,8 @@
-import { ALL_TASK_GROUPS, type Board } from "../../../../shared/models";
 import {
-  listTasksMergedSorted,
-  taskMatchesDateFilter,
-  taskMatchesPriorityFilter,
-  type ActiveTaskPriorityIds,
-  type TaskDateFilterResolved,
+  listColumnTasksSorted,
+  type BoardTaskFilterState,
 } from "../boardStatusUtils";
+import type { Board } from "../../../../shared/models";
 
 export type BoardLayoutNav = "lanes" | "stacked";
 
@@ -17,48 +14,15 @@ export function buildListColumnTaskIds(
   board: Board,
   layout: BoardLayoutNav,
   listIdsInOrder: number[],
-  visibleStatuses: string[],
-  workflowOrder: readonly string[],
-  activeGroup: string,
-  activePriorityIds: ActiveTaskPriorityIds,
-  dateFilter: TaskDateFilterResolved | null = null,
+  filter: BoardTaskFilterState,
 ): Map<number, number[]> {
   const map = new Map<number, number[]>();
   for (const listId of listIdsInOrder) {
-    if (layout === "stacked") {
-      const tasks = listTasksMergedSorted(
-        board,
-        listId,
-        visibleStatuses,
-        activeGroup,
-        activePriorityIds,
-        workflowOrder,
-        dateFilter,
-      );
-      map.set(
-        listId,
-        tasks.map((t) => t.id),
-      );
-    } else {
-      const ids: number[] = [];
-      for (const status of visibleStatuses) {
-        let tasks = board.tasks.filter(
-          (t) => t.listId === listId && t.status === status,
-        );
-        if (activeGroup !== ALL_TASK_GROUPS) {
-          tasks = tasks.filter((t) => String(t.groupId) === activeGroup);
-        }
-        tasks = tasks.filter((t) =>
-          taskMatchesPriorityFilter(t, activePriorityIds),
-        );
-        if (dateFilter != null) {
-          tasks = tasks.filter((t) => taskMatchesDateFilter(t, dateFilter));
-        }
-        tasks.sort((a, b) => a.order - b.order);
-        ids.push(...tasks.map((t) => t.id));
-      }
-      map.set(listId, ids);
-    }
+    const tasks = listColumnTasksSorted(board, layout, listId, filter);
+    map.set(
+      listId,
+      tasks.map((t) => t.id),
+    );
   }
   return map;
 }

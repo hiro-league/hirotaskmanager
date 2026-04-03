@@ -17,7 +17,7 @@ These are **not** planned for the CLI: they exist for the web app and are not ne
 |-------|--------|--------|
 | [1](#phase-1--minimum-working-cli-read-only--server-control) | Minimum CLI: reads, search, server control | **Done** |
 | [2](#phase-2--ai-agent-integration) | AI agent integration (rules, docs, actionable errors) | **Done** |
-| [3](#phase-3--core-write-commands) | Core writes: boards, lists, tasks (+ emoji) | Not started |
+| [3](#phase-3--core-write-commands) | Core writes: boards, lists, tasks (+ emoji) | **Done** |
 | [4](#phase-4--board-structure--extended-mutations) | Task groups, priorities, deletes, reorder | Not started |
 | [5](#phase-5--mcp-server) | MCP server wrapping the HTTP API | Not started |
 | [6](#phase-6--distribution--polish) | Distribution and polish | Partial (see phase) |
@@ -70,7 +70,7 @@ Implementation note: subcommands live in `src/cli/index.ts` rather than separate
 
 ## Phase 3 — Core Write Commands
 
-**Status: Not started**
+**Status: Done**
 
 First AI-first mutation commands: simple, non-interactive, JSON-first. Align with [ai-cli.md](./ai-cli.md); extend that spec with **emoji** wherever the API accepts it (validated via `parseEmojiField` / `MAX_EMOJI_GRAPHEMES` — see `src/shared/emojiField.ts`).
 

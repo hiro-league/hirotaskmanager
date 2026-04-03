@@ -148,7 +148,7 @@ This document describes the **latest** tables only: structure, how they map to `
 | `background_image` | TEXT | URL or empty. |
 | `show_counts` | INTEGER | `0` / `1`. |
 
-**Maps to:** `Board.visibleStatuses`, `Board.statusBandWeights`, `Board.boardLayout`, `Board.boardColor`, `Board.backgroundImage`, `Board.showCounts`.
+**Maps to:** `Board.visibleStatuses`, `Board.statusBandWeights`, `Board.boardLayout`, `Board.boardColor`, `Board.backgroundImage`, `Board.showStats` (column `show_counts`).
 
 **Features / API:** `PATCH /api/boards/:id/view-prefs` (`patchBoardViewPrefs`). Affects layout mode, status band visibility, column width weights, board chrome, and count badges — not task/list CRUD.
 

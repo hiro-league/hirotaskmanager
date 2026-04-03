@@ -9,6 +9,7 @@ import {
   type BoardReactDragStartEvent,
 } from "./dndReactOps";
 import { isBoardTaskDragData } from "./dndReactModel";
+import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 export interface TaskDndReactConfig {
@@ -65,6 +66,7 @@ export function useBoardTaskDndReact(
   list: ReturnType<typeof useHorizontalListReorderReact>,
   config: TaskDndReactConfig,
 ) {
+  const boardNav = useBoardKeyboardNavOptional();
   const updateTask = useUpdateTask();
   const reorderBand = useReorderTasksInBand();
 
@@ -120,8 +122,10 @@ export function useBoardTaskDndReact(
       taskDragStartMapRef.current = initial;
       setTaskContainers(initial);
       setActiveTaskId(sourceData.taskId);
+      // A task drag is an explicit task interaction even if the drop is a no-op.
+      boardNav?.selectTask(sourceData.taskId);
     },
-    [list, serverTaskMap],
+    [boardNav, list, serverTaskMap],
   );
 
   const onDragOver = useCallback(

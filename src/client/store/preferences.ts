@@ -7,6 +7,11 @@ import {
   type GroupDefinition,
   type TaskPriorityDefinition,
 } from "../../shared/models";
+import {
+  isValidYmd,
+  type TaskDateFilterMode,
+  type TaskDateFilterResolved,
+} from "@/components/board/boardStatusUtils";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type TaskCardViewMode = "small" | "normal" | "large" | "larger";
@@ -81,6 +86,14 @@ export function getTaskCardViewSpec(mode: TaskCardViewMode): TaskCardViewSpec {
 
 export const PREFERENCES_STORAGE_KEY = "tm-preferences";
 
+/** Per-board date filter (persisted); `enabled: false` keeps last range/mode for next time. */
+export interface TaskDateFilterPersisted {
+  enabled: boolean;
+  mode: TaskDateFilterMode;
+  startDate: string;
+  endDate: string;
+}
+
 interface PersistedShape {
   state?: {
     themePreference?: ThemePreference;
@@ -90,9 +103,42 @@ interface PersistedShape {
     activeTaskPriorityIdsByBoardId?: Record<string, string[]>;
     taskCardViewModeByBoardId?: Record<string, TaskCardViewMode>;
     taskCardSizeByBoardId?: Record<string, TaskCardViewMode>;
+    taskDateFilterByBoardId?: Record<string, TaskDateFilterPersisted>;
     /** User checked "don't show again" on board keyboard help — disables auto-open on board selection. */
     boardShortcutHelpDismissed?: boolean;
   };
+}
+
+function isTaskDateFilterMode(v: unknown): v is TaskDateFilterMode {
+  return v === "opened" || v === "closed" || v === "any";
+}
+
+function sanitizeTaskDateFilterMap(
+  raw: unknown,
+): Record<string, TaskDateFilterPersisted> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, TaskDateFilterPersisted> = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const o = value as Record<string, unknown>;
+    const mode = o.mode;
+    const startDate = o.startDate;
+    const endDate = o.endDate;
+    if (
+      typeof startDate !== "string" ||
+      typeof endDate !== "string" ||
+      !isTaskDateFilterMode(mode)
+    ) {
+      continue;
+    }
+    out[id] = {
+      enabled: Boolean(o.enabled),
+      mode,
+      startDate,
+      endDate,
+    };
+  }
+  return out;
 }
 
 function readPersistedSlice(): {
@@ -102,6 +148,7 @@ function readPersistedSlice(): {
   activeTaskGroupByBoardId: Record<string, string>;
   activeTaskPriorityIdsByBoardId: Record<string, string[]>;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
+  taskDateFilterByBoardId: Record<string, TaskDateFilterPersisted>;
   boardShortcutHelpDismissed: boolean;
 } {
   if (typeof localStorage === "undefined") {
@@ -112,6 +159,7 @@ function readPersistedSlice(): {
       activeTaskGroupByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
+      taskDateFilterByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
   }
@@ -125,6 +173,7 @@ function readPersistedSlice(): {
         activeTaskGroupByBoardId: {},
         activeTaskPriorityIdsByBoardId: {},
         taskCardViewModeByBoardId: {},
+        taskDateFilterByBoardId: {},
         boardShortcutHelpDismissed: false,
       };
     }
@@ -161,6 +210,9 @@ function readPersistedSlice(): {
             ),
           )
         : {};
+    const taskDateFilterByBoardId = sanitizeTaskDateFilterMap(
+      s?.taskDateFilterByBoardId,
+    );
     return {
       themePreference:
         s?.themePreference === "light" ||
@@ -173,6 +225,7 @@ function readPersistedSlice(): {
       activeTaskGroupByBoardId,
       activeTaskPriorityIdsByBoardId,
       taskCardViewModeByBoardId,
+      taskDateFilterByBoardId,
       boardShortcutHelpDismissed: Boolean(s?.boardShortcutHelpDismissed),
     };
   } catch {
@@ -183,6 +236,7 @@ function readPersistedSlice(): {
       activeTaskGroupByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
+      taskDateFilterByBoardId: {},
       boardShortcutHelpDismissed: false,
     };
   }
@@ -205,6 +259,11 @@ interface PreferencesState {
   setActiveTaskPriorityIdsForBoard: (
     boardId: string | number,
     priorityIds: string[] | undefined,
+  ) => void;
+  taskDateFilterByBoardId: Record<string, TaskDateFilterPersisted>;
+  setTaskDateFilterForBoard: (
+    boardId: string | number,
+    filter: TaskDateFilterPersisted,
   ) => void;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   setTaskCardViewModeForBoard: (
@@ -252,6 +311,14 @@ export const usePreferencesStore = create<PreferencesState>()(
           }
           return { activeTaskPriorityIdsByBoardId: next };
         }),
+      taskDateFilterByBoardId: initial.taskDateFilterByBoardId,
+      setTaskDateFilterForBoard: (boardId, filter) =>
+        set((s) => ({
+          taskDateFilterByBoardId: {
+            ...s.taskDateFilterByBoardId,
+            [String(boardId)]: { ...filter },
+          },
+        })),
       taskCardViewModeByBoardId: initial.taskCardViewModeByBoardId,
       setTaskCardViewModeForBoard: (boardId, mode) =>
         set((s) => ({
@@ -278,13 +345,20 @@ export const usePreferencesStore = create<PreferencesState>()(
               validIds.has(id),
             ),
           );
+          const nextTaskDateFilterByBoardId = Object.fromEntries(
+            Object.entries(s.taskDateFilterByBoardId).filter(([id]) =>
+              validIds.has(id),
+            ),
+          );
           if (
             Object.keys(nextActiveTaskGroupByBoardId).length ===
               Object.keys(s.activeTaskGroupByBoardId).length &&
             Object.keys(nextActiveTaskPriorityIdsByBoardId).length ===
               Object.keys(s.activeTaskPriorityIdsByBoardId).length &&
             Object.keys(nextTaskCardViewModeByBoardId).length ===
-              Object.keys(s.taskCardViewModeByBoardId).length
+              Object.keys(s.taskCardViewModeByBoardId).length &&
+            Object.keys(nextTaskDateFilterByBoardId).length ===
+              Object.keys(s.taskDateFilterByBoardId).length
           ) {
             return s;
           }
@@ -294,6 +368,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             activeTaskGroupByBoardId: nextActiveTaskGroupByBoardId,
             activeTaskPriorityIdsByBoardId: nextActiveTaskPriorityIdsByBoardId,
             taskCardViewModeByBoardId: nextTaskCardViewModeByBoardId,
+            taskDateFilterByBoardId: nextTaskDateFilterByBoardId,
           };
         }),
       boardShortcutHelpDismissed: initial.boardShortcutHelpDismissed,
@@ -309,6 +384,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
         activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,
         taskCardViewModeByBoardId: state.taskCardViewModeByBoardId,
+        taskDateFilterByBoardId: state.taskDateFilterByBoardId,
         boardShortcutHelpDismissed: state.boardShortcutHelpDismissed,
       }),
     },
@@ -359,4 +435,29 @@ export function useResolvedTaskCardViewMode(boardId: string | number): TaskCardV
   const key = String(boardId);
   const raw = usePreferencesStore((s) => s.taskCardViewModeByBoardId[key]);
   return isTaskCardViewMode(raw) ? raw : "normal";
+}
+
+/**
+ * When the date filter is enabled and dates are valid, returns the inclusive range for task matching.
+ */
+export function useResolvedTaskDateFilter(
+  boardId: string | number,
+): TaskDateFilterResolved | null {
+  const key = String(boardId);
+  const raw = usePreferencesStore((s) => s.taskDateFilterByBoardId[key]);
+  return useMemo(() => {
+    if (!raw?.enabled) return null;
+    if (!isValidYmd(raw.startDate) || !isValidYmd(raw.endDate)) return null;
+    let startDate = raw.startDate;
+    let endDate = raw.endDate;
+    if (startDate > endDate) {
+      const t = startDate;
+      startDate = endDate;
+      endDate = t;
+    }
+    const mode: TaskDateFilterMode = isTaskDateFilterMode(raw.mode)
+      ? raw.mode
+      : "any";
+    return { mode, startDate, endDate };
+  }, [raw, key]);
 }

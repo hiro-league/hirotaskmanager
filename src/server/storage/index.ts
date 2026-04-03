@@ -7,7 +7,7 @@ export {
   generateSlug,
   deleteBoardById,
   createBoardWithDefaults,
-  patchBoardName,
+  patchBoard,
   patchBoardViewPrefs,
   patchBoardTaskPriorities,
   patchBoardTaskGroups,

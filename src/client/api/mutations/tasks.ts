@@ -16,6 +16,7 @@ export function useCreateTask() {
       body: string;
       groupId: number;
       priorityId?: number | null;
+      emoji?: string | null;
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/tasks`, {
         method: "POST",
@@ -27,6 +28,7 @@ export function useCreateTask() {
           body: input.body,
           groupId: input.groupId,
           priorityId: input.priorityId ?? null,
+          emoji: input.emoji ?? null,
         }),
       });
     },
@@ -47,6 +49,7 @@ export function useCreateTask() {
         priorityId: input.priorityId ?? null,
         status: input.status,
         order: maxOrder + 1,
+        emoji: input.emoji ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -88,6 +91,7 @@ export function useUpdateTask() {
             status: t.status,
             order: t.order,
             color: t.color ?? null,
+            emoji: t.emoji ?? null,
           }),
         },
       );

@@ -12,7 +12,8 @@ import {
 } from "react";
 import {
   ALL_TASK_GROUPS,
-  groupLabelForId,
+  groupDisplayLabelForId,
+  listDisplayName,
   type Board,
   type List,
   type Task,
@@ -30,6 +31,7 @@ import {
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
 import {
@@ -108,7 +110,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
       task={task}
       taskPriorities={taskPriorities}
       viewMode={viewMode}
-      groupLabel={groupLabelForId(taskGroups, task.groupId)}
+      groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
       editingTitle={editingTitle}
       titleDraft={titleDraft}
@@ -224,6 +226,7 @@ function ListStackedBody({
     board.id,
     board.taskPriorities,
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
 
@@ -452,6 +455,7 @@ function ListStackedBody({
             activeGroup,
             activePriorityIds,
             workflowOrder,
+            dateFilterResolved,
           ),
     [
       taskContainerId,
@@ -461,6 +465,7 @@ function ListStackedBody({
       activeGroup,
       activePriorityIds,
       workflowOrder,
+      dateFilterResolved,
     ],
   );
 
@@ -582,7 +587,7 @@ function ListStackedBody({
           className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 pb-4 pt-2"
           data-board-id={board.id}
           data-list-id={listId}
-          aria-label={`${list.name} — tasks`}
+          aria-label={`${listDisplayName(list)} — tasks`}
         >
           <div className="flex flex-col gap-2">
             {taskContainerId != null ? (
@@ -614,7 +619,7 @@ function ListStackedBody({
                       task={task}
                       taskPriorities={board.taskPriorities}
                       viewMode={taskCardViewMode}
-                      groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                      groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
                       onOpen={() => setEditingTask(task)}
                       editingTitle={editingTitleTaskId === task.id}
                       titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}

@@ -48,7 +48,7 @@ export function AppHeader() {
           height={32}
           decoding="async"
         />
-        <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+        <span className="app-title-gradient inline-block truncate text-lg font-semibold tracking-tight">
           Hiro Task Manager
         </span>
       </div>

@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "commander": "^14.0.3",
+    "emoji-picker-react": "^4.18.0",
     "hono": "^4.12.9",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",

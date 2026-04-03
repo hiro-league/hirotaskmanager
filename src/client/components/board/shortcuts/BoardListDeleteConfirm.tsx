@@ -1,5 +1,5 @@
 import { useDeleteList } from "@/api/mutations";
-import type { Board } from "../../../../shared/models";
+import { listDisplayName, type Board } from "../../../../shared/models";
 import { useBoardKeyboardNav } from "./BoardKeyboardNavContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -31,7 +31,7 @@ export function BoardListDeleteConfirm({
       title="Delete this list?"
       message={
         list
-          ? `Delete list “${list.name}”? Tasks in this list will be removed. This cannot be undone.`
+          ? `Delete list “${listDisplayName(list)}”? Tasks in this list will be removed. This cannot be undone.`
           : "Delete this list? Tasks in this list will be removed. This cannot be undone."
       }
       confirmLabel="Delete"

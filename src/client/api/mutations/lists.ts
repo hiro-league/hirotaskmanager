@@ -8,11 +8,18 @@ const jsonHeaders = { "Content-Type": "application/json" } as const;
 export function useCreateList() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { boardId: number; name: string }) => {
+    mutationFn: async (input: {
+      boardId: number;
+      name: string;
+      emoji?: string | null;
+    }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/lists`, {
         method: "POST",
         headers: jsonHeaders,
-        body: JSON.stringify({ name: input.name }),
+        body: JSON.stringify({
+          name: input.name,
+          emoji: input.emoji ?? null,
+        }),
       });
     },
     onMutate: async (input) => {
@@ -25,6 +32,7 @@ export function useCreateList() {
         id: tempNumericId(),
         name: listName,
         order: maxOrder + 1,
+        emoji: input.emoji ?? null,
       };
       const next: Board = {
         ...prev,
@@ -45,34 +53,38 @@ export function useCreateList() {
   });
 }
 
-export function useRenameList() {
+/** PATCH list name and/or emoji (optional fields omitted leave server values unchanged). */
+export function usePatchList() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
       boardId: number;
       listId: number;
-      name: string;
+      patch: { name?: string; emoji?: string | null };
     }) => {
-      const trimmed = input.name.trim();
-      if (!trimmed) throw new Error("List name cannot be empty");
       return fetchJson<Board>(
         `/api/boards/${input.boardId}/lists/${input.listId}`,
         {
           method: "PATCH",
           headers: jsonHeaders,
-          body: JSON.stringify({ name: trimmed }),
+          body: JSON.stringify(input.patch),
         },
       );
     },
     onMutate: async (input) => {
       const prev = qc.getQueryData<Board>(boardKeys.detail(input.boardId));
-      const trimmed = input.name.trim();
-      if (!trimmed || !prev) return { prev: undefined as Board | undefined };
+      if (!prev) return { prev: undefined as Board | undefined };
+      const { patch } = input;
       const next: Board = {
         ...prev,
-        lists: prev.lists.map((l) =>
-          l.id === input.listId ? { ...l, name: trimmed } : l,
-        ),
+        lists: prev.lists.map((l) => {
+          if (l.id !== input.listId) return l;
+          return {
+            ...l,
+            ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+            ...(patch.emoji !== undefined ? { emoji: patch.emoji } : {}),
+          };
+        }),
         updatedAt: new Date().toISOString(),
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);

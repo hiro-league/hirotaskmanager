@@ -1,4 +1,4 @@
-import type { Board } from "../../../shared/models";
+import { formatGroupDisplayLabel, type Board } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { usePreferencesStore } from "@/store/preferences";
 import {
@@ -52,7 +52,7 @@ export function TaskGroupSwitcher({ board }: TaskGroupSwitcherProps) {
             aria-pressed={active}
             onClick={() => pick(String(g.id))}
           >
-            {g.label}
+            {formatGroupDisplayLabel(g)}
           </button>
         );
       })}

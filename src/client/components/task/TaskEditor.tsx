@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  formatGroupDisplayLabel,
   priorityDisplayLabel,
   sortPrioritiesByValue,
   type Board,
@@ -7,6 +8,7 @@ import {
 } from "../../../shared/models";
 import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
+import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useResolvedActiveTaskGroup } from "@/store/preferences";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
@@ -30,6 +32,7 @@ interface Baseline {
   body: string;
   group: string;
   priority: string;
+  emoji: string | null;
 }
 
 export function TaskEditor({
@@ -50,6 +53,8 @@ export function TaskEditor({
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  /** Task icon; null clears. */
+  const [emoji, setEmoji] = useState<string | null>(null);
   /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
   /** Select value — matches `String(taskPriority.id)` or empty string for no priority. */
@@ -61,15 +66,18 @@ export function TaskEditor({
     body: "",
     group: "",
     priority: "",
+    emoji: null,
   });
   const [showDiscard, setShowDiscard] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     if (mode === "edit" && task) {
       setTitle(task.title);
       setBody(task.body);
+      setEmoji(task.emoji ?? null);
       setGroup(String(task.groupId));
       setPriority(task.priorityId != null ? String(task.priorityId) : "");
       baselineRef.current = {
@@ -77,10 +85,12 @@ export function TaskEditor({
         body: task.body,
         group: String(task.groupId),
         priority: task.priorityId != null ? String(task.priorityId) : "",
+        emoji: task.emoji ?? null,
       };
     } else if (mode === "create" && createContext) {
       setTitle("");
       setBody("");
+      setEmoji(null);
       const defaultGroup =
         activeGroup !== ALL_TASK_GROUPS
           ? activeGroup
@@ -92,16 +102,14 @@ export function TaskEditor({
         body: "",
         group: defaultGroup,
         priority: "",
+        emoji: null,
       };
     }
-  }, [
-    open,
-    mode,
-    task,
-    createContext,
-    board.taskGroups,
-    activeGroup,
-  ]);
+  }, [open, mode, task, createContext, board.taskGroups, activeGroup]);
+
+  useEffect(() => {
+    if (open) setEmojiFieldError(null);
+  }, [open]);
 
   const isDirty = useMemo(() => {
     if (!open) return false;
@@ -110,7 +118,8 @@ export function TaskEditor({
         title.trim() !== baselineRef.current.title.trim() ||
         body !== baselineRef.current.body ||
         group !== baselineRef.current.group ||
-        priority !== baselineRef.current.priority
+        priority !== baselineRef.current.priority ||
+        (emoji ?? null) !== (baselineRef.current.emoji ?? null)
       );
     }
     if (mode === "create" && createContext) {
@@ -120,11 +129,12 @@ export function TaskEditor({
         title.trim() !== "" ||
         body.trim() !== "" ||
         group !== baselineRef.current.group ||
-        priority !== baselineRef.current.priority
+        priority !== baselineRef.current.priority ||
+        (emoji ?? null) !== (baselineRef.current.emoji ?? null)
       );
     }
     return false;
-  }, [open, mode, task, createContext, title, body, group, priority]);
+  }, [open, mode, task, createContext, title, body, group, priority, emoji]);
 
   const busy =
     createTask.isPending || updateTask.isPending || deleteTask.isPending;
@@ -168,6 +178,7 @@ export function TaskEditor({
         body,
         groupId: gid,
         priorityId,
+        emoji: emoji ?? null,
       });
     } else if (mode === "edit" && task) {
       const gid = Number(group) || task.groupId;
@@ -179,6 +190,7 @@ export function TaskEditor({
           body,
           groupId: gid,
           priorityId,
+          emoji: emoji ?? null,
           updatedAt: now,
         },
       });
@@ -191,6 +203,7 @@ export function TaskEditor({
     board,
     title,
     body,
+    emoji,
     group,
     priority,
     createTask,
@@ -269,18 +282,36 @@ export function TaskEditor({
           </h2>
 
           <div className="mt-4 space-y-3">
+            {emojiFieldError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {emojiFieldError}
+              </p>
+            ) : null}
             <div>
               <label htmlFor={`${titleId}-title`} className="text-xs font-medium text-muted-foreground">
                 Title
               </label>
-              <input
-                id={`${titleId}-title`}
-                ref={titleInputRef}
-                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
-                value={title}
-                disabled={busy}
-                onChange={(e) => setTitle(e.target.value)}
-              />
+              <div className="mt-1 flex gap-2">
+                <EmojiPickerMenuButton
+                  emoji={emoji}
+                  disabled={busy}
+                  onValidationError={setEmojiFieldError}
+                  chooseAriaLabel="Choose task emoji"
+                  selectedAriaLabel={(e) => `Task emoji ${e}`}
+                  onPick={(next) => {
+                    setEmojiFieldError(null);
+                    setEmoji(next);
+                  }}
+                />
+                <input
+                  id={`${titleId}-title`}
+                  ref={titleInputRef}
+                  className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                  value={title}
+                  disabled={busy}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
             </div>
             <div>
               <label htmlFor={`${titleId}-body`} className="text-xs font-medium text-muted-foreground">
@@ -308,7 +339,7 @@ export function TaskEditor({
               >
                 {board.taskGroups.map((g) => (
                   <option key={g.id} value={String(g.id)}>
-                    {g.label}
+                    {formatGroupDisplayLabel(g)}
                   </option>
                 ))}
               </select>

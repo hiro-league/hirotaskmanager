@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import {
   priorityDisplayLabel,
   priorityLabelForId,
+  taskDisplayTitle,
   type Task,
   type TaskPriorityDefinition,
   type TaskStatus,
@@ -209,45 +210,55 @@ function TaskCardContent({
       onClick={editingTitle ? undefined : onOpen}
     >
       {editingTitle ? (
-        // Inline rename auto-fits up to three lines without reselecting text while typing.
-        <textarea
-          ref={titleInputRef}
-          rows={3}
-          className={cn(
-            "w-full resize-y rounded border border-input bg-background px-2 py-1 text-foreground select-text",
-            viewSpec.titleClassName,
-          )}
-          value={titleDraft}
-          disabled={titleEditBusy}
-          onChange={(e) => {
-            // Auto-grow up to three lines, then keep the native resize handle available.
-            autoSizeInlineTitleTextarea(e.currentTarget);
-            onTitleDraftChange?.(e.target.value);
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onBlur={() => {
-            if (titleBlurModeRef.current === "cancel") {
-              titleBlurModeRef.current = "commit";
-              return;
-            }
-            onTitleCommit?.();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
+        <div className="flex min-w-0 gap-1.5">
+          {task.emoji ? (
+            <span
+              className="shrink-0 text-lg leading-tight"
+              aria-hidden
+            >
+              {task.emoji}
+            </span>
+          ) : null}
+          {/* Inline rename auto-fits up to three lines without reselecting text while typing. */}
+          <textarea
+            ref={titleInputRef}
+            rows={3}
+            className={cn(
+              "min-w-0 flex-1 resize-y rounded border border-input bg-background px-2 py-1 text-foreground select-text",
+              viewSpec.titleClassName,
+            )}
+            value={titleDraft}
+            disabled={titleEditBusy}
+            onChange={(e) => {
+              // Auto-grow up to three lines, then keep the native resize handle available.
+              autoSizeInlineTitleTextarea(e.currentTarget);
+              onTitleDraftChange?.(e.target.value);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={() => {
+              if (titleBlurModeRef.current === "cancel") {
+                titleBlurModeRef.current = "commit";
+                return;
+              }
               onTitleCommit?.();
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              titleBlurModeRef.current = "cancel";
-              onTitleCancel?.();
-            }
-          }}
-        />
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onTitleCommit?.();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                titleBlurModeRef.current = "cancel";
+                onTitleCancel?.();
+              }
+            }}
+          />
+        </div>
       ) : (
         <div className={cn("font-medium", viewSpec.titleClassName)}>
-          {task.title || "Untitled"}
+          {taskDisplayTitle(task)}
         </div>
       )}
       {viewMode !== "small" ? (

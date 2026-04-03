@@ -12,21 +12,23 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Search, Settings2 } from "lucide-react";
 import { boardKeys, useBoard } from "@/api/queries";
-import { usePatchBoardName, usePatchBoardViewPrefs } from "@/api/mutations";
+import { usePatchBoard, usePatchBoardViewPrefs } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
   ALL_TASK_GROUPS,
-  groupLabelForId,
+  groupDisplayLabelForId,
   priorityDisplayLabel,
   priorityLabelForId,
   resolvedBoardLayout,
   sortPrioritiesByValue,
   type Board,
 } from "../../../shared/models";
+import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import {
   usePreferencesStore,
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { BoardColorMenu } from "./BoardColorMenu";
@@ -37,6 +39,7 @@ import { BoardStatusToggles } from "./BoardStatusToggles";
 import { BoardPriorityToggles } from "./BoardPriorityToggles";
 import { BoardTaskCardSizeToggle } from "./BoardTaskCardSizeToggle";
 import { TaskGroupSwitcher } from "./TaskGroupSwitcher";
+import { BoardTaskDateFilter } from "./BoardTaskDateFilter";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
 import { TaskPrioritiesEditorDialog } from "./TaskPrioritiesEditorDialog";
 import {
@@ -63,6 +66,7 @@ import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
 import { useBoardSearch } from "@/context/BoardSearchContext";
 import { boardHeaderActionButtonClass } from "./boardHeaderButtonStyles";
+import type { TaskDateFilterMode } from "./boardStatusUtils";
 import { BoardSearchDialog } from "./BoardSearchDialog";
 import { OPEN_SHORTCUT_HELP_EVENT } from "@/lib/shortcutHelpEvents";
 
@@ -85,6 +89,33 @@ const EMPTY_BOARD_SCROLL_METRICS: BoardScrollMetrics = {
   scrollWidth: 0,
   clientWidth: 0,
 };
+
+function formatYmdForBadge(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(dt.getFullYear() !== new Date().getFullYear()
+      ? { year: "numeric" as const }
+      : {}),
+  });
+}
+
+function formatTaskDateFilterBadge(
+  startDate: string,
+  endDate: string,
+  mode: TaskDateFilterMode,
+): string {
+  const range =
+    startDate === endDate
+      ? formatYmdForBadge(startDate)
+      : `${formatYmdForBadge(startDate)}–${formatYmdForBadge(endDate)}`;
+  const modeLabel =
+    mode === "opened" ? "Opened" : mode === "closed" ? "Closed" : "Any";
+  return `${range} · ${modeLabel}`;
+}
 
 function readBoardScrollMetrics(scroller: HTMLDivElement | null): BoardScrollMetrics {
   if (!scroller) return EMPTY_BOARD_SCROLL_METRICS;
@@ -292,6 +323,11 @@ function BoardShortcutBindings({
         if (id != null) bridge?.requestOpenTaskEditor(id);
       },
       editHighlightedTaskTitle: () => {
+        const listId = nav?.highlightedListId;
+        if (listId != null) {
+          nav?.openRenameForList(listId);
+          return;
+        }
         const id = nav?.highlightedTaskId;
         if (id != null) bridge?.requestEditTaskTitle(id);
       },
@@ -392,7 +428,7 @@ function BoardShortcutBindings({
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
   const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
-  const patchBoardName = usePatchBoardName();
+  const patchBoard = usePatchBoard();
   const themePreference = usePreferencesStore((s) => s.themePreference);
   const systemDark = useSystemDark();
   const dark = resolveDark(themePreference, systemDark);
@@ -427,6 +463,9 @@ export function BoardView({ boardId }: BoardViewProps) {
   >("none");
   const boardNameInputRef = useRef<HTMLInputElement>(null);
   const boardNameBlurModeRef = useRef<"commit" | "cancel">("commit");
+  const [boardEmojiFieldError, setBoardEmojiFieldError] = useState<
+    string | null
+  >(null);
   const headerScrollTrackRef = useRef<HTMLDivElement>(null);
   const headerScrollDragRef = useRef<{
     pointerId: number;
@@ -631,6 +670,9 @@ export function BoardView({ boardId }: BoardViewProps) {
     data?.id ?? boardId ?? "",
     data?.taskPriorities ?? [],
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(
+    data?.id ?? boardId ?? "",
+  );
 
   const cancelBoardRename = useCallback(() => {
     boardNameBlurModeRef.current = "cancel";
@@ -648,14 +690,30 @@ export function BoardView({ boardId }: BoardViewProps) {
       return;
     }
     try {
-      await patchBoardName.mutateAsync({
+      await patchBoard.mutateAsync({
         boardId: data.id,
         name: trimmed,
       });
     } catch {
       setBoardNameDraft(data.name);
     }
-  }, [boardNameDraft, data, patchBoardName]);
+  }, [boardNameDraft, data, patchBoard]);
+
+  const pickBoardEmoji = useCallback(
+    async (next: string | null) => {
+      if (!data) return;
+      setBoardEmojiFieldError(null);
+      try {
+        await patchBoard.mutateAsync({
+          boardId: data.id,
+          emoji: next,
+        });
+      } catch {
+        /* server rejected; cache rolls back via mutation onError */
+      }
+    },
+    [data, patchBoard],
+  );
 
   // Compute this without a hook so BoardView keeps the same hook order while it
   // moves between empty/loading/error/success states.
@@ -696,7 +754,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   }
   const activeGroupLabel =
     activeTaskGroup !== ALL_TASK_GROUPS
-      ? groupLabelForId(data.taskGroups, Number(activeTaskGroup))
+      ? groupDisplayLabelForId(data.taskGroups, Number(activeTaskGroup))
       : null;
   const activePriorityLabel =
     activeTaskPriorityIds && activeTaskPriorityIds.length === 1
@@ -718,6 +776,13 @@ export function BoardView({ boardId }: BoardViewProps) {
           (priority) => String(priority.id) === activeTaskPriorityIds[0],
         )?.color
       : undefined;
+  const activeDateSummary = dateFilterResolved
+    ? formatTaskDateFilterBadge(
+        dateFilterResolved.startDate,
+        dateFilterResolved.endDate,
+        dateFilterResolved.mode,
+      )
+    : null;
   const headerScrollVisible =
     boardScrollMetrics.hasOverflow && (headerHovered || headerScrollDragging);
   const headerScrollMaxLeft = Math.max(
@@ -782,7 +847,29 @@ export function BoardView({ boardId }: BoardViewProps) {
           )}
         >
           <div className="grid min-w-0 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="relative flex min-w-0 items-center gap-2">
+              {boardEmojiFieldError ? (
+                <p className="absolute left-0 top-full z-20 mt-0.5 max-w-[min(100%,12rem)] text-[10px] text-destructive">
+                  {boardEmojiFieldError}
+                </p>
+              ) : null}
+              <EmojiPickerMenuButton
+                emoji={data.emoji}
+                disabled={patchBoard.isPending}
+                compact
+                placeholderIcon={
+                  <span
+                    className="text-[0.9375rem] font-medium leading-none text-muted-foreground"
+                    aria-hidden
+                  >
+                    ?
+                  </span>
+                }
+                onValidationError={setBoardEmojiFieldError}
+                chooseAriaLabel="Choose board emoji"
+                selectedAriaLabel={(e) => `Change board emoji (${e})`}
+                onPick={pickBoardEmoji}
+              />
               {editingBoardName ? (
                 <input
                   ref={boardNameInputRef}
@@ -794,7 +881,7 @@ export function BoardView({ boardId }: BoardViewProps) {
                       : "text-2xl font-semibold leading-tight",
                   )}
                   value={boardNameDraft}
-                  disabled={patchBoardName.isPending}
+                  disabled={patchBoard.isPending}
                   onChange={(e) => setBoardNameDraft(e.target.value)}
                   onBlur={() => {
                     if (boardNameBlurModeRef.current === "cancel") {
@@ -830,7 +917,8 @@ export function BoardView({ boardId }: BoardViewProps) {
                     setEditingBoardName(true);
                   }}
                 >
-                  {data.name}
+                  {/* Name only — board emoji is the separate control to the left. */}
+                  {data.name.trim() || "Untitled"}
                 </button>
               )}
               <button
@@ -863,6 +951,17 @@ export function BoardView({ boardId }: BoardViewProps) {
                   ) : null}
                   <span className="truncate font-medium text-foreground">
                     {activePrioritySummary}
+                  </span>
+                </div>
+              ) : null}
+              {activeDateSummary ? (
+                <div className="hidden min-w-0 max-w-[14rem] items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                  <span className="uppercase tracking-wide">Dates</span>
+                  <span
+                    className="truncate font-medium text-foreground"
+                    title={activeDateSummary}
+                  >
+                    {activeDateSummary}
                   </span>
                 </div>
               ) : null}
@@ -966,7 +1065,9 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <div className="min-w-0">
                   <TaskGroupSwitcher board={data} />
                 </div>
-                <div className="min-w-0" aria-hidden />
+                <div className="min-w-0">
+                  <BoardTaskDateFilter board={data} />
+                </div>
               </div>
             </div>
           ) : null}

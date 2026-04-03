@@ -5,6 +5,7 @@ import { useStatusWorkflowOrder } from "@/api/queries";
 import {
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import {
   parseStackedListContainerId,
@@ -15,6 +16,7 @@ import {
 import {
   listTasksMergedSorted,
   visibleStatusesForBoard,
+  type TaskDateFilterResolved,
 } from "./boardStatusUtils";
 import {
   mergeFilteredOrderIntoFullBand,
@@ -29,6 +31,7 @@ function buildStackedTaskContainerMap(
   activeGroup: string,
   activePriorityIds: string[] | null,
   workflowOrder: readonly string[],
+  dateFilter: TaskDateFilterResolved | null,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
@@ -40,6 +43,7 @@ function buildStackedTaskContainerMap(
       activeGroup,
       activePriorityIds,
       workflowOrder,
+      dateFilter,
     );
     out[key] = tasks.map((t) => sortableTaskId(t.id));
   }
@@ -149,6 +153,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     board.id,
     board.taskPriorities,
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
 
   const listIds = listIdsOverride ?? list.localListIds;
 
@@ -165,7 +170,11 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
 
   const prioritySig =
     activePriorityIds === null ? "__all__" : activePriorityIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}`;
+  const dateSig =
+    dateFilterResolved == null
+      ? "__nodate__"
+      : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}|${dateSig}`;
 
   const serverTaskMap = useMemo(
     () =>
@@ -176,6 +185,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
         activeGroup,
         activePriorityIds,
         workflowOrder,
+        dateFilterResolved,
       ),
     [
       containerMapDeps,
@@ -185,6 +195,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       activeGroup,
       activePriorityIds,
       workflowOrder,
+      dateFilterResolved,
     ],
   );
 

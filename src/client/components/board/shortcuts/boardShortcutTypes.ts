@@ -30,7 +30,7 @@ export interface BoardShortcutActions {
   highlightPage: (direction: -1 | 1) => void;
   /** Enter or Space — open highlighted task in the editor (keyboard bridge). */
   openHighlightedTask: () => void;
-  /** F2 — start inline title-only edit for the highlighted task. */
+  /** F2 — rename the highlighted list, or start inline title-only edit for the highlighted task. */
   editHighlightedTaskTitle: () => void;
   /** Delete — delete highlighted task or list (board-level confirm; same as list ⋮ Delete for lists). */
   requestDeleteHighlight: () => void;
@@ -96,6 +96,11 @@ export interface BoardShortcutDefinition {
   helpContext?: string;
   /** Sort order within the help tab (lower first). Omit to use registry order for that tab. */
   helpOrder?: number;
+  /**
+   * When true, this row appears in the shortcuts dialog only; {@link useBoardShortcutKeydown}
+   * does not dispatch it (use for duplicate keys explained in another tab).
+   */
+  helpOnly?: boolean;
   preventDefault?: boolean;
   /** Key from KeyboardEvent.key, lowercased for letters */
   matchKey: (key: string) => boolean;

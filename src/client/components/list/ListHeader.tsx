@@ -6,11 +6,13 @@ import {
   type RefCallback,
 } from "react";
 import { MoreVertical } from "lucide-react";
-import { useDeleteList, useRenameList } from "@/api/mutations";
+import { useDeleteList, usePatchList } from "@/api/mutations";
+import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
+import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { cn } from "@/lib/utils";
-import type { List } from "../../../shared/models";
+import { listDisplayName, type List } from "../../../shared/models";
 
 interface ListHeaderProps {
   boardId: number;
@@ -19,25 +21,75 @@ interface ListHeaderProps {
   dragHandleRef?: RefCallback<HTMLElement>;
 }
 
+function ListEmojiPicker({
+  emoji,
+  busy,
+  onPickEmoji,
+  onValidationError,
+}: {
+  emoji: string | null | undefined;
+  busy: boolean;
+  onPickEmoji: (next: string | null) => void;
+  onValidationError: (message: string) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "shrink-0 transition-opacity duration-150",
+        "opacity-0 group-hover/list-header:opacity-100 focus-within:opacity-100",
+        "[&_button[data-state=open]]:opacity-100",
+      )}
+    >
+      <EmojiPickerMenuButton
+        emoji={emoji}
+        disabled={busy}
+        compact
+        alwaysShowPlaceholder
+        placeholderIcon={
+          <span className="text-[0.875rem] leading-none" aria-hidden>
+            ❔
+          </span>
+        }
+        onValidationError={onValidationError}
+        chooseAriaLabel="Choose list emoji"
+        selectedAriaLabel={(e) => `Change list emoji (${e})`}
+        onPick={onPickEmoji}
+      />
+    </div>
+  );
+}
+
 export function ListHeader({
   boardId,
   list,
   dragHandleRef,
 }: ListHeaderProps) {
-  const renameList = useRenameList();
+  const patchList = usePatchList();
   const deleteList = useDeleteList();
+  const boardNav = useBoardKeyboardNavOptional();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(list.name);
   const [menuOpen, setMenuOpen] = useState(false);
   const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
+  const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const boardDrag = dragHandleRef != null;
+  const busy = patchList.isPending;
+
+  const baseName = list.name.trim() || String(list.id);
+  const emojiChar = list.emoji?.trim() || null;
 
   const startRename = useCallback(() => {
     setEditing(true);
     setEditValue(list.name);
   }, [list.name]);
+
+  // F2 on a keyboard-selected list calls the same entry point as click / ⋮ Rename.
+  useEffect(() => {
+    if (!boardNav) return;
+    return boardNav.registerListRename(list.id, startRename);
+  }, [boardNav, list.id, startRename]);
 
   const cancelRename = useCallback(() => {
     setEditing(false);
@@ -52,15 +104,15 @@ export function ListHeader({
       return;
     }
     try {
-      await renameList.mutateAsync({
+      await patchList.mutateAsync({
         boardId,
         listId: list.id,
-        name: trimmed,
+        patch: { name: trimmed },
       });
     } catch {
       setEditValue(list.name);
     }
-  }, [boardId, editValue, list.id, list.name, renameList]);
+  }, [boardId, editValue, list.id, list.name, patchList]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -98,71 +150,134 @@ export function ListHeader({
     setListDeleteConfirmOpen(false);
   }, [boardId, deleteList, list.id]);
 
+  const displayName = listDisplayName(list);
+
+  const pickListEmoji = useCallback(
+    (next: string | null) => {
+      setEmojiFieldError(null);
+      void patchList.mutateAsync({
+        boardId,
+        listId: list.id,
+        patch: { emoji: next },
+      });
+    },
+    [boardId, list.id, patchList],
+  );
+
+  const titleLine = (
+    <>
+      {emojiChar ? (
+        <span className="shrink-0 text-[0.9375rem] leading-tight" aria-hidden>
+          {emojiChar}
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate">{baseName}</span>
+    </>
+  );
+
   return (
     <>
     <div
       className={cn(
-        "group relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
+        "group/list-header relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
         boardDrag ? "border-b border-border/80" : "rounded-t-md border border-b-0",
       )}
     >
+      {emojiFieldError ? (
+        <p className="absolute left-2 top-full z-20 mt-0.5 max-w-[min(100%,12rem)] text-[10px] text-destructive">
+          {emojiFieldError}
+        </p>
+      ) : null}
       {editing ? (
-        // Inline rename restores selection so the board's drag surface does not swallow text editing behavior.
-        <input
-          autoFocus
-          className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-sm text-foreground select-text"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onBlur={() => void commitRename()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.currentTarget.blur();
-            }
-            if (e.key === "Escape") {
-              cancelRename();
-            }
-          }}
-        />
+        <div className="flex min-w-0 flex-1 items-center gap-1 pr-8">
+          <ListEmojiPicker
+            emoji={list.emoji}
+            busy={busy}
+            onValidationError={setEmojiFieldError}
+            onPickEmoji={pickListEmoji}
+          />
+          {emojiChar ? (
+            <span className="shrink-0 text-lg leading-none" aria-hidden>
+              {emojiChar}
+            </span>
+          ) : null}
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-sm text-foreground select-text"
+            value={editValue}
+            disabled={busy}
+            onChange={(e) => setEditValue(e.target.value)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onBlur={() => void commitRename()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") {
+                cancelRename();
+              }
+            }}
+          />
+        </div>
       ) : boardDrag ? (
         <>
           <div className="pointer-events-none min-w-0 flex-1" aria-hidden />
           <div
             ref={dragHandleRef}
-            className="absolute inset-y-0 left-2 right-10 z-[1] flex cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-            // The React-first sortable handle is ref-based, so keep an explicit
-            // double-click rename affordance on the handle itself.
-            onDoubleClick={() => {
+            className="absolute inset-y-0 left-2 right-10 z-[1] flex cursor-grab touch-none items-center justify-center gap-1 active:cursor-grabbing"
+            // List-column drag now waits for pointer movement, so a plain click
+            // on the title can reliably enter rename mode again.
+            onClick={() => {
               if (!editing) startRename();
             }}
           >
-            <span className="w-full truncate text-center text-[0.9375rem] font-bold leading-tight text-foreground">
-              {list.name}
+            <div
+              className="pointer-events-auto flex shrink-0 items-center"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ListEmojiPicker
+                emoji={list.emoji}
+                busy={busy}
+                onValidationError={setEmojiFieldError}
+                onPickEmoji={pickListEmoji}
+              />
+            </div>
+            <span className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate text-center text-[0.9375rem] font-bold leading-tight text-foreground">
+              {titleLine}
             </span>
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-center text-[0.9375rem] font-bold leading-tight text-foreground hover:bg-muted/80"
-          onDoubleClick={startRename}
-        >
-          {list.name}
-        </button>
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
+          <ListEmojiPicker
+            emoji={list.emoji}
+            busy={busy}
+            onValidationError={setEmojiFieldError}
+            onPickEmoji={pickListEmoji}
+          />
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded px-1 py-0.5 text-center text-[0.9375rem] font-bold leading-tight text-foreground hover:bg-muted/80"
+            onClick={startRename}
+          >
+            {titleLine}
+          </button>
+        </div>
       )}
       {!editing && (
         <div ref={menuRef} className="relative z-10 shrink-0">
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted/80 group-hover:opacity-100 data-[open]:opacity-100"
-            aria-label={`Actions for ${list.name}`}
+            className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted/80 group-hover/list-header:opacity-100 data-[open]:opacity-100"
+            aria-label={`Actions for ${displayName}`}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             data-open={menuOpen ? "" : undefined}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setMenuOpen((o) => !o)}
           >
-            <MoreVertical className="size-4" />
+            <MoreVertical className="size-4" aria-hidden />
           </button>
           {menuOpen ? (
             <div
@@ -201,7 +316,7 @@ export function ListHeader({
         open={listDeleteConfirmOpen}
         scope="list-delete-confirmation"
         title="Delete this list?"
-        message={`Delete list “${list.name}”? Tasks in this list will be removed. This cannot be undone.`}
+        message={`Delete list “${displayName}”? Tasks in this list will be removed. This cannot be undone.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="destructive"

@@ -1,4 +1,5 @@
 {
     "typescript.tsdk": "node_modules\\typescript\\lib",
-    "markdown.validate.enabled": false
+    "markdown.validate.enabled": false,
+    "chatgpt.runCodexInWindowsSubsystemForLinux": true
 }

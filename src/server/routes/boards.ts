@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { parseEmojiField } from "../../shared/emojiField";
 import type { Board, GroupDefinition, TaskPriorityDefinition } from "../../shared/models";
 import {
   createBoardWithDefaults,
@@ -10,7 +11,7 @@ import {
   entryByIdOrSlug,
   generateSlug,
   loadBoard,
-  patchBoardName,
+  patchBoard,
   patchBoardTaskPriorities,
   patchBoardTaskGroups,
   patchBoardViewPrefs,
@@ -29,10 +30,10 @@ boardsRoute.get("/", async (c) => {
 });
 
 boardsRoute.post("/", async (c) => {
-  let body: { name?: string } = {};
+  let body: { name?: string; emoji?: unknown } = {};
   try {
     const text = await c.req.text();
-    if (text) body = JSON.parse(text) as { name?: string };
+    if (text) body = JSON.parse(text) as { name?: string; emoji?: unknown };
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
@@ -41,8 +42,23 @@ boardsRoute.post("/", async (c) => {
     typeof body.name === "string" && body.name.trim()
       ? body.name.trim()
       : "New board";
+  let emoji: string | null = null;
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
+  }
   const slug = await generateSlug(name);
-  const board = await createBoardWithDefaults(name, slug);
+  const board = await createBoardWithDefaults(name, slug, emoji);
   return c.json(board, 201);
 });
 
@@ -99,7 +115,24 @@ boardsRoute.patch("/:id/groups", async (c) => {
     if (!label) continue;
     const id =
       typeof rec.id === "number" && Number.isFinite(rec.id) ? rec.id : 0;
-    taskGroups.push({ id, label });
+
+    let emoji: string | null | undefined = undefined;
+    if ("emoji" in rec) {
+      const raw = rec.emoji;
+      if (raw === null || raw === "") {
+        emoji = null;
+      } else if (typeof raw === "string") {
+        const parsed = parseEmojiField(raw);
+        if (!parsed.ok) {
+          return c.json({ error: parsed.error }, 400);
+        }
+        emoji = parsed.value;
+      } else {
+        return c.json({ error: "Invalid emoji" }, 400);
+      }
+    }
+
+    taskGroups.push({ id, label, emoji });
   }
   if (taskGroups.length === 0) {
     return c.json({ error: "At least one task group required" }, 400);
@@ -157,15 +190,32 @@ boardsRoute.patch("/:id/priorities", async (c) => {
 boardsRoute.post("/:id/lists", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
-  let body: { name?: string };
+  let body: Record<string, unknown>;
   try {
     const text = await c.req.text();
-    body = text ? (JSON.parse(text) as { name?: string }) : {};
+    body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
   const name = typeof body.name === "string" ? body.name : "New list";
-  const saved = createListOnBoard(entry.id, name);
+
+  let emoji: string | null | undefined = undefined;
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
+  }
+
+  const saved = createListOnBoard(entry.id, { name, emoji });
   if (!saved) return c.json({ error: "Board not found" }, 404);
   return c.json(saved, 201);
 });
@@ -183,10 +233,28 @@ boardsRoute.patch("/:id/lists/:listId", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  const updates: { name?: string; color?: string | null } = {};
+  const updates: {
+    name?: string;
+    color?: string | null;
+    emoji?: string | null;
+  } = {};
   if (typeof body.name === "string") updates.name = body.name;
   if (typeof body.color === "string" || body.color === null) {
     updates.color = body.color as string | null;
+  }
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      updates.emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      updates.emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
   }
   const saved = patchListOnBoard(entry.id, listId, updates);
   if (!saved) return c.json({ error: "List not found" }, 404);
@@ -249,6 +317,23 @@ boardsRoute.post("/:id/tasks", async (c) => {
       : body.priorityId === undefined
         ? undefined
         : Number(body.priorityId);
+
+  let emoji: string | null | undefined = undefined;
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
+  }
+
   const saved = createTaskOnBoard(entry.id, {
     listId,
     groupId,
@@ -256,6 +341,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
     title,
     body: taskBody,
     status,
+    emoji,
   });
   if (!saved) return c.json({ error: "Invalid task or board" }, 400);
   return c.json(saved, 201);
@@ -287,6 +373,20 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
   if (typeof body.order === "number") patch.order = body.order;
   if (typeof body.color === "string" || body.color === null) {
     patch.color = body.color as string | null;
+  }
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      patch.emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      patch.emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
   }
   const saved = patchTaskOnBoard(entry.id, taskId, patch);
   if (!saved) return c.json({ error: "Task not found" }, 404);
@@ -338,15 +438,41 @@ boardsRoute.put("/:id/tasks/reorder", async (c) => {
 boardsRoute.patch("/:id", async (c) => {
   const entry = await entryByIdOrSlug(c.req.param("id"));
   if (!entry) return c.json({ error: "Board not found" }, 404);
-  let body: { name?: string };
+  let body: Record<string, unknown>;
   try {
-    body = (await c.req.json()) as { name?: string };
+    body = (await c.req.json()) as Record<string, unknown>;
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  const name = typeof body.name === "string" ? body.name : "";
-  if (!name.trim()) return c.json({ error: "name required" }, 400);
-  const saved = await patchBoardName(entry.id, name);
+  if (!("name" in body) && !("emoji" in body)) {
+    return c.json({ error: "name or emoji required" }, 400);
+  }
+  const patch: { name?: string; emoji?: string | null } = {};
+  if ("name" in body) {
+    if (typeof body.name !== "string") {
+      return c.json({ error: "name must be a string" }, 400);
+    }
+    const trimmed = body.name.trim();
+    if (!trimmed) {
+      return c.json({ error: "name required when provided" }, 400);
+    }
+    patch.name = trimmed;
+  }
+  if ("emoji" in body) {
+    const raw = body.emoji;
+    if (raw === null || raw === "") {
+      patch.emoji = null;
+    } else if (typeof raw === "string") {
+      const parsed = parseEmojiField(raw);
+      if (!parsed.ok) {
+        return c.json({ error: parsed.error }, 400);
+      }
+      patch.emoji = parsed.value;
+    } else {
+      return c.json({ error: "Invalid emoji" }, 400);
+    }
+  }
+  const saved = await patchBoard(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
   return c.json(saved);
 });

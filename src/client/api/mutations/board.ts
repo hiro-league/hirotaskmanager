@@ -21,6 +21,7 @@ function buildOptimisticBoard(id: number, name: string): Board {
   return {
     id,
     name,
+    emoji: null,
     taskGroups,
     taskPriorities,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
@@ -59,6 +60,7 @@ export function useCreateBoard() {
         id: optimisticId,
         slug: "",
         name,
+        emoji: null,
         createdAt: new Date().toISOString(),
       };
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) => [
@@ -91,6 +93,7 @@ export function useCreateBoard() {
                   id: data.id,
                   slug: data.slug ?? e.slug,
                   name: data.name,
+                  emoji: data.emoji ?? null,
                   createdAt: data.createdAt,
                 }
               : e,
@@ -103,30 +106,46 @@ export function useCreateBoard() {
   });
 }
 
-export function usePatchBoardName() {
+/** PATCH `/api/boards/:id` — send `name` and/or `emoji` (omit a key to leave it unchanged). */
+export function usePatchBoard() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { boardId: number; name: string }) => {
+    mutationFn: async (input: {
+      boardId: number;
+      name?: string;
+      emoji?: string | null;
+    }) => {
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name;
+      if (input.emoji !== undefined) body.emoji = input.emoji;
       return fetchJson<Board>(`/api/boards/${input.boardId}`, {
         method: "PATCH",
         headers: jsonHeaders,
-        body: JSON.stringify({ name: input.name }),
+        body: JSON.stringify(body),
       });
     },
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: boardKeys.all, exact: true });
       const prevList = qc.getQueryData<BoardIndexEntry[]>(boardKeys.all);
       const prevDetail = qc.getQueryData<Board>(boardKeys.detail(input.boardId));
-      const trimmed = input.name.trim();
+      const trimmed =
+        input.name !== undefined ? input.name.trim() : undefined;
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === input.boardId ? { ...e, name: trimmed } : e,
+          e.id === input.boardId
+            ? {
+                ...e,
+                ...(trimmed !== undefined ? { name: trimmed } : {}),
+                ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
+              }
+            : e,
         ),
       );
       if (prevDetail) {
         qc.setQueryData<Board>(boardKeys.detail(input.boardId), {
           ...prevDetail,
-          name: trimmed,
+          ...(trimmed !== undefined ? { name: trimmed } : {}),
+          ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
           updatedAt: new Date().toISOString(),
         });
       }
@@ -143,13 +162,23 @@ export function usePatchBoardName() {
     onSuccess: (data) => {
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === data.id ? { ...e, name: data.name } : e,
+          e.id === data.id
+            ? {
+                ...e,
+                name: data.name,
+                slug: data.slug ?? e.slug,
+                emoji: data.emoji ?? null,
+              }
+            : e,
         ),
       );
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
     },
   });
 }
+
+/** @deprecated Prefer {@link usePatchBoard}; kept for call sites that only rename. */
+export const usePatchBoardName = usePatchBoard;
 
 export function usePatchBoardViewPrefs() {
   const qc = useQueryClient();

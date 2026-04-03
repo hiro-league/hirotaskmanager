@@ -1,8 +1,10 @@
 import { ALL_TASK_GROUPS, type Board } from "../../../../shared/models";
 import {
   listTasksMergedSorted,
+  taskMatchesDateFilter,
   taskMatchesPriorityFilter,
   type ActiveTaskPriorityIds,
+  type TaskDateFilterResolved,
 } from "../boardStatusUtils";
 
 export type BoardLayoutNav = "lanes" | "stacked";
@@ -19,6 +21,7 @@ export function buildListColumnTaskIds(
   workflowOrder: readonly string[],
   activeGroup: string,
   activePriorityIds: ActiveTaskPriorityIds,
+  dateFilter: TaskDateFilterResolved | null = null,
 ): Map<number, number[]> {
   const map = new Map<number, number[]>();
   for (const listId of listIdsInOrder) {
@@ -30,6 +33,7 @@ export function buildListColumnTaskIds(
         activeGroup,
         activePriorityIds,
         workflowOrder,
+        dateFilter,
       );
       map.set(
         listId,
@@ -47,6 +51,9 @@ export function buildListColumnTaskIds(
         tasks = tasks.filter((t) =>
           taskMatchesPriorityFilter(t, activePriorityIds),
         );
+        if (dateFilter != null) {
+          tasks = tasks.filter((t) => taskMatchesDateFilter(t, dateFilter));
+        }
         tasks.sort((a, b) => a.order - b.order);
         ids.push(...tasks.map((t) => t.id));
       }

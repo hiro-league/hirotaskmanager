@@ -35,6 +35,7 @@ export function useBoardShortcutKeydown({
       if (e.key === "Tab" && e.shiftKey) return;
 
       for (const def of boardShortcutRegistry) {
+        if (def.helpOnly) continue;
         if (!def.matchKey(e.key)) continue;
         if (def.enabled && !def.enabled(board)) continue;
         if (def.preventDefault) e.preventDefault();

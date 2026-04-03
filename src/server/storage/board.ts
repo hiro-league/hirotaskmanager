@@ -53,12 +53,17 @@ function mapIndexRow(row: {
   id: number;
   slug: string;
   name: string;
+  emoji: string | null;
   created_at: string;
 }): BoardIndexEntry {
   return {
     id: row.id,
     slug: row.slug,
     name: row.name,
+    emoji:
+      row.emoji != null && String(row.emoji).trim() !== ""
+        ? String(row.emoji).trim()
+        : null,
     createdAt: row.created_at,
   };
 }
@@ -67,12 +72,13 @@ export async function readBoardIndex(): Promise<BoardIndexEntry[]> {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, slug, name, created_at FROM board ORDER BY name COLLATE NOCASE",
+      "SELECT id, slug, name, emoji, created_at FROM board ORDER BY name COLLATE NOCASE",
     )
     .all() as {
     id: number;
     slug: string;
     name: string;
+    emoji: string | null;
     created_at: string;
   }[];
   return rows.map(mapIndexRow);
@@ -86,24 +92,26 @@ export async function entryByIdOrSlug(
   if (/^\d+$/.test(ref)) {
     const row = db
       .query(
-        "SELECT id, slug, name, created_at FROM board WHERE id = ?",
+        "SELECT id, slug, name, emoji, created_at FROM board WHERE id = ?",
       )
       .get(Number(ref)) as {
       id: number;
       slug: string;
       name: string;
+      emoji: string | null;
       created_at: string;
     } | null;
     if (row) return mapIndexRow(row);
   }
   const row2 = db
     .query(
-      "SELECT id, slug, name, created_at FROM board WHERE slug = ?",
+      "SELECT id, slug, name, emoji, created_at FROM board WHERE slug = ?",
     )
     .get(ref) as {
     id: number;
     slug: string;
     name: string;
+    emoji: string | null;
     created_at: string;
   } | null;
   return row2 ? mapIndexRow(row2) : null;
@@ -113,13 +121,14 @@ export function loadBoard(boardId: number): Board | null {
   const db = getDb();
   const boardRow = db
     .query(
-      "SELECT id, name, slug, created_at, updated_at FROM board WHERE id = ?",
+      "SELECT id, name, slug, emoji, created_at, updated_at FROM board WHERE id = ?",
     )
     .get(boardId) as
     | {
         id: number;
         name: string;
         slug: string;
+        emoji: string | null;
         created_at: string;
         updated_at: string;
       }
@@ -143,13 +152,17 @@ export function loadBoard(boardId: number): Board | null {
 
   const groupRows = db
     .query(
-      "SELECT id, label FROM task_group WHERE board_id = ? ORDER BY id",
+      "SELECT id, label, emoji FROM task_group WHERE board_id = ? ORDER BY id",
     )
-    .all(boardId) as { id: number; label: string }[];
+    .all(boardId) as { id: number; label: string; emoji: string | null }[];
 
   const taskGroups: GroupDefinition[] = groupRows.map((g) => ({
     id: g.id,
     label: g.label,
+    emoji:
+      g.emoji != null && String(g.emoji).trim() !== ""
+        ? String(g.emoji).trim()
+        : null,
   }));
 
   const priorityRows = db
@@ -176,13 +189,14 @@ export function loadBoard(boardId: number): Board | null {
 
   const listRows = db
     .query(
-      "SELECT id, name, sort_order, color FROM list WHERE board_id = ? ORDER BY sort_order, id",
+      "SELECT id, name, sort_order, color, emoji FROM list WHERE board_id = ? ORDER BY sort_order, id",
     )
     .all(boardId) as {
     id: number;
     name: string;
     sort_order: number;
     color: string | null;
+    emoji: string | null;
   }[];
 
   const lists: List[] = listRows.map((l) => ({
@@ -190,11 +204,15 @@ export function loadBoard(boardId: number): Board | null {
     name: l.name,
     order: l.sort_order,
     color: l.color ?? undefined,
+    emoji:
+      l.emoji != null && String(l.emoji).trim() !== ""
+        ? String(l.emoji).trim()
+        : null,
   }));
 
   const taskRows = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
        FROM task WHERE board_id = ? ORDER BY list_id, status_id, sort_order, id`,
     )
     .all(boardId) as {
@@ -207,6 +225,7 @@ export function loadBoard(boardId: number): Board | null {
     body: string;
     sort_order: number;
     color: string | null;
+    emoji: string | null;
     created_at: string;
     updated_at: string;
     closed_at: string | null;
@@ -222,6 +241,10 @@ export function loadBoard(boardId: number): Board | null {
     status: t.status_id as Task["status"],
     order: t.sort_order,
     color: t.color ?? undefined,
+    emoji:
+      t.emoji != null && String(t.emoji).trim() !== ""
+        ? String(t.emoji).trim()
+        : null,
     createdAt: t.created_at,
     updatedAt: t.updated_at,
     closedAt: t.closed_at ?? undefined,
@@ -246,6 +269,10 @@ export function loadBoard(boardId: number): Board | null {
     id: boardRow.id,
     slug: boardRow.slug,
     name: boardRow.name,
+    emoji:
+      boardRow.emoji != null && String(boardRow.emoji).trim() !== ""
+        ? String(boardRow.emoji).trim()
+        : null,
     backgroundImage: prefs?.background_image ?? undefined,
     boardColor: parseBoardColor(prefs?.board_color ?? undefined),
     taskGroups,
@@ -295,20 +322,21 @@ export async function deleteBoardById(id: number): Promise<void> {
 export async function createBoardWithDefaults(
   name: string,
   slug: string,
+  emoji: string | null = null,
 ): Promise<Board> {
   const now = new Date().toISOString();
   const boardId = withTransaction(getDb(), () => {
     const db = getDb();
     const r = db.run(
-      "INSERT INTO board (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)",
-      [name, slug, now, now],
+      "INSERT INTO board (name, slug, emoji, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      [name, slug, emoji, now, now],
     );
     const id = Number(r.lastInsertRowid);
     const groups = createDefaultTaskGroups();
     for (const g of groups) {
       db.run(
-        "INSERT INTO task_group (board_id, label) VALUES (?, ?)",
-        [id, g.label],
+        "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
+        [id, g.label, null],
       );
     }
     // Seed built-in priorities here so every new board can assign them immediately.
@@ -437,6 +465,29 @@ function applyTaskPriorityChanges(
   }
 }
 
+/**
+ * When `emoji` is omitted on PATCH (e.g. older clients), keep the stored value for that id.
+ */
+function resolveTaskGroupEmoji(
+  db: Database,
+  boardId: number,
+  g: GroupDefinition,
+): string | null {
+  if (g.emoji !== undefined) {
+    return g.emoji;
+  }
+  if (g.id > 0) {
+    const row = db
+      .query("SELECT emoji FROM task_group WHERE id = ? AND board_id = ?")
+      .get(g.id, boardId) as { emoji: string | null } | null;
+    const raw = row?.emoji;
+    if (raw != null && String(raw).trim() !== "") {
+      return String(raw).trim();
+    }
+  }
+  return null;
+}
+
 /** Sync task groups (insert/update/delete); remaps tasks when groups are removed. */
 function applyTaskGroupChanges(
   db: Database,
@@ -450,24 +501,29 @@ function applyTaskGroupChanges(
   const keptGroupIds = new Set<number>();
 
   for (const g of taskGroups) {
+    const emoji = resolveTaskGroupEmoji(db, boardId, g);
     if (g.id > 0) {
       const row = db
         .query("SELECT id FROM task_group WHERE id = ? AND board_id = ?")
         .get(g.id, boardId) as { id: number } | null;
       if (row) {
-        db.run("UPDATE task_group SET label = ? WHERE id = ?", [g.label, g.id]);
+        db.run("UPDATE task_group SET label = ?, emoji = ? WHERE id = ?", [
+          g.label,
+          emoji,
+          g.id,
+        ]);
         keptGroupIds.add(g.id);
       } else {
         const r = db.run(
-          "INSERT INTO task_group (board_id, label) VALUES (?, ?)",
-          [boardId, g.label],
+          "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
+          [boardId, g.label, emoji],
         );
         keptGroupIds.add(Number(r.lastInsertRowid));
       }
     } else {
       const r = db.run(
-        "INSERT INTO task_group (board_id, label) VALUES (?, ?)",
-        [boardId, g.label],
+        "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
+        [boardId, g.label, emoji],
       );
       keptGroupIds.add(Number(r.lastInsertRowid));
     }
@@ -488,27 +544,52 @@ function applyTaskGroupChanges(
   }
 }
 
-export async function patchBoardName(
+/**
+ * Patch board name and/or emoji. Omitted keys leave those fields unchanged.
+ * (Phase 4 emoji icons: same PATCH semantics as lists — omit field to preserve, null clears.)
+ */
+export async function patchBoard(
   boardId: number,
-  name: string,
+  patch: { name?: string; emoji?: string | null },
 ): Promise<Board | null> {
-  const trimmed = name.trim();
-  if (!trimmed) return null;
+  const hasName = "name" in patch;
+  const hasEmoji = "emoji" in patch;
+  if (!hasName && !hasEmoji) return null;
+
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const existing = loadBoard(boardId);
   if (!existing) return null;
-  if (existing.name === trimmed) return existing;
 
-  const newSlug = await generateSlug(trimmed, String(boardId));
+  let nextName = existing.name;
+  if (hasName) {
+    const trimmed = patch.name!.trim();
+    if (!trimmed) return null;
+    nextName = trimmed;
+  }
+
+  let nextSlug = existing.slug ?? "";
+  if (hasName && nextName !== existing.name) {
+    nextSlug = await generateSlug(nextName, String(boardId));
+  }
+
+  let nextEmoji = existing.emoji ?? null;
+  if (hasEmoji) {
+    nextEmoji = patch.emoji ?? null;
+  }
+
+  const unchanged =
+    (!hasName || nextName === existing.name) &&
+    (!hasEmoji || (nextEmoji ?? null) === (existing.emoji ?? null)) &&
+    (!hasName || nextSlug === (existing.slug ?? ""));
+  if (unchanged) return existing;
+
   const now = new Date().toISOString();
   withTransaction(db, () => {
-    db.run("UPDATE board SET name = ?, slug = ?, updated_at = ? WHERE id = ?", [
-      trimmed,
-      newSlug,
-      now,
-      boardId,
-    ]);
+    db.run(
+      "UPDATE board SET name = ?, slug = ?, emoji = ?, updated_at = ? WHERE id = ?",
+      [nextName, nextSlug, nextEmoji, now, boardId],
+    );
   });
   return loadBoard(boardId);
 }

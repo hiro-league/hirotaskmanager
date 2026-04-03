@@ -5,7 +5,7 @@ import { useBoard, useBoards } from "@/api/queries";
 import {
   useCreateBoard,
   useDeleteBoard,
-  usePatchBoardName,
+  usePatchBoard,
 } from "@/api/mutations";
 import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
@@ -13,8 +13,24 @@ import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTra
 import { usePreferencesStore } from "@/store/preferences";
 import { useMatch, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
+import { boardDisplayName } from "../../../shared/models";
 
-function boardCollapsedLabel(name: string): string {
+/** Collapsed rail: one grapheme when board emoji is set, else initials from the name. */
+function boardCollapsedLabel(name: string, emoji?: string | null): string {
+  const e = emoji?.trim();
+  if (e) {
+    try {
+      if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+        const seg = new Intl.Segmenter("en", { granularity: "grapheme" });
+        for (const { segment } of seg.segment(e)) {
+          return segment;
+        }
+      }
+    } catch {
+      /* fall through */
+    }
+    return [...e][0] ?? "?";
+  }
   const trimmed = name.trim();
   if (!trimmed) return "?";
   const words = trimmed.split(/\s+/).filter(Boolean);
@@ -137,7 +153,7 @@ export function Sidebar() {
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
   const selectedBoardId = boardMatch?.params.boardId ?? null;
   const createBoard = useCreateBoard();
-  const patchBoardName = usePatchBoardName();
+  const patchBoard = usePatchBoard();
   const deleteBoard = useDeleteBoard();
 
   const [editingId, setEditingId] = useState<string | null>(null); // String(board.id)
@@ -186,14 +202,14 @@ export function Sidebar() {
     const row = boards.find((b) => String(b.id) === id);
     if (!row || row.name === trimmed) return;
     try {
-      await patchBoardName.mutateAsync({
+      await patchBoard.mutateAsync({
         boardId: Number(id),
         name: trimmed,
       });
     } catch {
       /* toast in a later phase */
     }
-  }, [boards, cancelRename, editValue, editingId, patchBoardName]);
+  }, [boards, cancelRename, editValue, editingId, patchBoard]);
 
   const requestDelete = useCallback((id: number, name: string) => {
     setOpenMenuId(null);
@@ -268,13 +284,14 @@ export function Sidebar() {
             !isError &&
             boards.map((b) => {
               const active = String(b.id) === selectedBoardId;
-              const label = boardCollapsedLabel(b.name);
+              const label = boardCollapsedLabel(b.name, b.emoji);
+              const display = boardDisplayName(b);
               return (
                 <button
                   key={b.id}
                   type="button"
-                  title={b.name}
-                  aria-label={b.name}
+                  title={display}
+                  aria-label={display}
                   aria-current={active ? "true" : undefined}
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold leading-none tracking-tight transition-colors",
@@ -353,7 +370,7 @@ export function Sidebar() {
                       onClick={() => navigate(boardPath(String(b.id)))}
                       onDoubleClick={() => startRename(b.id, b.name)}
                     >
-                      {b.name}
+                      {boardDisplayName(b)}
                     </button>
                   )}
                   {!editing && (

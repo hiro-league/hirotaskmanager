@@ -13,6 +13,7 @@ import { useStatusWorkflowOrder } from "@/api/queries";
 import {
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { visibleStatusesForBoard } from "../boardStatusUtils";
 import {
@@ -92,6 +93,9 @@ interface BoardKeyboardNavContextValue {
   /** Open-band task composer per list; last open band wins if remounted. */
   registerAddTaskComposer: (listId: number, open: () => void) => () => void;
   openAddTaskForList: (listId: number) => void;
+  /** List header rename (F2); last mounted header for that list wins. */
+  registerListRename: (listId: number, openRename: () => void) => () => void;
+  openRenameForList: (listId: number) => void;
   /** Opens the board “Add list” composer; new list is ordered after `anchorListId` (null = append at end). */
   registerOpenAddListComposer: (
     fn: (anchorListId: number | null) => void,
@@ -138,6 +142,7 @@ export function BoardKeyboardNavProvider({
     board.id,
     board.taskPriorities,
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
@@ -178,6 +183,7 @@ export function BoardKeyboardNavProvider({
         workflowOrder,
         activeGroup,
         activePriorityIds,
+        dateFilterResolved,
       ),
     [
       board,
@@ -187,6 +193,7 @@ export function BoardKeyboardNavProvider({
       workflowOrder,
       activeGroup,
       activePriorityIds,
+      dateFilterResolved,
     ],
   );
 
@@ -263,6 +270,7 @@ export function BoardKeyboardNavProvider({
   const taskElementsRef = useRef<Map<number, HTMLElement>>(new Map());
   const listElementsRef = useRef<Map<number, HTMLElement>>(new Map());
   const addTaskComposersRef = useRef<Map<number, () => void>>(new Map());
+  const listRenameOpenersRef = useRef<Map<number, () => void>>(new Map());
   const lastMousePointRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -307,6 +315,20 @@ export function BoardKeyboardNavProvider({
 
   const openAddTaskForList = useCallback((listId: number) => {
     addTaskComposersRef.current.get(listId)?.();
+  }, []);
+
+  const registerListRename = useCallback(
+    (listId: number, openRename: () => void) => {
+      listRenameOpenersRef.current.set(listId, openRename);
+      return () => {
+        listRenameOpenersRef.current.delete(listId);
+      };
+    },
+    [],
+  );
+
+  const openRenameForList = useCallback((listId: number) => {
+    listRenameOpenersRef.current.get(listId)?.();
   }, []);
 
   const openAddListComposerRef = useRef<
@@ -547,6 +569,8 @@ export function BoardKeyboardNavProvider({
       registerListElement,
       registerAddTaskComposer,
       openAddTaskForList,
+      registerListRename,
+      openRenameForList,
       registerOpenAddListComposer,
       openAddListComposerAfter,
       setListColumnOrder,
@@ -567,6 +591,8 @@ export function BoardKeyboardNavProvider({
       registerListElement,
       registerAddTaskComposer,
       openAddTaskForList,
+      registerListRename,
+      openRenameForList,
       registerOpenAddListComposer,
       openAddListComposerAfter,
       focusOrScrollHighlight,

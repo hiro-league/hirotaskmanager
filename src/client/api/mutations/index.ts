@@ -1,6 +1,7 @@
 export {
   useCreateBoard,
   useDeleteBoard,
+  usePatchBoard,
   usePatchBoardName,
   usePatchBoardTaskPriorities,
   usePatchBoardTaskGroups,
@@ -9,7 +10,7 @@ export {
 export {
   useCreateList,
   useDeleteList,
-  useRenameList,
+  usePatchList,
   useReorderLists,
 } from "./lists";
 export {

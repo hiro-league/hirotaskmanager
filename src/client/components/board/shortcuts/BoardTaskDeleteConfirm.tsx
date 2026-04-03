@@ -1,5 +1,5 @@
 import { useDeleteTask } from "@/api/mutations";
-import type { Board } from "../../../../shared/models";
+import { taskDisplayTitle, type Board } from "../../../../shared/models";
 import { useBoardKeyboardNav } from "./BoardKeyboardNavContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -30,7 +30,7 @@ export function BoardTaskDeleteConfirm({
       title="Delete this task?"
       message={
         task
-          ? `Delete “${task.title.trim() || "Untitled"}”? This cannot be undone.`
+          ? `Delete “${taskDisplayTitle(task)}”? This cannot be undone.`
           : "Delete this task? This cannot be undone."
       }
       confirmLabel="Delete"

@@ -3,8 +3,12 @@ import { getDb, withTransaction } from "../db";
 import { boardExists } from "./helpers";
 import { loadBoard } from "./board";
 
-export function createListOnBoard(boardId: number, name: string): Board | null {
-  const trimmed = name.trim() || "New list";
+export function createListOnBoard(
+  boardId: number,
+  input: { name: string; emoji?: string | null },
+): Board | null {
+  const trimmed = input.name.trim() || "New list";
+  const emoji = input.emoji ?? null;
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const now = new Date().toISOString();
@@ -16,8 +20,8 @@ export function createListOnBoard(boardId: number, name: string): Board | null {
       .get(boardId) as { m: number };
     const nextOrder = maxRow.m + 1;
     db.run(
-      "INSERT INTO list (board_id, name, sort_order, color) VALUES (?, ?, ?, ?)",
-      [boardId, trimmed, nextOrder, null],
+      "INSERT INTO list (board_id, name, sort_order, color, emoji) VALUES (?, ?, ?, ?, ?)",
+      [boardId, trimmed, nextOrder, null, emoji],
     );
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
@@ -27,7 +31,7 @@ export function createListOnBoard(boardId: number, name: string): Board | null {
 export function patchListOnBoard(
   boardId: number,
   listId: number,
-  updates: { name?: string; color?: string | null },
+  updates: { name?: string; color?: string | null; emoji?: string | null },
 ): Board | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
@@ -45,6 +49,10 @@ export function patchListOnBoard(
   if (updates.color !== undefined) {
     sets.push("color = ?");
     vals.push(updates.color);
+  }
+  if (updates.emoji !== undefined) {
+    sets.push("emoji = ?");
+    vals.push(updates.emoji);
   }
   if (sets.length === 0) return loadBoard(boardId);
 

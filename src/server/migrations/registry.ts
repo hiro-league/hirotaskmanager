@@ -3,6 +3,10 @@ import { migration002 } from "./002_closed_at";
 import { migration003 } from "./003_task_search_fts5";
 import { migration004 } from "./004_task_search_extended";
 import { migration005 } from "./005_task_priorities";
+import { migration006 } from "./006_task_group_emoji";
+import { migration007 } from "./007_task_emoji";
+import { migration008 } from "./008_list_emoji";
+import { migration009 } from "./009_board_emoji";
 import type { Migration } from "./types";
 
 /** Numbered migrations, ascending by version. */
@@ -12,4 +16,8 @@ export const migrations: Migration[] = [
   migration003,
   migration004,
   migration005,
+  migration006,
+  migration007,
+  migration008,
+  migration009,
 ];

@@ -6,6 +6,7 @@ import {
   type GroupDefinition,
 } from "../../../shared/models";
 import { usePatchBoardTaskGroups } from "@/api/mutations";
+import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { DiscardChangesDialog } from "./shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
 import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
@@ -29,14 +30,16 @@ export function TaskGroupsEditorDialog({
   /** Snapshot when dialog opens — used for dirty detection (Phase 4 close-request path). */
   const [baseline, setBaseline] = useState("");
   const [showDiscard, setShowDiscard] = useState(false);
+  const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setShowDiscard(false);
+    setEmojiFieldError(null);
     const initial: GroupDefinition[] =
       board.taskGroups.length > 0
         ? board.taskGroups.map((g) => ({ ...g }))
-        : [{ id: 0, label: "" }];
+        : [{ id: 0, label: "", emoji: null }];
     setRows(initial);
     setBaseline(JSON.stringify(initial));
   }, [open, board.taskGroups]);
@@ -74,7 +77,11 @@ export function TaskGroupsEditorDialog({
 
   const { nextGroups, remapCount } = useMemo(() => {
     const trimmed = rows
-      .map((r) => ({ id: r.id, label: r.label.trim() }))
+      .map((r) => ({
+        id: r.id,
+        label: r.label.trim(),
+        emoji: r.emoji ?? null,
+      }))
       .filter((r) => r.label.length > 0);
     const nextIds = new Set(trimmed.map((g) => g.id));
     const removed = board.taskGroups
@@ -93,7 +100,14 @@ export function TaskGroupsEditorDialog({
   const save = () => {
     if (nextGroups.length === 0) return;
     patchGroups.mutate(
-      { boardId: board.id, taskGroups: nextGroups },
+      {
+        boardId: board.id,
+        taskGroups: nextGroups.map((g) => ({
+          id: g.id,
+          label: g.label,
+          emoji: g.emoji,
+        })),
+      },
       { onSuccess: () => onClose() },
     );
   };
@@ -123,6 +137,11 @@ export function TaskGroupsEditorDialog({
         <p className="mt-1 text-sm text-muted-foreground">
           Names used to categorize tasks on this board. Empty rows are ignored.
         </p>
+        {emojiFieldError ? (
+          <p className="mt-2 text-sm text-destructive" role="alert">
+            {emojiFieldError}
+          </p>
+        ) : null}
         {remapCount > 0 ? (
           <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
             {remapCount} task{remapCount === 1 ? "" : "s"} in removed groups
@@ -133,6 +152,21 @@ export function TaskGroupsEditorDialog({
         <ul className="mt-4 space-y-2">
           {rows.map((row) => (
             <li key={row.id} className="flex items-center gap-2">
+              <EmojiPickerMenuButton
+                emoji={row.emoji}
+                disabled={busy}
+                onValidationError={setEmojiFieldError}
+                chooseAriaLabel="Choose emoji for group"
+                selectedAriaLabel={(e) => `Group emoji ${e}`}
+                onPick={(next) => {
+                  setEmojiFieldError(null);
+                  setRows((prev) =>
+                    prev.map((x) =>
+                      x.id === row.id ? { ...x, emoji: next } : x,
+                    ),
+                  );
+                }}
+              />
               <input
                 type="text"
                 className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
@@ -169,7 +203,7 @@ export function TaskGroupsEditorDialog({
           onClick={() =>
             setRows((prev) => [
               ...prev,
-              { id: nextGroupId(prev), label: "" },
+              { id: nextGroupId(prev), label: "", emoji: null },
             ])
           }
         >

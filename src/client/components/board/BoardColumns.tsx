@@ -2,6 +2,7 @@ import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Board } from "../../../shared/models";
+import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import {
   DragDropProvider,
   DragOverlay as ReactDragOverlay,
@@ -43,11 +44,14 @@ export function AddListSlot({
   const createList = useCreateList();
   const reorderLists = useReorderLists();
   const [name, setName] = useState("");
+  const [listEmoji, setListEmoji] = useState<string | null>(null);
+  const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    setEmojiFieldError(null);
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [open]);
@@ -61,6 +65,7 @@ export function AddListSlot({
 
   const cancel = () => {
     setName("");
+    setListEmoji(null);
     onClose();
   };
 
@@ -76,10 +81,9 @@ export function AddListSlot({
     const anchor = insertAfterListId;
 
     createList.mutate(
-      { boardId, name: trimmed },
+      { boardId, name: trimmed, emoji: listEmoji ?? null },
       {
         onSuccess: (data) => {
-          setName("");
           cancel();
           const newList = data.lists.find((l) => !prevSet.has(l.id));
           if (anchor == null || !newList) return;
@@ -121,23 +125,41 @@ export function AddListSlot({
       className={`${shellClass} rounded-lg border border-border bg-list-column p-2 shadow-sm`}
       data-board-no-pan
     >
+      {emojiFieldError ? (
+        <p className="mb-1 text-xs text-destructive" role="alert">
+          {emojiFieldError}
+        </p>
+      ) : null}
       {/* The add-list editor restores selection inside the board's non-selectable drag surface. */}
-      <input
-        ref={inputRef}
-        type="text"
-        className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground select-text"
-        placeholder="Enter list name…"
-        value={name}
-        disabled={createList.isPending}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            submit();
-          }
-          if (e.key === "Escape") cancel();
-        }}
-      />
+      <div className="flex gap-2">
+        <EmojiPickerMenuButton
+          emoji={listEmoji}
+          disabled={createList.isPending}
+          onValidationError={setEmojiFieldError}
+          chooseAriaLabel="Choose list emoji"
+          selectedAriaLabel={(e) => `List emoji ${e}`}
+          onPick={(next) => {
+            setEmojiFieldError(null);
+            setListEmoji(next);
+          }}
+        />
+        <input
+          ref={inputRef}
+          type="text"
+          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground select-text"
+          placeholder="Enter list name…"
+          value={name}
+          disabled={createList.isPending}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+            if (e.key === "Escape") cancel();
+          }}
+        />
+      </div>
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"

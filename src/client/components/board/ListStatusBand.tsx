@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
   ALL_TASK_GROUPS,
-  groupLabelForId,
+  groupDisplayLabelForId,
   type Board,
   type List,
   type Task,
@@ -18,8 +18,10 @@ import {
   useResolvedActiveTaskGroup,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
+  useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
+import { taskMatchesDateFilter } from "./boardStatusUtils";
 import { parseTaskSortableId } from "./dndIds";
 import { SortableTaskRow } from "./SortableTaskRow";
 import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
@@ -50,6 +52,7 @@ export function ListStatusBand({
     board.id,
     board.taskPriorities,
   );
+  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
 
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
@@ -75,8 +78,20 @@ export function ListStatusBand({
           activePriorityIds.includes(String(t.priorityId)),
       );
     }
+    if (dateFilterResolved != null) {
+      listTasks = listTasks.filter((t) =>
+        taskMatchesDateFilter(t, dateFilterResolved),
+      );
+    }
     return listTasks.sort((a, b) => a.order - b.order);
-  }, [board.tasks, list.id, status, activeGroup, activePriorityIds]);
+  }, [
+    board.tasks,
+    list.id,
+    status,
+    activeGroup,
+    activePriorityIds,
+    dateFilterResolved,
+  ]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -315,7 +330,7 @@ export function ListStatusBand({
                     task={task}
                     taskPriorities={board.taskPriorities}
                     viewMode={taskCardViewMode}
-                    groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                    groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
                     onOpen={() => setEditingTask(task)}
                     editingTitle={editingTitleTaskId === task.id}
                     titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -444,7 +459,7 @@ export function ListStatusBand({
                 task={task}
                 taskPriorities={board.taskPriorities}
                 viewMode={taskCardViewMode}
-                groupLabel={groupLabelForId(board.taskGroups, task.groupId)}
+                groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
                 onOpen={() => setEditingTask(task)}
                 editingTitle={editingTitleTaskId === task.id}
                 titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -516,7 +531,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
       task={task}
       taskPriorities={taskPriorities}
       viewMode={viewMode}
-      groupLabel={groupLabelForId(taskGroups, task.groupId)}
+      groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
       onOpen={handleOpen}
       editingTitle={editingTitle}
       titleDraft={titleDraft}

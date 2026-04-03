@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useRef, type RefCallback } from "react";
-import type { Board, List } from "../../../shared/models";
+import { listDisplayName, type Board, type List } from "../../../shared/models";
 import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatusBand } from "@/components/board/ListStatusBand";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
@@ -88,7 +88,7 @@ function ListColumnBody({
               data-board-id={board.id}
               data-list-id={listId}
               data-status={status}
-              aria-label={`${list.name} — ${status}`}
+              aria-label={`${listDisplayName(list)} — ${status}`}
             >
               <ListStatusBand
                 board={board}

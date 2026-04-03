@@ -17,6 +17,8 @@ export type TaskStatus = string;
 export interface GroupDefinition {
   id: number;
   label: string;
+  /** Optional emoji before the label; not used for search or sorting. */
+  emoji?: string | null;
 }
 
 export interface TaskPriorityDefinition {
@@ -57,12 +59,29 @@ export function nextGroupId(groups: GroupDefinition[]): number {
   return max + 1;
 }
 
-/** Resolved label for a group id, or the id if unknown. */
+/** Plain text label for a group id, or the id if unknown (no emoji). */
 export function groupLabelForId(
   groups: GroupDefinition[],
   groupId: number,
 ): string {
   return groups.find((g) => g.id === groupId)?.label ?? String(groupId);
+}
+
+/** Visible group label: optional emoji, space, then name (Phase 1 task group icons). */
+export function formatGroupDisplayLabel(g: GroupDefinition): string {
+  const label = g.label.trim() || String(g.id);
+  const e = g.emoji?.trim();
+  return e ? `${e} ${label}` : label;
+}
+
+/** Resolved display label for a group id (emoji + label when set). */
+export function groupDisplayLabelForId(
+  groups: GroupDefinition[],
+  groupId: number,
+): string {
+  const g = groups.find((x) => x.id === groupId);
+  if (!g) return String(groupId);
+  return formatGroupDisplayLabel(g);
 }
 
 /** Default priorities for new boards; placeholder ids are only for optimistic client state. */
@@ -111,6 +130,15 @@ export interface List {
   name: string;
   order: number;
   color?: string;
+  /** Optional emoji before the list name; not indexed for search. */
+  emoji?: string | null;
+}
+
+/** Visible list name: emoji + space + name when emoji is set. */
+export function listDisplayName(list: List): string {
+  const base = list.name.trim() || String(list.id);
+  const e = list.emoji?.trim();
+  return e ? `${e} ${base}` : base;
 }
 
 export interface Task {
@@ -125,10 +153,19 @@ export interface Task {
   status: TaskStatus;
   order: number;
   color?: string;
+  /** Optional emoji before the title; not indexed for search. */
+  emoji?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Set when the task is in a closed (`is_closed`) status; first close time is preserved. */
   closedAt?: string | null;
+}
+
+/** Visible task title line: emoji + space + title when emoji is set. */
+export function taskDisplayTitle(task: Task): string {
+  const base = task.title.trim() || "Untitled";
+  const e = task.emoji?.trim();
+  return e ? `${e} ${base}` : base;
 }
 
 /** Row in the board list API — lightweight sidebar entries. */
@@ -136,6 +173,8 @@ export interface BoardIndexEntry {
   id: number;
   slug: string;
   name: string;
+  /** Optional emoji before the board name; not indexed for search. */
+  emoji?: string | null;
   createdAt: string;
 }
 
@@ -162,6 +201,8 @@ export interface Board {
   /** URL slug (also in index); optional on partial client payloads. */
   slug?: string;
   name: string;
+  /** Optional emoji before the board name; not indexed for search. */
+  emoji?: string | null;
   backgroundImage?: string;
   /** Canvas color preset for the main column area; omitted reads as default (cyan) in UI. */
   boardColor?: BoardColorPreset;
@@ -179,6 +220,13 @@ export interface Board {
   tasks: Task[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** Visible board title line: emoji + space + name when emoji is set. */
+export function boardDisplayName(board: Pick<Board, "name" | "emoji">): string {
+  const base = board.name.trim() || "Untitled";
+  const e = board.emoji?.trim();
+  return e ? `${e} ${base}` : base;
 }
 
 /** Effective layout: only explicit `"lanes"` selects lanes; omitted or `"stacked"` → stacked. */

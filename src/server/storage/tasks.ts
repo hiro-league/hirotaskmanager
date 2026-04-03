@@ -13,6 +13,7 @@ export function createTaskOnBoard(
     body: string;
     groupId: number;
     priorityId?: number | null;
+    emoji?: string | null;
   },
 ): Board | null {
   const db = getDb();
@@ -55,11 +56,12 @@ export function createTaskOnBoard(
 
   const now = new Date().toISOString();
   const closedAt = statusIsClosed(db, statusId) ? now : null;
+  const emoji = input.emoji ?? null;
   withTransaction(db, () => {
     db.run(
       `INSERT INTO task (list_id, group_id, priority_id, board_id, status_id,
-         title, body, sort_order, color, created_at, updated_at, closed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         title, body, sort_order, color, emoji, created_at, updated_at, closed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.listId,
         input.groupId,
@@ -70,6 +72,7 @@ export function createTaskOnBoard(
         input.body,
         maxOrder + 1,
         null,
+        emoji,
         now,
         now,
         closedAt,
@@ -92,6 +95,7 @@ export function patchTaskOnBoard(
     status: string;
     order: number;
     color: string | null;
+    emoji: string | null;
   }>,
 ): Board | null {
   const db = getDb();
@@ -99,7 +103,7 @@ export function patchTaskOnBoard(
 
   const trow = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, created_at, updated_at, closed_at
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
        FROM task WHERE id = ? AND board_id = ?`,
     )
     .get(taskId, boardId) as {
@@ -112,6 +116,7 @@ export function patchTaskOnBoard(
     body: string;
     sort_order: number;
     color: string | null;
+    emoji: string | null;
     created_at: string;
     updated_at: string;
     closed_at: string | null;
@@ -167,6 +172,12 @@ export function patchTaskOnBoard(
   const title = patch.title ?? trow.title;
   const body = patch.body ?? trow.body;
   const color = patch.color !== undefined ? patch.color : trow.color;
+  const emoji =
+    patch.emoji !== undefined
+      ? patch.emoji
+      : trow.emoji != null && String(trow.emoji).trim() !== ""
+        ? String(trow.emoji).trim()
+        : null;
   const now = new Date().toISOString();
 
   let nextClosedAt: string | null;
@@ -179,7 +190,7 @@ export function patchTaskOnBoard(
   withTransaction(db, () => {
     db.run(
       `UPDATE task SET list_id = ?, group_id = ?, priority_id = ?, status_id = ?, title = ?, body = ?,
-         sort_order = ?, color = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
+         sort_order = ?, color = ?, emoji = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
       [
         listId,
         groupId,
@@ -189,6 +200,7 @@ export function patchTaskOnBoard(
         body,
         order,
         color,
+        emoji,
         now,
         nextClosedAt,
         taskId,

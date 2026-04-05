@@ -1,8 +1,69 @@
 import { coerceTaskStatus } from "../../shared/models";
-import type { Board } from "../../shared/models";
+import type { Board, Task } from "../../shared/models";
 import { getDb, withTransaction } from "../db";
 import { boardExists, statusIsClosed } from "./helpers";
 import { loadBoard } from "./board";
+
+type TaskRow = {
+  id: number;
+  list_id: number;
+  group_id: number;
+  priority_id: number | null;
+  status_id: string;
+  title: string;
+  body: string;
+  sort_order: number;
+  color: string | null;
+  emoji: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+};
+
+export type TaskWriteResult = {
+  boardId: number;
+  boardUpdatedAt: string;
+  task: Task;
+};
+
+export type TaskDeleteResult = {
+  boardId: number;
+  boardUpdatedAt: string;
+  deletedTaskId: number;
+};
+
+function mapTaskRow(t: TaskRow): Task {
+  return {
+    id: t.id,
+    listId: t.list_id,
+    title: t.title,
+    body: t.body,
+    groupId: t.group_id,
+    priorityId: t.priority_id,
+    status: t.status_id as Task["status"],
+    order: t.sort_order,
+    color: t.color ?? undefined,
+    emoji:
+      t.emoji != null && String(t.emoji).trim() !== ""
+        ? String(t.emoji).trim()
+        : null,
+    createdAt: t.created_at,
+    updatedAt: t.updated_at,
+    closedAt: t.closed_at ?? undefined,
+  };
+}
+
+/** Phase 2: small task writes read back one task row instead of reloading the full board. */
+export function readTaskById(boardId: number, taskId: number): Task | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
+       FROM task WHERE id = ? AND board_id = ?`,
+    )
+    .get(taskId, boardId) as TaskRow | null;
+  return row ? mapTaskRow(row) : null;
+}
 
 export function createTaskOnBoard(
   boardId: number,
@@ -15,7 +76,7 @@ export function createTaskOnBoard(
     priorityId?: number | null;
     emoji?: string | null;
   },
-): Board | null {
+): TaskWriteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
 
@@ -57,8 +118,9 @@ export function createTaskOnBoard(
   const now = new Date().toISOString();
   const closedAt = statusIsClosed(db, statusId) ? now : null;
   const emoji = input.emoji ?? null;
+  let taskId: number | null = null;
   withTransaction(db, () => {
-    db.run(
+    const result = db.run(
       `INSERT INTO task (list_id, group_id, priority_id, board_id, status_id,
          title, body, sort_order, color, emoji, created_at, updated_at, closed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -78,9 +140,13 @@ export function createTaskOnBoard(
         closedAt,
       ],
     );
+    taskId = Number(result.lastInsertRowid);
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  if (taskId == null) return null;
+  const task = readTaskById(boardId, taskId);
+  if (!task) return null;
+  return { boardId, boardUpdatedAt: now, task };
 }
 
 export function patchTaskOnBoard(
@@ -97,7 +163,7 @@ export function patchTaskOnBoard(
     color: string | null;
     emoji: string | null;
   }>,
-): Board | null {
+): TaskWriteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
 
@@ -106,21 +172,7 @@ export function patchTaskOnBoard(
       `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
        FROM task WHERE id = ? AND board_id = ?`,
     )
-    .get(taskId, boardId) as {
-    id: number;
-    list_id: number;
-    group_id: number;
-    priority_id: number | null;
-    status_id: string;
-    title: string;
-    body: string;
-    sort_order: number;
-    color: string | null;
-    emoji: string | null;
-    created_at: string;
-    updated_at: string;
-    closed_at: string | null;
-  } | null;
+    .get(taskId, boardId) as TaskRow | null;
   if (!trow) return null;
 
   let listId = patch.listId ?? trow.list_id;
@@ -208,13 +260,15 @@ export function patchTaskOnBoard(
     );
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  const task = readTaskById(boardId, taskId);
+  if (!task) return null;
+  return { boardId, boardUpdatedAt: now, task };
 }
 
 export function deleteTaskOnBoard(
   boardId: number,
   taskId: number,
-): Board | null {
+): TaskDeleteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const row = db
@@ -226,7 +280,7 @@ export function deleteTaskOnBoard(
     db.run("DELETE FROM task WHERE id = ?", [taskId]);
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  return { boardId, boardUpdatedAt: now, deletedTaskId: taskId };
 }
 
 export function reorderTasksInBand(
@@ -267,5 +321,188 @@ export function reorderTasksInBand(
     });
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
+  return loadBoard(boardId);
+}
+
+function mergeVisibleOrderIntoBand(
+  serverBand: number[],
+  visibleOrderedTaskIds: number[],
+): number[] | null {
+  const visibleSet = new Set(visibleOrderedTaskIds);
+  if (visibleSet.size !== visibleOrderedTaskIds.length) return null;
+  if (!visibleOrderedTaskIds.every((id) => serverBand.includes(id))) return null;
+  if (visibleOrderedTaskIds.length === serverBand.length) return visibleOrderedTaskIds;
+
+  const out: number[] = [];
+  let visibleIdx = 0;
+  for (const id of serverBand) {
+    if (visibleSet.has(id)) {
+      const nextId = visibleOrderedTaskIds[visibleIdx++];
+      if (nextId == null) return null;
+      out.push(nextId);
+    } else {
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+export function moveTaskOnBoard(
+  boardId: number,
+  input: {
+    taskId: number;
+    toListId?: number;
+    toStatus?: string;
+    beforeTaskId?: number;
+    afterTaskId?: number;
+    position?: "first" | "last";
+    visibleOrderedTaskIds?: number[];
+  },
+): Board | null {
+  const db = getDb();
+  if (!boardExists(db, boardId)) return null;
+
+  const taskRow = db
+    .query(
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
+       FROM task WHERE id = ? AND board_id = ?`,
+    )
+    .get(input.taskId, boardId) as TaskRow | null;
+  if (!taskRow) return null;
+
+  const placementCount =
+    (input.beforeTaskId != null ? 1 : 0) +
+    (input.afterTaskId != null ? 1 : 0) +
+    (input.position != null ? 1 : 0);
+  if (placementCount > 1) return null;
+
+  const toListId = input.toListId ?? taskRow.list_id;
+  const listOk = db
+    .query("SELECT id FROM list WHERE id = ? AND board_id = ?")
+    .get(toListId, boardId) as { id: number } | null;
+  if (!listOk) return null;
+
+  const allowedStatusIds = (
+    db.query("SELECT id FROM status ORDER BY sort_order ASC, id ASC").all() as {
+      id: string;
+    }[]
+  ).map((r) => r.id);
+  const toStatus = coerceTaskStatus(input.toStatus ?? taskRow.status_id, allowedStatusIds);
+
+  const sourceListId = taskRow.list_id;
+  const sourceStatus = taskRow.status_id;
+  const sameBand = sourceListId === toListId && sourceStatus === toStatus;
+
+  const sourceBandIds = (
+    db.query(
+      `SELECT id FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? ORDER BY sort_order ASC, id ASC`,
+    ).all(boardId, sourceListId, sourceStatus) as { id: number }[]
+  ).map((row) => row.id);
+
+  const destinationBandWithoutTask = (
+    db.query(
+      `SELECT id FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? AND id != ? ORDER BY sort_order ASC, id ASC`,
+    ).all(boardId, toListId, toStatus, input.taskId) as { id: number }[]
+  ).map((row) => row.id);
+
+  if (input.beforeTaskId != null) {
+    if (input.beforeTaskId === input.taskId) return null;
+    const target = db
+      .query("SELECT list_id, status_id FROM task WHERE id = ? AND board_id = ?")
+      .get(input.beforeTaskId, boardId) as {
+      list_id: number;
+      status_id: string;
+    } | null;
+    if (!target || target.list_id !== toListId || target.status_id !== toStatus) return null;
+  }
+  if (input.afterTaskId != null) {
+    if (input.afterTaskId === input.taskId) return null;
+    const target = db
+      .query("SELECT list_id, status_id FROM task WHERE id = ? AND board_id = ?")
+      .get(input.afterTaskId, boardId) as {
+      list_id: number;
+      status_id: string;
+    } | null;
+    if (!target || target.list_id !== toListId || target.status_id !== toStatus) return null;
+  }
+
+  let destinationOrder: number[];
+  if (Array.isArray(input.visibleOrderedTaskIds) && input.visibleOrderedTaskIds.length > 0) {
+    const baseline = sameBand
+      ? sourceBandIds
+      : [...destinationBandWithoutTask, input.taskId];
+    const merged = mergeVisibleOrderIntoBand(baseline, input.visibleOrderedTaskIds);
+    if (!merged || !merged.includes(input.taskId)) return null;
+    destinationOrder = merged;
+  } else {
+    const remaining = destinationBandWithoutTask;
+    let insertAt = remaining.length;
+
+    if (input.beforeTaskId != null) {
+      const idx = remaining.indexOf(input.beforeTaskId);
+      if (idx < 0) return null;
+      insertAt = idx;
+    } else if (input.afterTaskId != null) {
+      const idx = remaining.indexOf(input.afterTaskId);
+      if (idx < 0) return null;
+      insertAt = idx + 1;
+    } else if (input.position === "first") {
+      insertAt = 0;
+    } else if (input.position === "last" || input.position == null) {
+      insertAt = remaining.length;
+    } else {
+      return null;
+    }
+
+    destinationOrder = [
+      ...remaining.slice(0, insertAt),
+      input.taskId,
+      ...remaining.slice(insertAt),
+    ];
+  }
+
+  const nextClosedAt = statusIsClosed(db, toStatus)
+    ? taskRow.closed_at ?? new Date().toISOString()
+    : null;
+  const now = new Date().toISOString();
+
+  withTransaction(db, () => {
+    if (sameBand) {
+      destinationOrder.forEach((taskId, index) => {
+        const closedAt = taskId === input.taskId ? nextClosedAt : undefined;
+        db.run(
+          `UPDATE task
+             SET list_id = ?, status_id = ?, sort_order = ?, updated_at = ?, closed_at = COALESCE(?, closed_at)
+           WHERE id = ? AND board_id = ?`,
+          [toListId, toStatus, index, now, closedAt ?? null, taskId, boardId],
+        );
+      });
+    } else {
+      const nextSource = sourceBandIds.filter((id) => id !== input.taskId);
+      nextSource.forEach((taskId, index) => {
+        db.run(
+          "UPDATE task SET sort_order = ?, updated_at = ? WHERE id = ? AND board_id = ?",
+          [index, now, taskId, boardId],
+        );
+      });
+      destinationOrder.forEach((taskId, index) => {
+        if (taskId === input.taskId) {
+          db.run(
+            `UPDATE task
+               SET list_id = ?, status_id = ?, sort_order = ?, updated_at = ?, closed_at = ?
+             WHERE id = ? AND board_id = ?`,
+            [toListId, toStatus, index, now, nextClosedAt, taskId, boardId],
+          );
+          return;
+        }
+        db.run(
+          "UPDATE task SET sort_order = ?, updated_at = ? WHERE id = ? AND board_id = ?",
+          [index, now, taskId, boardId],
+        );
+      });
+    }
+    db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
+  });
+
   return loadBoard(boardId);
 }

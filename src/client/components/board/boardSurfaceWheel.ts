@@ -37,6 +37,25 @@ export function verticalScrollChainCanConsumeWheel(
 }
 
 /**
+ * Returns true when the wheel target sits inside a real vertical scroll area,
+ * even if that scroller is already pinned at its top/bottom edge. This lets
+ * the board avoid "handing off" list-edge wheel gestures to horizontal panning.
+ */
+export function verticalScrollChainContainsScrollable(
+  target: Element,
+  root: HTMLElement,
+): boolean {
+  let el: Element | null = target;
+  while (el && el !== root) {
+    if (el instanceof HTMLElement && isVerticalOverflowScrollable(el)) {
+      if (el.scrollHeight > el.clientHeight + 1) return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+/**
  * Like {@link verticalScrollChainCanConsumeWheel}, but walks ancestors only while
  * inside `container` (inclusive). Use for wheel targets outside the board scroller
  * (e.g. board header) so we do not walk up into app chrome.

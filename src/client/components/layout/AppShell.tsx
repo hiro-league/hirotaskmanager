@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { useNotificationStream } from "@/api/useNotificationStream";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/store/preferences";
 import { AppHeader } from "./AppHeader";
+import { NotificationToasts } from "./NotificationToasts";
 
 interface AppShellProps {
   sidebar: ReactNode;
@@ -10,6 +12,7 @@ interface AppShellProps {
 
 export function AppShell({ sidebar, children }: AppShellProps) {
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
+  useNotificationStream();
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-background">
@@ -27,6 +30,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
           {children}
         </main>
       </div>
+      <NotificationToasts />
     </div>
   );
 }

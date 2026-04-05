@@ -262,12 +262,12 @@ export function ListStatusBand({
       {
         onSuccess: (data) => {
           setTitle("");
-          const createdTask = data.tasks.find(
-            (task) =>
-              !existingTaskIds.has(task.id) &&
-              task.listId === list.id &&
-              task.status === status,
-          );
+          const createdTask =
+            !existingTaskIds.has(data.entity.id) &&
+            data.entity.listId === list.id &&
+            data.entity.status === status
+              ? data.entity
+              : null;
           // After creating a task, move selection to the new task instead of
           // leaving the highlight behind on an older interaction.
           if (createdTask) boardNav?.selectTask(createdTask.id);

@@ -36,7 +36,18 @@ export type WriteTaskEntity = {
   closedAt: string | null | undefined;
 };
 
-export type WriteEntity = WriteBoardEntity | WriteListEntity | WriteTaskEntity;
+export type WriteDeletedEntity = {
+  type: "board" | "list" | "task";
+  id: number;
+  slug?: string;
+  deleted: true;
+};
+
+export type WriteEntity =
+  | WriteBoardEntity
+  | WriteListEntity
+  | WriteTaskEntity
+  | WriteDeletedEntity;
 
 export type WriteSuccessEnvelope = {
   ok: true;
@@ -44,6 +55,14 @@ export type WriteSuccessEnvelope = {
   boardSlug: string;
   boardUpdatedAt: string;
   entity: WriteEntity;
+};
+
+export type WriteDeleteEnvelope = {
+  ok: true;
+  boardId: number;
+  boardSlug: string;
+  boardUpdatedAt?: string;
+  deleted: WriteDeletedEntity;
 };
 
 export function compactBoardEntity(board: Board): WriteBoardEntity {
@@ -88,7 +107,7 @@ export function compactTaskEntity(task: Task): WriteTaskEntity {
 }
 
 export function writeSuccess(
-  board: Board,
+  board: Pick<Board, "id" | "updatedAt"> & { slug?: string },
   entity: WriteEntity,
 ): WriteSuccessEnvelope {
   return {
@@ -100,20 +119,28 @@ export function writeSuccess(
   };
 }
 
-/** New list is appended at the end — max `sort_order` / `order`. */
-export function findNewestList(board: Board): List | undefined {
-  if (board.lists.length === 0) return undefined;
-  return board.lists.reduce((a, b) =>
-    b.order > a.order || (b.order === a.order && b.id > a.id) ? b : a,
-  );
+export function deletedEntity(
+  type: WriteDeletedEntity["type"],
+  id: number,
+  slug?: string,
+): WriteDeletedEntity {
+  return {
+    type,
+    id,
+    slug,
+    deleted: true,
+  };
 }
 
-/** After `POST .../tasks`, the created row is the task with the largest id on the board. */
-export function findNewestTask(board: Board): Task | undefined {
-  if (board.tasks.length === 0) return undefined;
-  return board.tasks.reduce((a, b) => (b.id > a.id ? b : a));
-}
-
-export function findTaskById(board: Board, taskId: number): Task | undefined {
-  return board.tasks.find((t) => t.id === taskId);
+export function writeDeleted(
+  board: Pick<Board, "id"> & { slug?: string; updatedAt?: string },
+  deleted: WriteDeletedEntity,
+): WriteDeleteEnvelope {
+  return {
+    ok: true,
+    boardId: board.id,
+    boardSlug: board.slug ?? "",
+    boardUpdatedAt: board.updatedAt,
+    deleted,
+  };
 }

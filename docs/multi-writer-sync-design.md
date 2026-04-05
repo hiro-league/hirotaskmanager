@@ -322,13 +322,7 @@ The CLI does change, but only in its response parsing logic.
 
 `src/cli/lib/writeCommands.ts` currently assumes the API returns a full `Board`. After the write model change, the CLI should read the changed entity directly from the mutation result envelope.
 
-That means helpers like:
-
-- `findNewestTask`
-- `findNewestList`
-- `findTaskById`
-
-become unnecessary or much less important.
+The CLI now reads `entity` from the mutation envelope; helpers that inferred the changed row from a full `Board` (`findNewestTask`, `findNewestList`, `findTaskById`) were removed from `write-result.ts`.
 
 ## Scalability model
 

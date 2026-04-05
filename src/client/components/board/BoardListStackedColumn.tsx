@@ -422,12 +422,12 @@ function ListStackedBody({
       {
         onSuccess: (data) => {
           setTitle("");
-          const createdTask = data.tasks.find(
-            (task) =>
-              !existingTaskIds.has(task.id) &&
-              task.listId === list.id &&
-              task.status === quickAddStatus,
-          );
+          const createdTask =
+            !existingTaskIds.has(data.entity.id) &&
+            data.entity.listId === list.id &&
+            data.entity.status === quickAddStatus
+              ? data.entity
+              : null;
           // After creating a task, move selection to the new task instead of
           // leaving the highlight behind on an older interaction.
           if (createdTask) stackedBoardNav?.selectTask(createdTask.id);

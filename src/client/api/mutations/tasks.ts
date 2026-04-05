@@ -1,9 +1,22 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+  TASK_MANAGER_MUTATION_RESPONSE_HEADER,
+  type TaskDeleteMutationResult,
+  type TaskMutationResult,
+} from "../../../shared/mutationResults";
 import type { Board, Task } from "../../../shared/models";
+import { invalidateNotificationQueries } from "../notifications";
 import { boardKeys, fetchJson, invalidateBoardStatsQueries } from "../queries";
 import { tempNumericId } from "./shared";
 
-const jsonHeaders = { "Content-Type": "application/json" } as const;
+const jsonHeaders = {
+  "Content-Type": "application/json",
+  [TASK_MANAGER_MUTATION_RESPONSE_HEADER]: TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+} as const;
+
+/** Reorder returns a full `Board`; server ignores the granular mutation header on that route. */
+const jsonHeadersFullBoardOnly = { "Content-Type": "application/json" } as const;
 
 export function useCreateTask() {
   const qc = useQueryClient();
@@ -18,7 +31,7 @@ export function useCreateTask() {
       priorityId?: number | null;
       emoji?: string | null;
     }) => {
-      return fetchJson<Board>(`/api/boards/${input.boardId}/tasks`, {
+      return fetchJson<TaskMutationResult>(`/api/boards/${input.boardId}/tasks`, {
         method: "POST",
         headers: jsonHeaders,
         body: JSON.stringify({
@@ -59,16 +72,31 @@ export function useCreateTask() {
         updatedAt: now,
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
-      return { prev };
+      return { prev, optimisticTaskId: task.id };
     },
     onError: (_err, input, ctx) => {
       if (ctx?.prev) {
         qc.setQueryData<Board>(boardKeys.detail(input.boardId), ctx.prev);
       }
     },
-    onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+    onSuccess: (data, _input, ctx) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        const optimisticId = ctx?.optimisticTaskId;
+        const hasOptimistic =
+          optimisticId != null && current.tasks.some((task) => task.id === optimisticId);
+        return {
+          ...current,
+          tasks: hasOptimistic
+            ? current.tasks.map((task) =>
+                task.id === optimisticId ? data.entity : task,
+              )
+            : [...current.tasks, data.entity],
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -78,7 +106,7 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: async (input: { boardId: number; task: Task }) => {
       const t = input.task;
-      return fetchJson<Board>(
+      return fetchJson<TaskMutationResult>(
         `/api/boards/${input.boardId}/tasks/${t.id}`,
         {
           method: "PATCH",
@@ -134,8 +162,53 @@ export function useUpdateTask() {
       }
     },
     onSuccess: (data) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          tasks: current.tasks.map((task) =>
+            task.id === data.entity.id ? data.entity : task,
+          ),
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
+    },
+  });
+}
+
+export function useMoveTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      boardId: number;
+      taskId: number;
+      toListId?: number;
+      toStatus?: string;
+      beforeTaskId?: number;
+      afterTaskId?: number;
+      position?: "first" | "last";
+      visibleOrderedTaskIds?: number[];
+    }) => {
+      return fetchJson<Board>(`/api/boards/${input.boardId}/tasks/move`, {
+        method: "PUT",
+        headers: jsonHeadersFullBoardOnly,
+        body: JSON.stringify({
+          taskId: input.taskId,
+          toListId: input.toListId,
+          toStatus: input.toStatus,
+          beforeTaskId: input.beforeTaskId,
+          afterTaskId: input.afterTaskId,
+          position: input.position,
+          visibleOrderedTaskIds: input.visibleOrderedTaskIds,
+        }),
+      });
+    },
+    onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
       invalidateBoardStatsQueries(qc, data.id);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -151,7 +224,7 @@ export function useReorderTasksInBand() {
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/tasks/reorder`, {
         method: "PUT",
-        headers: jsonHeaders,
+        headers: jsonHeadersFullBoardOnly,
         body: JSON.stringify({
           listId: input.listId,
           status: input.status,
@@ -192,6 +265,7 @@ export function useReorderTasksInBand() {
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
       invalidateBoardStatsQueries(qc, data.id);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -200,9 +274,9 @@ export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { boardId: number; taskId: number }) => {
-      return fetchJson<Board>(
+      return fetchJson<TaskDeleteMutationResult>(
         `/api/boards/${input.boardId}/tasks/${input.taskId}`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: jsonHeaders },
       );
     },
     onMutate: async (input) => {
@@ -223,8 +297,16 @@ export function useDeleteTask() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          tasks: current.tasks.filter((task) => task.id !== data.deletedTaskId),
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
     },
   });
 }

@@ -115,6 +115,19 @@ interface BoardKeyboardNavContextValue {
   highlightEnd: () => void;
   /** Page Up = -1, Page Down = +1 (moves by PAGE_STEP within the column). */
   highlightPage: (direction: -1 | 1) => void;
+  /**
+   * Apply list/task selection from notification deep links. If the task exists on the board
+   * but is not in the filtered column map, returns `task_filtered_out` so the caller can
+   * open the task editor instead.
+   */
+  applyNotificationTarget: (opts: {
+    taskId?: number;
+    listId?: number;
+  }) =>
+    | { kind: "task_selected" }
+    | { kind: "task_filtered_out"; taskId: number }
+    | { kind: "list_selected" }
+    | { kind: "noop" };
 }
 
 const BoardKeyboardNavContext =
@@ -240,6 +253,21 @@ export function BoardKeyboardNavProvider({
     // On board load, select the first task in the leftmost list, or that list’s header if it has no visible tasks.
     // Ref avoids re-applying when filters/group/priority change columnMap for the same board.
     if (initialHighlightAppliedForBoardId.current === board.id) return;
+    // Notification deep links apply in a child `useLayoutEffect` before this passive effect; honor that selection
+    // so we do not overwrite it when listColumnOrder syncs late or the hash is cleared before this runs.
+    if (highlightedTaskId != null || highlightedListId != null) {
+      initialHighlightAppliedForBoardId.current = board.id;
+      return;
+    }
+    const hash =
+      typeof window !== "undefined" ? window.location.hash : "";
+    if (
+      hash.length > 1 &&
+      (hash.includes("taskId=") || hash.includes("listId="))
+    ) {
+      initialHighlightAppliedForBoardId.current = board.id;
+      return;
+    }
     const orderedFromBoard = [...board.lists]
       .sort((a, b) => a.order - b.order)
       .map((l) => l.id);
@@ -261,8 +289,10 @@ export function BoardKeyboardNavProvider({
   }, [
     board.id,
     board.lists,
-    listColumnOrder,
     columnMap,
+    highlightedListId,
+    highlightedTaskId,
+    listColumnOrder,
     setHighlightedListId,
     setHighlightedTaskId,
   ]);
@@ -583,6 +613,29 @@ export function BoardKeyboardNavProvider({
     [highlightedListId, highlightedTaskId, columnMap, setHighlightedTaskId],
   );
 
+  const applyNotificationTarget = useCallback(
+    (opts: { taskId?: number; listId?: number }):
+      | { kind: "task_selected" }
+      | { kind: "task_filtered_out"; taskId: number }
+      | { kind: "list_selected" }
+      | { kind: "noop" } => {
+      if (opts.taskId != null) {
+        const all = [...columnMap.values()].flat();
+        if (all.includes(opts.taskId)) {
+          selectTask(opts.taskId);
+          return { kind: "task_selected" };
+        }
+        return { kind: "task_filtered_out", taskId: opts.taskId };
+      }
+      if (opts.listId != null && listColumnOrder.includes(opts.listId)) {
+        selectList(opts.listId);
+        return { kind: "list_selected" };
+      }
+      return { kind: "noop" };
+    },
+    [columnMap, listColumnOrder, selectTask, selectList],
+  );
+
   const value = useMemo(
     (): BoardKeyboardNavContextValue => ({
       highlightedTaskId,
@@ -609,6 +662,7 @@ export function BoardKeyboardNavProvider({
       highlightHome,
       highlightEnd,
       highlightPage,
+      applyNotificationTarget,
     }),
     [
       highlightedTaskId,
@@ -632,6 +686,7 @@ export function BoardKeyboardNavProvider({
       highlightHome,
       highlightEnd,
       highlightPage,
+      applyNotificationTarget,
     ],
   );
 

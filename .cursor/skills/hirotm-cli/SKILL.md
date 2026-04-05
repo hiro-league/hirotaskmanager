@@ -17,6 +17,7 @@ Use this skill when:
 ## Core Rules
 
 - Use `hirotm` instead of direct SQLite access for normal TaskManager operations (reads and writes).
+- For agent-driven writes, include `--client-name "Cursor Agent"` so notifications identify the writer clearly.
 - Prefer CLI JSON output as the source of truth for current board/task data.
 - Do not write SQL or edit database files unless the user explicitly asks for database-level work.
 - If a query command fails with `Server not reachable`, run the exact `hirotm start ...` hint from the error output and retry.
@@ -27,11 +28,11 @@ Use this skill when:
 hirotm status
 hirotm boards list
 hirotm boards show <id-or-slug>
-hirotm boards add [name] [--emoji <text>]
-hirotm lists add --board <id-or-slug> [name] [--emoji <text>]
-hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks update --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm boards add --client-name "Cursor Agent" [name] [--emoji <text>]
+hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> [name] [--emoji <text>]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm statuses list
 hirotm search "<query>"
 hirotm search "<query>" --board <id-or-slug>
@@ -45,6 +46,7 @@ hirotm start --background
 2. If the server is not reachable, run the hinted `hirotm start ...` command.
 3. Use read commands to inspect current state.
 4. Keep outputs in JSON when reporting or making follow-up decisions.
+5. When performing writes as an automated agent, add `--client-name "Cursor Agent"` unless the user asked for a different writer label.
 
 ## Output Expectations
 

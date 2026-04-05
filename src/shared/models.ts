@@ -178,6 +178,8 @@ export interface BoardIndexEntry {
   name: string;
   /** Optional emoji before the board name; not indexed for search. */
   emoji?: string | null;
+  /** Plain-text notes; empty string when unset (same as full `Board`). */
+  description: string;
   /** Access level for hirotm CLI (`X-TaskManager-Client`); default `none`. */
   cliAccess: BoardCliAccess;
   createdAt: string;

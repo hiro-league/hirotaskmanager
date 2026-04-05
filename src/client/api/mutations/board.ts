@@ -12,6 +12,8 @@ import {
 } from "../../../shared/models";
 import { appNavigate } from "@/lib/appNavigate";
 import { boardPath, parseBoardIdFromPath } from "@/lib/boardPath";
+import { withBrowserClientHeaders } from "../clientHeaders";
+import { invalidateNotificationQueries } from "../notifications";
 import { boardKeys, fetchJson } from "../queries";
 import { tempNumericId } from "./shared";
 
@@ -65,6 +67,7 @@ export function useCreateBoard() {
         slug: "",
         name,
         emoji: null,
+        description: "",
         cliAccess: "none",
         createdAt: new Date().toISOString(),
       };
@@ -99,6 +102,7 @@ export function useCreateBoard() {
                   slug: data.slug ?? e.slug,
                   name: data.name,
                   emoji: data.emoji ?? null,
+                  description: data.description ?? "",
                   cliAccess: data.cliAccess ?? "none",
                   createdAt: data.createdAt,
                 }
@@ -108,6 +112,7 @@ export function useCreateBoard() {
       }
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
       appNavigate(boardPath(data.id), { replace: true });
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -152,6 +157,9 @@ export function usePatchBoard() {
                 ...(input.cliAccess !== undefined
                   ? { cliAccess: input.cliAccess }
                   : {}),
+                ...(input.description !== undefined
+                  ? { description: input.description ?? "" }
+                  : {}),
               }
             : e,
         ),
@@ -192,12 +200,14 @@ export function usePatchBoard() {
                 name: data.name,
                 slug: data.slug ?? e.slug,
                 emoji: data.emoji ?? null,
+                description: data.description ?? "",
                 cliAccess: data.cliAccess,
               }
             : e,
         ),
       );
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -271,6 +281,7 @@ export function usePatchBoardViewPrefs() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -290,6 +301,7 @@ export function usePatchBoardTaskGroups() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -309,6 +321,7 @@ export function usePatchBoardTaskPriorities() {
     },
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -317,7 +330,10 @@ export function useDeleteBoard() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/boards/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/boards/${id}`, {
+        method: "DELETE",
+        headers: withBrowserClientHeaders(),
+      });
       if (!res.ok) throw new Error(await res.text());
     },
     onMutate: async (id) => {
@@ -348,6 +364,9 @@ export function useDeleteBoard() {
       if (ctx?.wasSelected) {
         appNavigate(boardPath(ctx.id), { replace: true });
       }
+    },
+    onSuccess: () => {
+      invalidateNotificationQueries(qc);
     },
   });
 }

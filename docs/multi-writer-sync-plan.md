@@ -25,12 +25,12 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Add a small server event bus module for board-scoped subscribers.
-- [ ] Add `GET /api/events` using SSE.
-- [ ] Emit a board-changed event after successful board/list/task writes.
-- [ ] Add a client hook that subscribes to board-scoped events.
-- [ ] On event, invalidate the active board query and related board stats queries.
-- [ ] Add keepalive behavior and cleanup handling for disconnected clients.
+- [x] Add a small server event bus module for board-scoped subscribers.
+- [x] Add `GET /api/events` using SSE.
+- [x] Emit a board-changed event after successful board/list/task writes.
+- [x] Add a client hook that subscribes to board-scoped events.
+- [x] On event, invalidate the active board query and related board stats queries.
+- [x] Add keepalive behavior and cleanup handling for disconnected clients.
 
 ### Exit criteria
 
@@ -51,12 +51,12 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Add focused read helpers such as `readTaskById` and `readListById`.
-- [ ] Refactor task storage mutations to return granular results plus `boardUpdatedAt`.
-- [ ] Refactor list storage mutations to return granular results plus `boardUpdatedAt`.
-- [ ] Refactor board metadata writes to return lightweight board-level results where practical.
-- [ ] Keep `loadBoard(boardId)` for full-board reads and fallback paths.
-- [ ] Preserve current route behavior temporarily so the external API does not break yet.
+- [x] Add focused read helpers such as `readTaskById` and `readListById`.
+- [x] Refactor task storage mutations to return granular results plus `boardUpdatedAt`.
+- [x] Refactor list storage mutations to return granular results plus `boardUpdatedAt`.
+- [x] Refactor board metadata writes to return lightweight board-level results where practical.
+- [x] Keep `loadBoard(boardId)` for full-board reads and fallback paths.
+- [x] Preserve current route behavior temporarily so the external API does not break yet.
 
 ### Exit criteria
 
@@ -76,12 +76,12 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Add shared mutation-result types in `src/shared/`.
-- [ ] Update task create/update/delete routes to return granular results.
-- [ ] Update list create/update/delete routes to return granular results.
-- [ ] Decide which structural routes still use board invalidation rather than granular patching.
-- [ ] Keep `GET /api/boards/:id` unchanged for full-board reads.
-- [ ] Add or document targeted read endpoints needed for later partial refresh.
+- [x] Add shared mutation-result types in `src/shared/`.
+- [x] Update task create/update/delete routes to return granular results.
+- [x] Update list create/update/delete routes to return granular results.
+- [x] Decide which structural routes still use board invalidation rather than granular patching.
+- [x] Keep `GET /api/boards/:id` unchanged for full-board reads.
+- [x] Add or document targeted read endpoints needed for later partial refresh.
 
 ### Exit criteria
 
@@ -101,12 +101,12 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Update `src/client/api/mutations/tasks.ts` to patch task changes into cached board state on success.
-- [ ] Update `src/client/api/mutations/lists.ts` to patch list changes into cached board state on success.
-- [ ] Update `src/client/api/mutations/board.ts` to patch board metadata without replacing unrelated task/list data.
-- [ ] Keep optimistic `onMutate` behavior aligned with the new success path.
-- [ ] Continue invalidating stats queries where needed.
-- [ ] Verify unchanged entities retain stable references where possible.
+- [x] Update `src/client/api/mutations/tasks.ts` to patch task changes into cached board state on success.
+- [x] Update `src/client/api/mutations/lists.ts` to patch list changes into cached board state on success.
+- [x] Update `src/client/api/mutations/board.ts` to patch board metadata without replacing unrelated task/list data.
+- [x] Keep optimistic `onMutate` behavior aligned with the new success path.
+- [x] Continue invalidating stats queries where needed.
+- [x] Verify unchanged entities retain stable references where possible.
 
 ### Exit criteria
 
@@ -126,11 +126,11 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Update CLI mutation fetch types to use granular result envelopes.
-- [ ] Remove the need to infer changed entities from a returned full board.
-- [ ] Simplify helpers such as `findNewestTask`, `findNewestList`, and `findTaskById` where they are no longer needed.
-- [ ] Keep existing command names, flags, and output envelope semantics stable for users.
-- [ ] Verify CLI output still reports board id, board slug, board updated time, and compact entity data.
+- [x] Update CLI mutation fetch types to use granular result envelopes.
+- [x] Remove the need to infer changed entities from a returned full board.
+- [x] Simplify helpers such as `findNewestTask`, `findNewestList`, and `findTaskById` where they are no longer needed.
+- [x] Keep existing command names, flags, and output envelope semantics stable for users.
+- [x] Verify CLI output still reports board id, board slug, board updated time, and compact entity data.
 
 ### Exit criteria
 
@@ -149,12 +149,12 @@ This document breaks the multi-writer sync work into execution phases. Product i
 
 ### Checklist
 
-- [ ] Extend SSE events to typed payloads such as `task-updated`, `task-deleted`, and `list-updated`.
-- [ ] Add targeted entity read endpoints if not already added.
-- [ ] Update the client event hook to fetch and patch a single entity for granular events.
-- [ ] Keep full-board invalidation for structural or recovery events.
-- [ ] Compare event `boardUpdatedAt` to cached board state to avoid unnecessary self-refresh work where possible.
-- [ ] Profile large boards and verify that common small writes avoid full-board fetches.
+- [x] Extend SSE events to typed payloads such as `task-updated`, `task-deleted`, and `list-updated`.
+- [x] Add targeted entity read endpoints if not already added.
+- [x] Update the client event hook to fetch and patch a single entity for granular events.
+- [x] Keep full-board invalidation for structural or recovery events.
+- [x] Compare event `boardUpdatedAt` to cached board state to avoid unnecessary self-refresh work where possible.
+- [x] Profile large boards and verify that common small writes avoid full-board fetches.
 
 ### Exit criteria
 

@@ -6,6 +6,12 @@ export type BoardCliAccess = (typeof BOARD_CLI_ACCESS)[number];
 export const TASK_MANAGER_CLIENT_HEADER = "X-TaskManager-Client";
 export const TASK_MANAGER_CLIENT_HIROTM = "hirotm";
 
+/** Optional human-friendly client label for notifications (e.g. Web App, Cursor Agent). */
+export const TASK_MANAGER_CLIENT_NAME_HEADER = "X-TaskManager-Client-Name";
+
+/** Optional per-session/client instance id for own-write filtering and toasts. */
+export const TASK_MANAGER_CLIENT_INSTANCE_HEADER = "X-TaskManager-Client-Instance";
+
 export const CLI_BOARD_ACCESS_DENIED_MESSAGE =
   "CLI access to this board is disabled. Ask the owner to open Board settings in the web app and set CLI access to Read or Read/Write.";
 

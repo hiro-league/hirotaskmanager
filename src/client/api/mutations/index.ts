@@ -10,12 +10,14 @@ export {
 export {
   useCreateList,
   useDeleteList,
+  useMoveList,
   usePatchList,
   useReorderLists,
 } from "./lists";
 export {
   useCreateTask,
   useDeleteTask,
+  useMoveTask,
   useReorderTasksInBand,
   useUpdateTask,
 } from "./tasks";

@@ -12,9 +12,35 @@ import {
   type TaskDateFilterMode,
   type TaskDateFilterResolved,
 } from "@/components/board/boardStatusUtils";
+import type { NotificationFeedSourceFilter } from "../../shared/notifications";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type TaskCardViewMode = "small" | "normal" | "large" | "larger";
+export type NotificationPanelScopePreference = "all" | "current";
+
+export type { NotificationFeedSourceFilter };
+
+function isNotificationFeedSourceFilter(
+  v: unknown,
+): v is NotificationFeedSourceFilter {
+  return v === "all" || v === "ui" || v === "cli" || v === "system";
+}
+
+/** Migrate from legacy `notificationHideOwnWrites` or validate persisted filter. Default `cli`. */
+function resolveNotificationSourceFilter(
+  s:
+    | {
+        notificationSourceFilter?: unknown;
+        notificationHideOwnWrites?: boolean;
+      }
+    | undefined,
+): NotificationFeedSourceFilter {
+  if (s && isNotificationFeedSourceFilter(s.notificationSourceFilter)) {
+    return s.notificationSourceFilter;
+  }
+  if (s?.notificationHideOwnWrites === false) return "all";
+  return "cli";
+}
 
 export const TASK_CARD_VIEW_MODE_ORDER: TaskCardViewMode[] = [
   "small",
@@ -98,6 +124,10 @@ interface PersistedShape {
   state?: {
     themePreference?: ThemePreference;
     sidebarCollapsed?: boolean;
+    notificationPanelScopePreference?: NotificationPanelScopePreference;
+    /** @deprecated Migrated to `notificationSourceFilter`. */
+    notificationHideOwnWrites?: boolean;
+    notificationSourceFilter?: NotificationFeedSourceFilter;
     boardFilterStripCollapsed?: boolean;
     activeTaskGroupByBoardId?: Record<string, string>;
     activeTaskPriorityIdsByBoardId?: Record<string, string[]>;
@@ -144,6 +174,8 @@ function sanitizeTaskDateFilterMap(
 function readPersistedSlice(): {
   themePreference: ThemePreference;
   sidebarCollapsed: boolean;
+  notificationPanelScopePreference: NotificationPanelScopePreference;
+  notificationSourceFilter: NotificationFeedSourceFilter;
   boardFilterStripCollapsed: boolean;
   activeTaskGroupByBoardId: Record<string, string>;
   activeTaskPriorityIdsByBoardId: Record<string, string[]>;
@@ -155,6 +187,8 @@ function readPersistedSlice(): {
     return {
       themePreference: "system",
       sidebarCollapsed: false,
+      notificationPanelScopePreference: "all",
+      notificationSourceFilter: "cli",
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
@@ -169,6 +203,8 @@ function readPersistedSlice(): {
       return {
         themePreference: "system",
         sidebarCollapsed: false,
+        notificationPanelScopePreference: "all",
+        notificationSourceFilter: "cli",
         boardFilterStripCollapsed: false,
         activeTaskGroupByBoardId: {},
         activeTaskPriorityIdsByBoardId: {},
@@ -221,6 +257,9 @@ function readPersistedSlice(): {
           ? s.themePreference
           : "system",
       sidebarCollapsed: Boolean(s?.sidebarCollapsed),
+      notificationPanelScopePreference:
+        s?.notificationPanelScopePreference === "current" ? "current" : "all",
+      notificationSourceFilter: resolveNotificationSourceFilter(s),
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
       activeTaskGroupByBoardId,
       activeTaskPriorityIdsByBoardId,
@@ -232,6 +271,8 @@ function readPersistedSlice(): {
     return {
       themePreference: "system",
       sidebarCollapsed: false,
+      notificationPanelScopePreference: "all",
+      notificationSourceFilter: "cli",
       boardFilterStripCollapsed: false,
       activeTaskGroupByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
@@ -250,6 +291,10 @@ interface PreferencesState {
   sidebarCollapsed: boolean;
   toggleSidebarCollapsed: () => void;
   setSidebarCollapsed: (v: boolean) => void;
+  notificationPanelScopePreference: NotificationPanelScopePreference;
+  setNotificationPanelScopePreference: (v: NotificationPanelScopePreference) => void;
+  notificationSourceFilter: NotificationFeedSourceFilter;
+  setNotificationSourceFilter: (v: NotificationFeedSourceFilter) => void;
   boardFilterStripCollapsed: boolean;
   setBoardFilterStripCollapsed: (v: boolean) => void;
   toggleBoardFilterStripCollapsed: () => void;
@@ -284,6 +329,12 @@ export const usePreferencesStore = create<PreferencesState>()(
       toggleSidebarCollapsed: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      notificationPanelScopePreference: initial.notificationPanelScopePreference,
+      setNotificationPanelScopePreference: (notificationPanelScopePreference) =>
+        set({ notificationPanelScopePreference }),
+      notificationSourceFilter: initial.notificationSourceFilter,
+      setNotificationSourceFilter: (notificationSourceFilter) =>
+        set({ notificationSourceFilter }),
       boardFilterStripCollapsed: initial.boardFilterStripCollapsed,
       setBoardFilterStripCollapsed: (boardFilterStripCollapsed) =>
         set({ boardFilterStripCollapsed }),
@@ -380,6 +431,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       partialize: (state) => ({
         themePreference: state.themePreference,
         sidebarCollapsed: state.sidebarCollapsed,
+        notificationPanelScopePreference: state.notificationPanelScopePreference,
+        notificationSourceFilter: state.notificationSourceFilter,
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
         activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
         activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,

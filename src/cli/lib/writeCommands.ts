@@ -1,5 +1,13 @@
+import { parseBoardColor } from "../../shared/boardColor";
+import { parseBoardCliAccess } from "../../shared/boardCliAccess";
 import type { Board } from "../../shared/models";
-import { fetchApiMutate } from "./api-client";
+import type {
+  ListDeleteMutationResult,
+  ListMutationResult,
+  TaskDeleteMutationResult,
+  TaskMutationResult,
+} from "../../shared/mutationResults";
+import { fetchApi, fetchApiMutate } from "./api-client";
 import { parseOptionalEmojiFlag } from "./emoji-cli";
 import { CliError, printJson } from "./output";
 import { loadBodyText, resolveExclusiveBody } from "./task-body";
@@ -7,11 +15,11 @@ import {
   compactBoardEntity,
   compactListEntity,
   compactTaskEntity,
-  findNewestList,
-  findNewestTask,
-  findTaskById,
+  deletedEntity,
+  writeDeleted,
   writeSuccess,
 } from "./write-result";
+
 function parsePositiveInt(
   label: string,
   raw: string | undefined,
@@ -32,10 +40,104 @@ function parseTaskId(raw: string | undefined): number {
   return n;
 }
 
+type TextInputSource = "flag" | "file" | "stdin";
+
+function resolveExclusiveTextInput(
+  label: string,
+  options: {
+    text?: string;
+    file?: string;
+    stdin?: boolean;
+  },
+): { source: TextInputSource; text: string } | undefined {
+  const hasText = options.text !== undefined;
+  const hasFile = Boolean(options.file?.trim());
+  const hasStdin = Boolean(options.stdin);
+  const count = (hasText ? 1 : 0) + (hasFile ? 1 : 0) + (hasStdin ? 1 : 0);
+  if (count > 1) {
+    throw new CliError(`Exactly one ${label} input source is allowed`, 2);
+  }
+  if (hasText) {
+    return { source: "flag", text: options.text ?? "" };
+  }
+  if (hasFile) {
+    return { source: "file", text: options.file!.trim() };
+  }
+  if (hasStdin) {
+    return { source: "stdin", text: "" };
+  }
+  return undefined;
+}
+
+async function readStdinUtf8(): Promise<string> {
+  return await new Response(Bun.stdin.stream()).text();
+}
+
+async function loadTextInput(
+  label: string,
+  resolved: { source: TextInputSource; text: string },
+): Promise<string> {
+  if (resolved.source === "flag") {
+    return resolved.text;
+  }
+  if (resolved.source === "stdin") {
+    return await readStdinUtf8();
+  }
+  const path = resolved.text;
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    throw new CliError(`${label} file not found`, 1, { path });
+  }
+  return await file.text();
+}
+
+async function loadJsonArrayInput(
+  label: string,
+  options: {
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+  },
+  propertyName: string,
+): Promise<unknown[]> {
+  const resolved = resolveExclusiveTextInput(label, {
+    text: options.json,
+    file: options.file,
+    stdin: options.stdin,
+  });
+  if (!resolved) {
+    throw new CliError(`One ${label} input source is required`, 2);
+  }
+  const text = await loadTextInput(label, resolved);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new CliError(`Invalid ${label} JSON`, 2);
+  }
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as Record<string, unknown>)[propertyName])
+  ) {
+    return (parsed as Record<string, unknown>)[propertyName] as unknown[];
+  }
+  throw new CliError(
+    `${label} must be a JSON array or an object with ${propertyName}`,
+    2,
+  );
+}
+
 export async function runBoardsAdd(opts: {
   port?: number;
   name?: string;
   emoji?: string;
+  description?: string;
+  descriptionFile?: string;
+  descriptionStdin?: boolean;
 }): Promise<void> {
   const port = opts.port;
   const nameTrim = opts.name?.trim() ?? "";
@@ -44,12 +146,211 @@ export async function runBoardsAdd(opts: {
   if (nameTrim) body.name = nameTrim;
   if (!emojiOpt.omit) body.emoji = emojiOpt.value;
 
+  const descriptionResolved = resolveExclusiveTextInput("description", {
+    text: opts.description,
+    file: opts.descriptionFile,
+    stdin: opts.descriptionStdin,
+  });
+  if (descriptionResolved) {
+    // Align with POST /boards: trimmed plain text in JSON body.
+    body.description = (await loadTextInput("description", descriptionResolved)).trim();
+  }
+
   const board = await fetchApiMutate<Board>(
     "/boards",
     { method: "POST", body: Object.keys(body).length ? body : {} },
     { port },
   );
   printJson(writeSuccess(board, compactBoardEntity(board)));
+}
+
+export async function runBoardsUpdate(opts: {
+  port?: number;
+  board: string | undefined;
+  name?: string;
+  emoji?: string;
+  clearEmoji?: boolean;
+  cliAccess?: string;
+  boardColor?: string;
+  clearBoardColor?: boolean;
+  description?: string;
+  descriptionFile?: string;
+  descriptionStdin?: boolean;
+  clearDescription?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required argument: <id-or-slug>", 2);
+  }
+  if (opts.clearEmoji && opts.emoji !== undefined) {
+    throw new CliError("Cannot use --emoji together with --clear-emoji", 2);
+  }
+  if (opts.clearBoardColor && opts.boardColor !== undefined) {
+    throw new CliError(
+      "Cannot use --board-color together with --clear-board-color",
+      2,
+    );
+  }
+  if (opts.clearDescription) {
+    const hasDescriptionInput =
+      opts.description !== undefined ||
+      Boolean(opts.descriptionFile?.trim()) ||
+      Boolean(opts.descriptionStdin);
+    if (hasDescriptionInput) {
+      throw new CliError(
+        "Cannot combine --clear-description with another description input",
+        2,
+      );
+    }
+  }
+
+  const descriptionResolved = resolveExclusiveTextInput("description", {
+    text: opts.description,
+    file: opts.descriptionFile,
+    stdin: opts.descriptionStdin,
+  });
+
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.clearEmoji) patch.emoji = null;
+  else if (opts.emoji !== undefined) {
+    const emojiOpt = parseOptionalEmojiFlag(opts.emoji);
+    if (!emojiOpt.omit) patch.emoji = emojiOpt.value;
+  }
+  if (opts.cliAccess !== undefined) {
+    const cliAccess = parseBoardCliAccess(opts.cliAccess.trim());
+    if (!cliAccess) {
+      throw new CliError("Invalid cliAccess", 2, { cliAccess: opts.cliAccess });
+    }
+    patch.cliAccess = cliAccess;
+  }
+  if (opts.clearBoardColor) {
+    patch.boardColor = null;
+  } else if (opts.boardColor !== undefined) {
+    const boardColor = parseBoardColor(opts.boardColor.trim());
+    if (!boardColor) {
+      throw new CliError("Invalid boardColor", 2, {
+        boardColor: opts.boardColor,
+      });
+    }
+    patch.boardColor = boardColor;
+  }
+  if (opts.clearDescription) {
+    patch.description = null;
+  } else if (descriptionResolved) {
+    patch.description = await loadTextInput("description", descriptionResolved);
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new CliError("At least one update field is required", 2);
+  }
+
+  try {
+    const board = await fetchApiMutate<Board>(
+      `/boards/${encodeURIComponent(boardId)}`,
+      { method: "PATCH", body: patch },
+      { port: opts.port },
+    );
+    printJson(writeSuccess(board, compactBoardEntity(board)));
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runBoardsDelete(opts: {
+  port?: number;
+  board: string | undefined;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required argument: <id-or-slug>", 2);
+  }
+
+  try {
+    const board = await fetchApi<Board>(
+      `/boards/${encodeURIComponent(boardId)}`,
+      { port: opts.port },
+    );
+    await fetchApiMutate<void>(
+      `/boards/${encodeURIComponent(boardId)}`,
+      { method: "DELETE" },
+      { port: opts.port },
+    );
+    printJson(
+      writeDeleted(
+        { id: board.id, slug: board.slug },
+        deletedEntity("board", board.id, board.slug),
+      ),
+    );
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runBoardsGroups(opts: {
+  port?: number;
+  board: string | undefined;
+  json?: string;
+  file?: string;
+  stdin?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required argument: <id-or-slug>", 2);
+  }
+  const taskGroups = await loadJsonArrayInput("task groups", opts, "taskGroups");
+
+  try {
+    const board = await fetchApiMutate<Board>(
+      `/boards/${encodeURIComponent(boardId)}/groups`,
+      { method: "PATCH", body: { taskGroups } },
+      { port: opts.port },
+    );
+    printJson(writeSuccess(board, compactBoardEntity(board)));
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runBoardsPriorities(opts: {
+  port?: number;
+  board: string | undefined;
+  json?: string;
+  file?: string;
+  stdin?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required argument: <id-or-slug>", 2);
+  }
+  const taskPriorities = await loadJsonArrayInput(
+    "task priorities",
+    opts,
+    "taskPriorities",
+  );
+
+  try {
+    const board = await fetchApiMutate<Board>(
+      `/boards/${encodeURIComponent(boardId)}/priorities`,
+      { method: "PATCH", body: { taskPriorities } },
+      { port: opts.port },
+    );
+    printJson(writeSuccess(board, compactBoardEntity(board)));
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
 }
 
 export async function runListsAdd(opts: {
@@ -70,19 +371,208 @@ export async function runListsAdd(opts: {
   if (!emojiOpt.omit) body.emoji = emojiOpt.value;
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const result = await fetchApiMutate<ListMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/lists`,
       { method: "POST", body: Object.keys(body).length ? body : {} },
       { port },
     );
-    const list = findNewestList(board);
-    if (!list) {
-      throw new CliError("List not found after create", 1);
-    }
-    printJson(writeSuccess(board, compactListEntity(list)));
+    printJson(
+      writeSuccess(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactListEntity(result.entity),
+      ),
+    );
   } catch (e) {
     if (e instanceof CliError && e.message === "Board not found") {
       throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runListsUpdate(opts: {
+  port?: number;
+  board: string | undefined;
+  listId: string | undefined;
+  name?: string;
+  color?: string;
+  clearColor?: boolean;
+  emoji?: string;
+  clearEmoji?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const listId = parsePositiveInt("listId", opts.listId);
+  if (listId === undefined) {
+    throw new CliError("Invalid list id", 2, { listId: opts.listId });
+  }
+  if (opts.clearColor && opts.color !== undefined) {
+    throw new CliError("Cannot use --color together with --clear-color", 2);
+  }
+  if (opts.clearEmoji && opts.emoji !== undefined) {
+    throw new CliError("Cannot use --emoji together with --clear-emoji", 2);
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.clearColor) patch.color = null;
+  else if (opts.color !== undefined) patch.color = opts.color;
+  if (opts.clearEmoji) patch.emoji = null;
+  else if (opts.emoji !== undefined) {
+    const emojiOpt = parseOptionalEmojiFlag(opts.emoji);
+    if (!emojiOpt.omit) patch.emoji = emojiOpt.value;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new CliError("At least one update field is required", 2);
+  }
+
+  try {
+    const result = await fetchApiMutate<ListMutationResult>(
+      `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
+      { method: "PATCH", body: patch },
+      { port: opts.port },
+    );
+    printJson(
+      writeSuccess(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactListEntity(result.entity),
+      ),
+    );
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    if (e instanceof CliError && e.message === "List not found") {
+      throw new CliError(e.message, e.exitCode, {
+        ...e.details,
+        board: boardId,
+        listId,
+      });
+    }
+    throw e;
+  }
+}
+
+export async function runListsDelete(opts: {
+  port?: number;
+  board: string | undefined;
+  listId: string | undefined;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const listId = parsePositiveInt("listId", opts.listId);
+  if (listId === undefined) {
+    throw new CliError("Invalid list id", 2, { listId: opts.listId });
+  }
+
+  try {
+    const result = await fetchApiMutate<ListDeleteMutationResult>(
+      `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
+      { method: "DELETE" },
+      { port: opts.port },
+    );
+    printJson(
+      writeDeleted(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        deletedEntity("list", result.deletedListId),
+      ),
+    );
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    if (e instanceof CliError && e.message === "List not found") {
+      throw new CliError(e.message, e.exitCode, {
+        ...e.details,
+        board: boardId,
+        listId,
+      });
+    }
+    throw e;
+  }
+}
+
+export async function runListsMove(opts: {
+  port?: number;
+  board: string | undefined;
+  listId: string | undefined;
+  before?: string;
+  after?: string;
+  first?: boolean;
+  last?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const listId = parsePositiveInt("listId", opts.listId);
+  if (listId === undefined) {
+    throw new CliError("Invalid list id", 2, { listId: opts.listId });
+  }
+
+  const beforeListId = parsePositiveInt("beforeListId", opts.before);
+  const afterListId = parsePositiveInt("afterListId", opts.after);
+  const placementCount =
+    (beforeListId !== undefined ? 1 : 0) +
+    (afterListId !== undefined ? 1 : 0) +
+    (opts.first ? 1 : 0) +
+    (opts.last ? 1 : 0);
+  if (placementCount > 1) {
+    throw new CliError(
+      "Use only one of --before, --after, --first, or --last",
+      2,
+    );
+  }
+
+  try {
+    const board = await fetchApiMutate<Board>(
+      `/boards/${encodeURIComponent(boardId)}/lists/move`,
+      {
+        method: "PUT",
+        body: {
+          listId,
+          beforeListId,
+          afterListId,
+          position: opts.first ? "first" : opts.last ? "last" : undefined,
+        },
+      },
+      { port: opts.port },
+    );
+    const moved = board.lists.find((list) => list.id === listId);
+    if (!moved) {
+      throw new CliError("Moved list missing from board", 1, {
+        board: boardId,
+        listId,
+      });
+    }
+    printJson(writeSuccess(board, compactListEntity(moved)));
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    if (e instanceof CliError && e.message === "List not found") {
+      throw new CliError(e.message, e.exitCode, {
+        ...e.details,
+        board: boardId,
+        listId,
+      });
     }
     throw e;
   }
@@ -166,16 +656,21 @@ export async function runTasksAdd(opts: {
   const port = opts.port;
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const result = await fetchApiMutate<TaskMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/tasks`,
       { method: "POST", body: payload },
       { port },
     );
-    const task = findNewestTask(board);
-    if (!task) {
-      throw new CliError("Task not found after create", 1);
-    }
-    printJson(writeSuccess(board, compactTaskEntity(task)));
+    printJson(
+      writeSuccess(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactTaskEntity(result.entity),
+      ),
+    );
   } catch (e) {
     if (e instanceof CliError && e.message === "Board not found") {
       throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
@@ -265,16 +760,63 @@ export async function runTasksUpdate(opts: {
   }
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const result = await fetchApiMutate<TaskMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
       { method: "PATCH", body: patch },
       { port },
     );
-    const task = findTaskById(board, taskId);
-    if (!task) {
-      throw new CliError("Task not found", 1, { board: boardId, taskId });
+    printJson(
+      writeSuccess(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactTaskEntity(result.entity),
+      ),
+    );
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
     }
-    printJson(writeSuccess(board, compactTaskEntity(task)));
+    if (e instanceof CliError && e.message === "Task not found") {
+      throw new CliError(e.message, e.exitCode, {
+        ...e.details,
+        board: boardId,
+        taskId,
+      });
+    }
+    throw e;
+  }
+}
+
+export async function runTasksDelete(opts: {
+  port?: number;
+  board: string | undefined;
+  taskId: string | undefined;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const taskId = parseTaskId(opts.taskId);
+
+  try {
+    const result = await fetchApiMutate<TaskDeleteMutationResult>(
+      `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
+      { method: "DELETE" },
+      { port: opts.port },
+    );
+    printJson(
+      writeDeleted(
+        {
+          id: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        deletedEntity("task", result.deletedTaskId),
+      ),
+    );
   } catch (e) {
     if (e instanceof CliError && e.message === "Board not found") {
       throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
@@ -296,6 +838,10 @@ export async function runTasksMove(opts: {
   taskId: string | undefined;
   toList?: string;
   toStatus?: string;
+  beforeTask?: string;
+  afterTask?: string;
+  first?: boolean;
+  last?: boolean;
 }): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
@@ -306,25 +852,48 @@ export async function runTasksMove(opts: {
   if (toList === undefined) {
     throw new CliError("Missing required option: --to-list", 2);
   }
-
-  const patch: Record<string, unknown> = { listId: toList };
-  if (opts.toStatus !== undefined && opts.toStatus.trim() !== "") {
-    patch.status = opts.toStatus.trim();
+  const beforeTaskId = parsePositiveInt("beforeTaskId", opts.beforeTask);
+  const afterTaskId = parsePositiveInt("afterTaskId", opts.afterTask);
+  const placementCount =
+    (beforeTaskId !== undefined ? 1 : 0) +
+    (afterTaskId !== undefined ? 1 : 0) +
+    (opts.first ? 1 : 0) +
+    (opts.last ? 1 : 0);
+  if (placementCount > 1) {
+    throw new CliError(
+      "Use only one of --before-task, --after-task, --first, or --last",
+      2,
+    );
   }
 
   const port = opts.port;
 
   try {
     const board = await fetchApiMutate<Board>(
-      `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
-      { method: "PATCH", body: patch },
+      `/boards/${encodeURIComponent(boardId)}/tasks/move`,
+      {
+        method: "PUT",
+        body: {
+          taskId,
+          toListId: toList,
+          toStatus: opts.toStatus?.trim() || undefined,
+          beforeTaskId,
+          afterTaskId,
+          position: opts.first ? "first" : opts.last ? "last" : undefined,
+        },
+      },
       { port },
     );
-    const task = findTaskById(board, taskId);
-    if (!task) {
-      throw new CliError("Task not found", 1, { board: boardId, taskId });
+    const moved = board.tasks.find((task) => task.id === taskId);
+    if (!moved) {
+      throw new CliError("Moved task missing from board", 1, {
+        board: boardId,
+        taskId,
+      });
     }
-    printJson(writeSuccess(board, compactTaskEntity(task)));
+    printJson(
+      writeSuccess(board, compactTaskEntity(moved)),
+    );
   } catch (e) {
     if (e instanceof CliError && e.message === "Board not found") {
       throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });

@@ -1,7 +1,26 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { parseBoardCliAccess } from "../../shared/boardCliAccess";
 import { parseEmojiField } from "../../shared/emojiField";
-import type { Board, GroupDefinition, TaskPriorityDefinition } from "../../shared/models";
+import {
+  isValidYmd,
+  taskMatchesBoardFilter,
+  visibleStatusesForBoard,
+  type TaskDateFilterResolved,
+} from "../../shared/boardFilters";
+import {
+  TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+  TASK_MANAGER_MUTATION_RESPONSE_HEADER,
+  type ListDeleteMutationResult,
+  type ListMutationResult,
+  type TaskDeleteMutationResult,
+  type TaskMutationResult,
+} from "../../shared/mutationResults";
+import type {
+  Board,
+  GroupDefinition,
+  TaskPriorityDefinition,
+} from "../../shared/models";
+import { ALL_TASK_GROUPS } from "../../shared/models";
 import {
   closedStatusIdsFromStatuses,
   computeBoardStats,
@@ -10,6 +29,7 @@ import {
 import {
   createBoardWithDefaults,
   createListOnBoard,
+  moveListOnBoard,
   createTaskOnBoard,
   deleteBoardById,
   deleteListOnBoard,
@@ -23,14 +43,101 @@ import {
   patchBoardTaskGroups,
   patchBoardViewPrefs,
   patchListOnBoard,
+  moveTaskOnBoard,
   patchTaskOnBoard,
+  readListById,
   readBoardIndex,
+  readTaskById,
   reorderListsOnBoard,
   reorderTasksInBand,
 } from "../storage";
 import { cliBoardAccessError } from "../cliBoardGuard";
+import { publishBoardChanged, publishBoardEvent } from "../events";
+import {
+  recordBoardCreated,
+  recordBoardDeleted,
+  recordBoardPatched,
+  recordBoardTaskGroups,
+  recordBoardTaskPriorities,
+  recordListCreated,
+  recordListDeleted,
+  recordListMoved,
+  recordListUpdated,
+  recordListsReordered,
+  recordTaskCreated,
+  recordTaskDeleted,
+  recordTaskMoved,
+  recordTaskUpdated,
+  recordTasksReordered,
+} from "../notifications/record";
 
 export const boardsRoute = new Hono();
+
+function loadBoardAfterGranularWrite(boardId: number): Board | null {
+  // Phase 2 keeps the public route payload stable while storage stops depending on
+  // full-board reloads for small writes.
+  return loadBoard(boardId);
+}
+
+function wantsGranularMutationResponse(c: Context): boolean {
+  return (
+    c.req.header(TASK_MANAGER_MUTATION_RESPONSE_HEADER)?.toLowerCase() ===
+    TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1
+  );
+}
+
+function taskMutationResponse(
+  c: Context,
+  result: TaskMutationResult,
+  status: 200 | 201,
+) {
+  if (wantsGranularMutationResponse(c)) {
+    // The header gate lets Phase 3 ship without breaking older browser and CLI clients.
+    return c.json(result, status);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved, status);
+}
+
+function taskDeleteResponse(c: Context, result: TaskDeleteMutationResult) {
+  if (wantsGranularMutationResponse(c)) {
+    return c.json(result);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved);
+}
+
+function listMutationResponse(
+  c: Context,
+  result: ListMutationResult,
+  status: 200 | 201,
+) {
+  if (wantsGranularMutationResponse(c)) {
+    return c.json(result, status);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved, status);
+}
+
+function listDeleteResponse(c: Context, result: ListDeleteMutationResult) {
+  if (wantsGranularMutationResponse(c)) {
+    return c.json(result);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved);
+}
+
+function repeatedQueryValues(searchParams: URLSearchParams, key: string): string[] {
+  return searchParams
+    .getAll(key)
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
 
 boardsRoute.get("/", async (c) => {
   const index = await readBoardIndex();
@@ -38,10 +145,15 @@ boardsRoute.get("/", async (c) => {
 });
 
 boardsRoute.post("/", async (c) => {
-  let body: { name?: string; emoji?: unknown } = {};
+  let body: { name?: string; emoji?: unknown; description?: unknown } = {};
   try {
     const text = await c.req.text();
-    if (text) body = JSON.parse(text) as { name?: string; emoji?: unknown };
+    if (text)
+      body = JSON.parse(text) as {
+        name?: string;
+        emoji?: unknown;
+        description?: unknown;
+      };
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
@@ -65,8 +177,17 @@ boardsRoute.post("/", async (c) => {
       return c.json({ error: "Invalid emoji" }, 400);
     }
   }
+  let description = "";
+  if ("description" in body && body.description != null) {
+    if (typeof body.description !== "string") {
+      return c.json({ error: "Invalid description" }, 400);
+    }
+    description = body.description.trim();
+  }
   const slug = await generateSlug(name);
-  const board = await createBoardWithDefaults(name, slug, emoji);
+  const board = await createBoardWithDefaults(name, slug, emoji, description);
+  publishBoardChanged(board.id, board.updatedAt);
+  recordBoardCreated(c, board);
   return c.json(board, 201);
 });
 
@@ -108,6 +229,8 @@ boardsRoute.patch("/:id/view-prefs", async (c) => {
   }
   const saved = patchBoardViewPrefs(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  // View preference updates do not emit notification rows (Phase 4).
   return c.json(saved);
 });
 
@@ -158,6 +281,8 @@ boardsRoute.patch("/:id/groups", async (c) => {
   try {
     const saved = patchBoardTaskGroups(entry.id, taskGroups);
     if (!saved) return c.json({ error: "Board not found" }, 404);
+    publishBoardChanged(entry.id, saved.updatedAt);
+    recordBoardTaskGroups(c, entry, saved);
     return c.json(saved);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Invalid task groups";
@@ -200,6 +325,8 @@ boardsRoute.patch("/:id/priorities", async (c) => {
   try {
     const saved = patchBoardTaskPriorities(entry.id, taskPriorities);
     if (!saved) return c.json({ error: "Board not found" }, 404);
+    publishBoardChanged(entry.id, saved.updatedAt);
+    recordBoardTaskPriorities(c, entry, saved);
     return c.json(saved);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Invalid task priorities";
@@ -237,9 +364,112 @@ boardsRoute.post("/:id/lists", async (c) => {
     }
   }
 
-  const saved = createListOnBoard(entry.id, { name, emoji });
-  if (!saved) return c.json({ error: "Board not found" }, 404);
-  return c.json(saved, 201);
+  const result = createListOnBoard(entry.id, { name, emoji });
+  if (!result) return c.json({ error: "Board not found" }, 404);
+  publishBoardEvent({
+    kind: "list-created",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    listId: result.list.id,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board) recordListCreated(c, entry, board, result);
+  }
+  return listMutationResponse(
+    c,
+    {
+      boardId: result.boardId,
+      boardSlug: entry.slug,
+      boardUpdatedAt: result.boardUpdatedAt,
+      entity: result.list,
+    },
+    201,
+  );
+});
+
+boardsRoute.put("/:id/lists/move", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
+
+  let body: {
+    listId?: unknown;
+    beforeListId?: unknown;
+    afterListId?: unknown;
+    position?: unknown;
+  };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const listId = Number(body.listId);
+  if (!Number.isFinite(listId)) {
+    return c.json({ error: "listId required" }, 400);
+  }
+  if (!readListById(entry.id, listId)) {
+    return c.json({ error: "List not found" }, 404);
+  }
+
+  const beforeListId =
+    body.beforeListId === undefined ? undefined : Number(body.beforeListId);
+  const afterListId =
+    body.afterListId === undefined ? undefined : Number(body.afterListId);
+  if (
+    (beforeListId !== undefined && !Number.isFinite(beforeListId)) ||
+    (afterListId !== undefined && !Number.isFinite(afterListId))
+  ) {
+    return c.json({ error: "Invalid move target" }, 400);
+  }
+  const position =
+    body.position === "first" || body.position === "last"
+      ? body.position
+      : body.position === undefined
+        ? undefined
+        : null;
+  if (position === null) {
+    return c.json({ error: "Invalid position" }, 400);
+  }
+
+  const boardBefore = loadBoard(entry.id);
+  if (!boardBefore) return c.json({ error: "Board not found" }, 404);
+  const orderBefore = [...boardBefore.lists]
+    .sort((a, b) => a.order - b.order)
+    .map((l) => l.id);
+
+  const saved = moveListOnBoard(entry.id, {
+    listId,
+    beforeListId,
+    afterListId,
+    position,
+  });
+  if (!saved) return c.json({ error: "Invalid move" }, 400);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  const orderAfter = [...saved.lists]
+    .sort((a, b) => a.order - b.order)
+    .map((l) => l.id);
+  // Skip notification when the list order is unchanged (no-op move / same slot).
+  if (JSON.stringify(orderBefore) !== JSON.stringify(orderAfter)) {
+    recordListMoved(c, entry, saved, listId);
+  }
+  return c.json(saved);
+});
+
+boardsRoute.get("/:id/lists/:listId", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "read");
+  if (blocked) return blocked;
+  const listId = Number(c.req.param("listId"));
+  if (!Number.isFinite(listId)) {
+    return c.json({ error: "Invalid list id" }, 400);
+  }
+  const list = readListById(entry.id, listId);
+  if (!list) return c.json({ error: "List not found" }, 404);
+  return c.json(list);
 });
 
 boardsRoute.patch("/:id/lists/:listId", async (c) => {
@@ -280,9 +510,24 @@ boardsRoute.patch("/:id/lists/:listId", async (c) => {
       return c.json({ error: "Invalid emoji" }, 400);
     }
   }
-  const saved = patchListOnBoard(entry.id, listId, updates);
-  if (!saved) return c.json({ error: "List not found" }, 404);
-  return c.json(saved);
+  const result = patchListOnBoard(entry.id, listId, updates);
+  if (!result) return c.json({ error: "List not found" }, 404);
+  publishBoardEvent({
+    kind: "list-updated",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    listId: result.list.id,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board) recordListUpdated(c, entry, board, result);
+  }
+  return listMutationResponse(c, {
+    boardId: result.boardId,
+    boardSlug: entry.slug,
+    boardUpdatedAt: result.boardUpdatedAt,
+    entity: result.list,
+  }, 200);
 });
 
 boardsRoute.delete("/:id/lists/:listId", async (c) => {
@@ -294,9 +539,25 @@ boardsRoute.delete("/:id/lists/:listId", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const saved = deleteListOnBoard(entry.id, listId);
-  if (!saved) return c.json({ error: "List not found" }, 404);
-  return c.json(saved);
+  const listSnapshot = readListById(entry.id, listId);
+  const result = deleteListOnBoard(entry.id, listId);
+  if (!result) return c.json({ error: "List not found" }, 404);
+  publishBoardEvent({
+    kind: "list-deleted",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    listId: result.deletedListId,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board && listSnapshot) recordListDeleted(c, entry, board, listSnapshot, result);
+  }
+  return listDeleteResponse(c, {
+    boardId: result.boardId,
+    boardSlug: entry.slug,
+    boardUpdatedAt: result.boardUpdatedAt,
+    deletedListId: result.deletedListId,
+  });
 });
 
 boardsRoute.put("/:id/lists/order", async (c) => {
@@ -319,6 +580,8 @@ boardsRoute.put("/:id/lists/order", async (c) => {
   }
   const saved = reorderListsOnBoard(entry.id, orderedListIds);
   if (!saved) return c.json({ error: "Invalid reorder" }, 400);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  recordListsReordered(c, entry, saved);
   return c.json(saved);
 });
 
@@ -364,7 +627,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
     }
   }
 
-  const saved = createTaskOnBoard(entry.id, {
+  const result = createTaskOnBoard(entry.id, {
     listId,
     groupId,
     priorityId,
@@ -373,8 +636,220 @@ boardsRoute.post("/:id/tasks", async (c) => {
     status,
     emoji,
   });
-  if (!saved) return c.json({ error: "Invalid task or board" }, 400);
-  return c.json(saved, 201);
+  if (!result) return c.json({ error: "Invalid task or board" }, 400);
+  publishBoardEvent({
+    kind: "task-created",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    taskId: result.task.id,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board) recordTaskCreated(c, entry, board, result);
+  }
+  return taskMutationResponse(
+    c,
+    {
+      boardId: result.boardId,
+      boardSlug: entry.slug,
+      boardUpdatedAt: result.boardUpdatedAt,
+      entity: result.task,
+    },
+    201,
+  );
+});
+
+boardsRoute.get("/:id/tasks", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "read");
+  if (blocked) return blocked;
+
+  const board = loadBoard(entry.id);
+  if (!board) return c.json({ error: "Board not found" }, 404);
+
+  const searchParams = new URL(c.req.url).searchParams;
+  const listIdRaw = searchParams.get("listId");
+  const groupIdRaw = searchParams.get("groupId");
+  const priorityIdRaw = repeatedQueryValues(searchParams, "priorityId");
+  const statusRaw = repeatedQueryValues(searchParams, "status");
+  const dateModeRaw = searchParams.get("dateMode");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  const listId =
+    listIdRaw == null || listIdRaw === "" ? undefined : Number(listIdRaw);
+  if (listId !== undefined && !Number.isFinite(listId)) {
+    return c.json({ error: "Invalid listId" }, 400);
+  }
+  const groupId =
+    groupIdRaw == null || groupIdRaw === "" ? undefined : Number(groupIdRaw);
+  if (groupId !== undefined && !Number.isFinite(groupId)) {
+    return c.json({ error: "Invalid groupId" }, 400);
+  }
+  const priorityIds = priorityIdRaw.map((value) => Number(value));
+  if (!priorityIds.every((value) => Number.isFinite(value))) {
+    return c.json({ error: "Invalid priorityId" }, 400);
+  }
+
+  const workflowOrder = listStatuses().map((status) => status.id);
+  const allowedStatuses = new Set(workflowOrder);
+  if (statusRaw.some((status) => !allowedStatuses.has(status))) {
+    return c.json({ error: "Invalid status" }, 400);
+  }
+
+  let dateFilter: TaskDateFilterResolved | null = null;
+  if (dateModeRaw != null || from != null || to != null) {
+    if (
+      (dateModeRaw !== "opened" && dateModeRaw !== "closed" && dateModeRaw !== "any") ||
+      !from ||
+      !to ||
+      !isValidYmd(from) ||
+      !isValidYmd(to)
+    ) {
+      return c.json({ error: "Invalid date filter" }, 400);
+    }
+    dateFilter = {
+      mode: dateModeRaw,
+      startDate: from,
+      endDate: to,
+    };
+  }
+
+  const visibleStatuses =
+    statusRaw.length > 0 ? statusRaw : visibleStatusesForBoard(board, workflowOrder);
+  const visibleSet = new Set(visibleStatuses);
+  const orderByList = new Map(board.lists.map((list) => [list.id, list.order] as const));
+  const statusOrder = new Map(workflowOrder.map((status, index) => [status, index] as const));
+  const activePriorityIds =
+    priorityIds.length > 0 ? priorityIds.map((id) => String(id)) : null;
+  const activeGroup =
+    groupId !== undefined ? String(groupId) : ALL_TASK_GROUPS;
+
+  const tasks = board.tasks
+    .filter((task) => (listId === undefined ? true : task.listId === listId))
+    .filter((task) => visibleSet.has(task.status))
+    .filter((task) =>
+      taskMatchesBoardFilter(task, {
+        activeGroup,
+        activePriorityIds,
+        dateFilter,
+      }),
+    )
+    .sort((a, b) => {
+      const listDelta = (orderByList.get(a.listId) ?? 0) - (orderByList.get(b.listId) ?? 0);
+      if (listDelta !== 0) return listDelta;
+      const statusDelta =
+        (statusOrder.get(a.status) ?? 0) - (statusOrder.get(b.status) ?? 0);
+      if (statusDelta !== 0) return statusDelta;
+      return a.order - b.order || a.id - b.id;
+    });
+
+  return c.json(tasks);
+});
+
+boardsRoute.put("/:id/tasks/move", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "write");
+  if (blocked) return blocked;
+
+  let body: {
+    taskId?: unknown;
+    toListId?: unknown;
+    toStatus?: unknown;
+    beforeTaskId?: unknown;
+    afterTaskId?: unknown;
+    position?: unknown;
+    visibleOrderedTaskIds?: unknown;
+  };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const taskId = Number(body.taskId);
+  if (!Number.isFinite(taskId)) {
+    return c.json({ error: "taskId required" }, 400);
+  }
+  if (!readTaskById(entry.id, taskId)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+
+  const toListId =
+    body.toListId === undefined ? undefined : Number(body.toListId);
+  if (toListId !== undefined && !Number.isFinite(toListId)) {
+    return c.json({ error: "Invalid toListId" }, 400);
+  }
+
+  const beforeTaskId =
+    body.beforeTaskId === undefined ? undefined : Number(body.beforeTaskId);
+  const afterTaskId =
+    body.afterTaskId === undefined ? undefined : Number(body.afterTaskId);
+  if (
+    (beforeTaskId !== undefined && !Number.isFinite(beforeTaskId)) ||
+    (afterTaskId !== undefined && !Number.isFinite(afterTaskId))
+  ) {
+    return c.json({ error: "Invalid move target" }, 400);
+  }
+  const position =
+    body.position === "first" || body.position === "last"
+      ? body.position
+      : body.position === undefined
+        ? undefined
+        : null;
+  if (position === null) {
+    return c.json({ error: "Invalid position" }, 400);
+  }
+
+  const visibleOrderedTaskIds = Array.isArray(body.visibleOrderedTaskIds)
+    ? body.visibleOrderedTaskIds.map((value) => Number(value))
+    : undefined;
+  if (
+    visibleOrderedTaskIds &&
+    !visibleOrderedTaskIds.every((value) => Number.isFinite(value))
+  ) {
+    return c.json({ error: "Invalid visibleOrderedTaskIds" }, 400);
+  }
+
+  const taskBeforeMove = readTaskById(entry.id, taskId);
+
+  const saved = moveTaskOnBoard(entry.id, {
+    taskId,
+    toListId,
+    toStatus: typeof body.toStatus === "string" ? body.toStatus : undefined,
+    beforeTaskId,
+    afterTaskId,
+    position,
+    visibleOrderedTaskIds,
+  });
+  if (!saved) return c.json({ error: "Invalid move" }, 400);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  const taskAfterMove = saved.tasks.find((t) => t.id === taskId);
+  if (
+    taskBeforeMove &&
+    taskAfterMove &&
+    (taskBeforeMove.listId !== taskAfterMove.listId ||
+      taskBeforeMove.status !== taskAfterMove.status)
+  ) {
+    recordTaskMoved(c, entry, saved, taskId);
+  }
+  return c.json(saved);
+});
+
+boardsRoute.get("/:id/tasks/:taskId", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardAccessError(c, entry, "read");
+  if (blocked) return blocked;
+  const taskId = Number(c.req.param("taskId"));
+  if (!Number.isFinite(taskId)) {
+    return c.json({ error: "Invalid task id" }, 400);
+  }
+  const task = readTaskById(entry.id, taskId);
+  if (!task) return c.json({ error: "Task not found" }, 404);
+  return c.json(task);
 });
 
 boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
@@ -420,9 +895,27 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
       return c.json({ error: "Invalid emoji" }, 400);
     }
   }
-  const saved = patchTaskOnBoard(entry.id, taskId, patch);
-  if (!saved) return c.json({ error: "Task not found" }, 404);
-  return c.json(saved);
+  const taskBeforePatch = readTaskById(entry.id, taskId);
+  const result = patchTaskOnBoard(entry.id, taskId, patch);
+  if (!result) return c.json({ error: "Task not found" }, 404);
+  publishBoardEvent({
+    kind: "task-updated",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    taskId: result.task.id,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board && taskBeforePatch) {
+      recordTaskUpdated(c, entry, board, taskBeforePatch, result);
+    }
+  }
+  return taskMutationResponse(c, {
+    boardId: result.boardId,
+    boardSlug: entry.slug,
+    boardUpdatedAt: result.boardUpdatedAt,
+    entity: result.task,
+  }, 200);
 });
 
 boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
@@ -434,9 +927,25 @@ boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const saved = deleteTaskOnBoard(entry.id, taskId);
-  if (!saved) return c.json({ error: "Task not found" }, 404);
-  return c.json(saved);
+  const taskSnapshot = readTaskById(entry.id, taskId);
+  const result = deleteTaskOnBoard(entry.id, taskId);
+  if (!result) return c.json({ error: "Task not found" }, 404);
+  publishBoardEvent({
+    kind: "task-deleted",
+    boardId: result.boardId,
+    boardUpdatedAt: result.boardUpdatedAt,
+    taskId: result.deletedTaskId,
+  });
+  {
+    const board = loadBoard(entry.id);
+    if (board && taskSnapshot) recordTaskDeleted(c, entry, board, taskSnapshot, result);
+  }
+  return taskDeleteResponse(c, {
+    boardId: result.boardId,
+    boardSlug: entry.slug,
+    boardUpdatedAt: result.boardUpdatedAt,
+    deletedTaskId: result.deletedTaskId,
+  });
 });
 
 boardsRoute.put("/:id/tasks/reorder", async (c) => {
@@ -468,6 +977,8 @@ boardsRoute.put("/:id/tasks/reorder", async (c) => {
   }
   const saved = reorderTasksInBand(entry.id, listId, status, orderedTaskIds);
   if (!saved) return c.json({ error: "Invalid reorder" }, 400);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  recordTasksReordered(c, entry, saved, listId, status);
   return c.json(saved);
 });
 
@@ -551,6 +1062,8 @@ boardsRoute.patch("/:id", async (c) => {
   }
   const saved = await patchBoard(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
+  publishBoardChanged(entry.id, saved.updatedAt);
+  recordBoardPatched(c, entry, saved);
   return c.json(saved);
 });
 
@@ -587,7 +1100,10 @@ boardsRoute.delete("/:id", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blocked = cliBoardAccessError(c, entry, "write");
   if (blocked) return blocked;
-  if (!loadBoard(entry.id)) return c.json({ error: "Board not found" }, 404);
+  const snapshot = loadBoard(entry.id);
+  if (!snapshot) return c.json({ error: "Board not found" }, 404);
   await deleteBoardById(entry.id);
+  publishBoardChanged(entry.id, new Date().toISOString());
+  if (snapshot) recordBoardDeleted(c, entry, snapshot);
   return c.body(null, 204);
 });

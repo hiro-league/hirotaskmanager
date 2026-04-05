@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Board } from "../../../shared/models";
-import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
+import { useMoveTask } from "@/api/mutations";
 import {
   getOperationSourceData,
   moveGroupedSortableItems,
@@ -16,10 +16,10 @@ export interface TaskDndReactConfig {
   buildContainerMap: () => Record<string, string[]>;
   persistChanges: (
     board: Board,
+    taskId: number,
     prev: Record<string, string[]>,
     next: Record<string, string[]>,
-    updateTask: ReturnType<typeof useUpdateTask>,
-    reorderBand: ReturnType<typeof useReorderTasksInBand>,
+    moveTask: ReturnType<typeof useMoveTask>,
   ) => Promise<void>;
   containerMapDeps: string;
 }
@@ -67,8 +67,7 @@ export function useBoardTaskDndReact(
   config: TaskDndReactConfig,
 ) {
   const boardNav = useBoardKeyboardNavOptional();
-  const updateTask = useUpdateTask();
-  const reorderBand = useReorderTasksInBand();
+  const moveTask = useMoveTask();
 
   const serverTaskMap = useMemo(
     () => config.buildContainerMap(),
@@ -172,10 +171,10 @@ export function useBoardTaskDndReact(
       setPendingTaskMap(endMap);
 
       void configRef.current
-        .persistChanges(boardRef.current, startMap, endMap, updateTask, reorderBand)
+        .persistChanges(boardRef.current, sourceData.taskId, startMap, endMap, moveTask)
         .finally(() => setPendingTaskMap(null));
     },
-    [list, reorderBand, updateTask],
+    [list, moveTask],
   );
 
   return {

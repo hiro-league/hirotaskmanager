@@ -56,6 +56,7 @@ function mapIndexRow(row: {
   slug: string;
   name: string;
   emoji: string | null;
+  description: string | null;
   cli_access: string | null;
   created_at: string;
 }): BoardIndexEntry {
@@ -67,6 +68,7 @@ function mapIndexRow(row: {
       row.emoji != null && String(row.emoji).trim() !== ""
         ? String(row.emoji).trim()
         : null,
+    description: row.description ?? "",
     cliAccess: normalizeBoardCliAccessColumn(row.cli_access),
     createdAt: row.created_at,
   };
@@ -76,13 +78,14 @@ export async function readBoardIndex(): Promise<BoardIndexEntry[]> {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, slug, name, emoji, cli_access, created_at FROM board ORDER BY name COLLATE NOCASE",
+      "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board ORDER BY name COLLATE NOCASE",
     )
     .all() as {
     id: number;
     slug: string;
     name: string;
     emoji: string | null;
+    description: string | null;
     cli_access: string | null;
     created_at: string;
   }[];
@@ -97,13 +100,14 @@ export async function entryByIdOrSlug(
   if (/^\d+$/.test(ref)) {
     const row = db
       .query(
-        "SELECT id, slug, name, emoji, cli_access, created_at FROM board WHERE id = ?",
+        "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board WHERE id = ?",
       )
       .get(Number(ref)) as {
       id: number;
       slug: string;
       name: string;
       emoji: string | null;
+      description: string | null;
       cli_access: string | null;
       created_at: string;
     } | null;
@@ -111,13 +115,14 @@ export async function entryByIdOrSlug(
   }
   const row2 = db
     .query(
-      "SELECT id, slug, name, emoji, cli_access, created_at FROM board WHERE slug = ?",
+      "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board WHERE slug = ?",
     )
     .get(ref) as {
     id: number;
     slug: string;
     name: string;
     emoji: string | null;
+    description: string | null;
     cli_access: string | null;
     created_at: string;
   } | null;
@@ -339,13 +344,14 @@ export async function createBoardWithDefaults(
   name: string,
   slug: string,
   emoji: string | null = null,
+  description: string = "",
 ): Promise<Board> {
   const now = new Date().toISOString();
   const boardId = withTransaction(getDb(), () => {
     const db = getDb();
     const r = db.run(
-      "INSERT INTO board (name, slug, emoji, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      [name, slug, emoji, now, now],
+      "INSERT INTO board (name, slug, emoji, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [name, slug, emoji, description, now, now],
     );
     const id = Number(r.lastInsertRowid);
     const groups = createDefaultTaskGroups();

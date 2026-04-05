@@ -20,9 +20,18 @@ Use simple Git-style nested commands:
 
 ```bash
 hirotm boards add
+hirotm boards update
+hirotm boards delete
+hirotm boards groups
+hirotm boards priorities
+hirotm boards tasks
 hirotm lists add
+hirotm lists update
+hirotm lists delete
+hirotm lists move
 hirotm tasks add
 hirotm tasks update
+hirotm tasks delete
 hirotm tasks move
 ```
 
@@ -44,13 +53,12 @@ Why:
 
 ### Move semantics
 
-Keep `tasks move` simple:
+Keep move commands server-owned:
 
-- move by updating `listId` and optionally `status`
-- destination placement is always append-to-end of the target band
-- no `before`, `after`, or exact index handling in v1
-
-This matches current server behavior when a task changes list or status.
+- `lists move` and `tasks move` call dedicated move endpoints
+- placement uses `--before` / `--after` / `--first` / `--last` style flags
+- the CLI does not assemble full ordered id arrays for normal move operations
+- `tasks update` still changes task fields, but `tasks move` is the canonical ordering surface
 
 ### Task update scope
 
@@ -66,7 +74,7 @@ Recommended mutable fields:
 - `listId`
 - `color`
 
-`order` is intentionally excluded from the public CLI mutation surface in v1. Reordering remains separate from simple move semantics.
+`order` remains excluded from the public CLI mutation surface; ordering belongs to the dedicated move endpoints instead of generic patch commands.
 
 ## Command Spec
 
@@ -90,6 +98,97 @@ Example:
 hirotm boards add "Sprint Planning"
 ```
 
+### `hirotm boards update`
+
+Patch board metadata.
+
+```bash
+hirotm boards update <id-or-slug> [options]
+```
+
+Options:
+
+- `--name <text>`
+- `--emoji <text>`
+- `--clear-emoji`
+- `--description <text>`
+- `--description-file <path>`
+- `--description-stdin`
+- `--clear-description`
+- `--cli-access <none|read|read_write>`
+- `--board-color <stone|cyan|azure|indigo|violet|rose|amber|emerald|coral|sage>`
+- `--clear-board-color`
+
+Rules:
+
+- at least one update field is required
+- exactly one description source may be supplied
+- `--clear-description` writes `description: null`
+- `--clear-emoji` writes `emoji: null`
+- `--clear-board-color` writes `boardColor: null`
+
+### `hirotm boards delete`
+
+Delete a board.
+
+```bash
+hirotm boards delete <id-or-slug>
+```
+
+Rules:
+
+- `<id-or-slug>` is required
+- no interactive confirmation
+- output is a compact delete result, not a board payload
+
+### `hirotm boards groups`
+
+Replace the board task groups definition set from JSON.
+
+```bash
+hirotm boards groups <id-or-slug> (--json <text> | --file <path> | --stdin)
+```
+
+Rules:
+
+- exactly one JSON source is required
+- input may be either:
+  - a raw JSON array of groups, or
+  - an object with `taskGroups`
+- the CLI forwards the definition set to the existing replace-style API
+
+### `hirotm boards priorities`
+
+Replace the board task priorities definition set from JSON.
+
+```bash
+hirotm boards priorities <id-or-slug> (--json <text> | --file <path> | --stdin)
+```
+
+Rules:
+
+- exactly one JSON source is required
+- input may be either:
+  - a raw JSON array of priorities, or
+  - an object with `taskPriorities`
+- built-in/custom behavior follows the replace-style rules in the design doc
+
+### `hirotm boards tasks`
+
+List filtered tasks for one board without loading the full board payload.
+
+```bash
+hirotm boards tasks <id-or-slug> [--list <id>] [--group <id>] [--priority <id> ...] [--status <id> ...] [--date-mode <opened|closed|any>] [--from <yyyy-mm-dd>] [--to <yyyy-mm-dd>]
+```
+
+Rules:
+
+- `<id-or-slug>` is required
+- `--list` scopes to one list within the board
+- `--priority` and `--status` may be repeated or passed as comma-separated values
+- `--date-mode`, `--from`, and `--to` map directly to the board task query API
+- output is a task array, not the full board payload
+
 ### `hirotm lists add`
 
 Create a list on an existing board.
@@ -110,6 +209,57 @@ Example:
 ```bash
 hirotm lists add --board sprint-planning "Ready"
 ```
+
+### `hirotm lists update`
+
+Patch one list.
+
+```bash
+hirotm lists update --board <id-or-slug> <list-id> [options]
+```
+
+Options:
+
+- `--name <text>`
+- `--color <css-color>`
+- `--clear-color`
+- `--emoji <text>`
+- `--clear-emoji`
+
+Rules:
+
+- `--board` and `<list-id>` are required
+- at least one update field is required
+- `--clear-color` writes `color: null`
+- `--clear-emoji` writes `emoji: null`
+
+### `hirotm lists delete`
+
+Delete one list.
+
+```bash
+hirotm lists delete --board <id-or-slug> <list-id>
+```
+
+Rules:
+
+- `--board` and `<list-id>` are required
+- output is a compact delete result
+
+### `hirotm lists move`
+
+Move one list with server-owned relative placement.
+
+```bash
+hirotm lists move --board <id-or-slug> <list-id> [--before <list-id> | --after <list-id> | --first | --last]
+```
+
+Rules:
+
+- `--board` and `<list-id>` are required
+- use at most one of `--before`, `--after`, `--first`, or `--last`
+- omitted placement defaults to the server move endpoint's last-position behavior
+- output is a compact list result derived from the returned board
 
 ### `hirotm tasks add`
 
@@ -196,18 +346,19 @@ hirotm tasks update --board sprint-planning 42 --body-stdin --status in-progress
 
 ### `hirotm tasks move`
 
-Move a task to another list and optionally another status.
+Move a task to another list and optionally another status with server-owned relative placement.
 
 ```bash
-hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>] [--before-task <id> | --after-task <id> | --first | --last]
 ```
 
 Rules:
 
 - `--board`, `<task-id>`, and `--to-list` are required
 - omitted `--to-status` keeps the current status
-- moved task is appended to the end of the destination band
-- this is a convenience command implemented via the same task patch route as `tasks update`
+- use at most one of `--before-task`, `--after-task`, `--first`, or `--last`
+- omitted placement falls back to the server move endpoint's last-position behavior
+- this command uses the dedicated task move endpoint rather than generic task patching
 
 Examples:
 
@@ -218,6 +369,23 @@ hirotm tasks move --board sprint-planning 42 --to-list 15
 ```bash
 hirotm tasks move --board sprint-planning 42 --to-list 15 --to-status closed
 ```
+
+```bash
+hirotm tasks move --board sprint-planning 42 --to-list 15 --before-task 99
+```
+
+### `hirotm tasks delete`
+
+Delete one task.
+
+```bash
+hirotm tasks delete --board <id-or-slug> <task-id>
+```
+
+Rules:
+
+- `--board` and `<task-id>` are required
+- output is a compact delete result
 
 ## Body Input Rules
 
@@ -259,8 +427,11 @@ Recommended envelope:
 Recommended command-specific payloads:
 
 - `boards add` → `entity` contains compact board fields
+- `boards update` / `boards groups` / `boards priorities` → `entity` contains compact board fields
 - `lists add` → `entity` contains compact list fields
+- `lists update` / `lists move` → `entity` contains compact list fields
 - `tasks add` / `tasks update` / `tasks move` → `entity` contains the final task fields
+- `boards delete` / `lists delete` / `tasks delete` → `deleted` contains the deleted target descriptor
 
 Recommended task result shape:
 
@@ -289,8 +460,9 @@ Recommended task result shape:
 
 Implementation note:
 
-- the server can continue returning full `Board` objects
-- the CLI should derive the compact entity payload from the returned board before printing
+- the server can continue returning full `Board` objects for board-level replace/update commands
+- the CLI may derive compact entity payloads from the returned board before printing
+- list/task delete endpoints may return granular delete results directly
 
 ## Error Rules
 
@@ -322,18 +494,45 @@ Examples:
 - destructive commands remain separate from this spec
 - defaults should be server-backed where possible so the CLI stays thin
 
+## Planned CLI coverage
+
+The commands in **Command Spec** above are implemented. Additional scope is captured in the **design doc** (planned command tables plus the board-filter, replace, and move design sections): [ai-cli-design.md §3.11–§3.13, §4](./ai-cli-design.md#311-board-scoped-task-filters).
+
+**Remaining planned coverage**:
+
+**Phase 4a: implemented**
+
+- `boards update`
+- `boards delete`
+- `boards groups`
+- `boards priorities`
+- `lists update`
+- `lists delete`
+- `tasks delete`
+
+**Phase 4b: implemented**
+
+- `boards tasks`
+- `lists move`
+- `tasks move` upgraded to the dedicated move endpoint surface
+
+**Other gaps** (outside the Phase 4 / 4b bundle):
+
+| Gap | Blocker / note |
+|-----|----------------|
+| Advanced FTS with server-side filters (group, priority, status, dates, …) | **No API yet** — [Future B](./ai-cli-plan.md#future--advanced-search-server-side-filtering) |
+| `--format table` for `boards list`, `boards show`, `statuses list` | Only `search` supports table today — [Phase 6](./ai-cli-plan.md#phase-6--distribution--polish) |
+
+Intentionally out-of-scope for the CLI (e.g. editing **view prefs**) remain omitted; see [ai-cli-plan.md — CLI vs UI-only](./ai-cli-plan.md#cli-vs-ui-only-surface).
+
 ## Implementation Notes
 
-This spec aligns with the current API routes:
+This spec aligns with the current implemented API routes:
 
 - `POST /api/boards`
+- `GET /api/boards/:id/tasks`
 - `POST /api/boards/:id/lists`
+- `PUT /api/boards/:id/lists/move`
 - `POST /api/boards/:id/tasks`
 - `PATCH /api/boards/:id/tasks/:taskId`
-
-`tasks move` should be a CLI convenience wrapper over the existing task patch route by sending:
-
-- `listId`
-- optional `status`
-
-The current server already appends to the end of the destination band when list or status changes, so no new move API is required for v1.
+- `PUT /api/boards/:id/tasks/move`

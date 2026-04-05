@@ -25,6 +25,7 @@ import {
   useStatuses,
   useStatusWorkflowOrder,
 } from "@/api/queries";
+import { useBoardChangeStream } from "@/api/useBoardChangeStream";
 import { usePatchBoard, usePatchBoardViewPrefs } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
@@ -76,6 +77,7 @@ import { useBoardTaskKeyboardBridgeOptional } from "./shortcuts/BoardTaskKeyboar
 import type { BoardShortcutActions } from "./shortcuts/boardShortcutTypes";
 import {
   rootCanConsumeVerticalWheel,
+  verticalScrollChainContainsScrollable,
   verticalScrollChainCanConsumeWheel,
   verticalScrollChainCanConsumeWheelWithin,
 } from "./boardSurfaceWheel";
@@ -93,6 +95,7 @@ import { BoardCelebrationSoundToggle } from "./BoardCelebrationSoundToggle";
 import { BoardStatsVisibilityToggle } from "./BoardStatsVisibilityToggle";
 import type { TaskDateFilterMode } from "./boardStatusUtils";
 import { BoardSearchDialog } from "./BoardSearchDialog";
+import { BoardNotificationDeepLink } from "./BoardNotificationDeepLink";
 import { OPEN_SHORTCUT_HELP_EVENT } from "@/lib/shortcutHelpEvents";
 import {
   BoardTaskCompletionCelebrationProvider,
@@ -465,6 +468,7 @@ function BoardShortcutBindings({
 
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
+  useBoardChangeStream(boardId, data?.id ?? null);
   const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
   const patchBoard = usePatchBoard();
   const themePreference = usePreferencesStore((s) => s.themePreference);
@@ -595,6 +599,9 @@ export function BoardView({ boardId }: BoardViewProps) {
     const onWheelBoard = (e: WheelEvent) => {
       const t = e.target;
       if (!(t instanceof Element)) return;
+      // Keep wheel gestures that start inside list/task scrollers local to that
+      // scroller, even at the edge, so they do not suddenly pan the board sideways.
+      if (verticalScrollChainContainsScrollable(t, scroller)) return;
       if (verticalScrollChainCanConsumeWheel(t, e.deltaY, scroller)) return;
       if (stackedLayout && rootCanConsumeVerticalWheel(scroller, e.deltaY)) return;
       applyHorizontal(e);
@@ -976,6 +983,7 @@ export function BoardView({ boardId }: BoardViewProps) {
         setTaskDeleteConfirmId={setTaskDeleteConfirmId}
         setListDeleteConfirmId={setListDeleteConfirmId}
       />
+      <BoardNotificationDeepLink board={data} />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
         style={boardThemeStyle}

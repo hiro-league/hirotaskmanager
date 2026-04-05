@@ -1,17 +1,70 @@
-import type { Board } from "../../shared/models";
+import type { Board, List } from "../../shared/models";
 import { getDb, withTransaction } from "../db";
 import { boardExists } from "./helpers";
 import { loadBoard } from "./board";
 
+type ListRow = {
+  id: number;
+  name: string;
+  sort_order: number;
+  color: string | null;
+  emoji: string | null;
+};
+
+export type ListWriteResult = {
+  boardId: number;
+  boardUpdatedAt: string;
+  list: List;
+};
+
+export type ListDeleteResult = {
+  boardId: number;
+  boardUpdatedAt: string;
+  deletedListId: number;
+};
+
+function mapListRow(row: ListRow): List {
+  return {
+    id: row.id,
+    name: row.name,
+    order: row.sort_order,
+    color: row.color ?? undefined,
+    emoji:
+      row.emoji != null && String(row.emoji).trim() !== ""
+        ? String(row.emoji).trim()
+        : null,
+  };
+}
+
+function readBoardUpdatedAt(boardId: number): string | null {
+  const db = getDb();
+  const row = db
+    .query("SELECT updated_at FROM board WHERE id = ?")
+    .get(boardId) as { updated_at: string } | null;
+  return row?.updated_at ?? null;
+}
+
+/** Phase 2: small list writes read back one list row instead of reloading the full board. */
+export function readListById(boardId: number, listId: number): List | null {
+  const db = getDb();
+  const row = db
+    .query(
+      "SELECT id, name, sort_order, color, emoji FROM list WHERE id = ? AND board_id = ?",
+    )
+    .get(listId, boardId) as ListRow | null;
+  return row ? mapListRow(row) : null;
+}
+
 export function createListOnBoard(
   boardId: number,
   input: { name: string; emoji?: string | null },
-): Board | null {
+): ListWriteResult | null {
   const trimmed = input.name.trim() || "New list";
   const emoji = input.emoji ?? null;
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const now = new Date().toISOString();
+  let listId: number | null = null;
   withTransaction(db, () => {
     const maxRow = db
       .query(
@@ -19,20 +72,24 @@ export function createListOnBoard(
       )
       .get(boardId) as { m: number };
     const nextOrder = maxRow.m + 1;
-    db.run(
+    const result = db.run(
       "INSERT INTO list (board_id, name, sort_order, color, emoji) VALUES (?, ?, ?, ?, ?)",
       [boardId, trimmed, nextOrder, null, emoji],
     );
+    listId = Number(result.lastInsertRowid);
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  if (listId == null) return null;
+  const list = readListById(boardId, listId);
+  if (!list) return null;
+  return { boardId, boardUpdatedAt: now, list };
 }
 
 export function patchListOnBoard(
   boardId: number,
   listId: number,
   updates: { name?: string; color?: string | null; emoji?: string | null },
-): Board | null {
+): ListWriteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const row = db
@@ -54,7 +111,13 @@ export function patchListOnBoard(
     sets.push("emoji = ?");
     vals.push(updates.emoji);
   }
-  if (sets.length === 0) return loadBoard(boardId);
+  if (sets.length === 0) {
+    const list = readListById(boardId, listId);
+    if (!list) return null;
+    const boardUpdatedAt = readBoardUpdatedAt(boardId);
+    if (!boardUpdatedAt) return null;
+    return { boardId, boardUpdatedAt, list };
+  }
 
   const now = new Date().toISOString();
   vals.push(listId, boardId);
@@ -65,10 +128,15 @@ export function patchListOnBoard(
     );
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  const list = readListById(boardId, listId);
+  if (!list) return null;
+  return { boardId, boardUpdatedAt: now, list };
 }
 
-export function deleteListOnBoard(boardId: number, listId: number): Board | null {
+export function deleteListOnBoard(
+  boardId: number,
+  listId: number,
+): ListDeleteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const row = db
@@ -80,7 +148,7 @@ export function deleteListOnBoard(boardId: number, listId: number): Board | null
     db.run("DELETE FROM list WHERE id = ?", [listId]);
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
   });
-  return loadBoard(boardId);
+  return { boardId, boardUpdatedAt: now, deletedListId: listId };
 }
 
 export function reorderListsOnBoard(
@@ -100,6 +168,72 @@ export function reorderListsOnBoard(
   const now = new Date().toISOString();
   withTransaction(db, () => {
     orderedListIds.forEach((listId, order) => {
+      db.run("UPDATE list SET sort_order = ? WHERE id = ? AND board_id = ?", [
+        order,
+        listId,
+        boardId,
+      ]);
+    });
+    db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
+  });
+  return loadBoard(boardId);
+}
+
+export function moveListOnBoard(
+  boardId: number,
+  input: {
+    listId: number;
+    beforeListId?: number;
+    afterListId?: number;
+    position?: "first" | "last";
+  },
+): Board | null {
+  const db = getDb();
+  if (!boardExists(db, boardId)) return null;
+
+  const currentOrder = db
+    .query(
+      "SELECT id FROM list WHERE board_id = ? ORDER BY sort_order ASC, id ASC",
+    )
+    .all(boardId) as { id: number }[];
+  const orderedIds = currentOrder.map((row) => row.id);
+  if (!orderedIds.includes(input.listId)) return null;
+
+  const placementCount =
+    (input.beforeListId != null ? 1 : 0) +
+    (input.afterListId != null ? 1 : 0) +
+    (input.position != null ? 1 : 0);
+  if (placementCount > 1) return null;
+
+  const remaining = orderedIds.filter((id) => id !== input.listId);
+  let insertAt = remaining.length;
+
+  if (input.beforeListId != null) {
+    if (input.beforeListId === input.listId) return null;
+    const idx = remaining.indexOf(input.beforeListId);
+    if (idx < 0) return null;
+    insertAt = idx;
+  } else if (input.afterListId != null) {
+    if (input.afterListId === input.listId) return null;
+    const idx = remaining.indexOf(input.afterListId);
+    if (idx < 0) return null;
+    insertAt = idx + 1;
+  } else if (input.position === "first") {
+    insertAt = 0;
+  } else if (input.position === "last" || input.position == null) {
+    insertAt = remaining.length;
+  } else {
+    return null;
+  }
+
+  const nextOrder = [
+    ...remaining.slice(0, insertAt),
+    input.listId,
+    ...remaining.slice(insertAt),
+  ];
+  const now = new Date().toISOString();
+  withTransaction(db, () => {
+    nextOrder.forEach((listId, order) => {
       db.run("UPDATE list SET sort_order = ? WHERE id = ? AND board_id = ?", [
         order,
         listId,

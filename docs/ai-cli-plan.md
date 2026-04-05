@@ -9,7 +9,7 @@ These are **not** planned for the CLI: they exist for the web app and are not ne
 - **View preferences** — layout (lanes vs stacked), status band weights, theme/canvas colors, background image, visible statuses / show counts as persisted presentation (`PATCH .../view-prefs`). (Board data still includes `visibleStatuses`; the CLI may read it, but we do not plan CLI commands to *edit* view prefs.)
 - **Keyboard shortcuts** — entirely UI.
 
-**Not the same as view prefs:** the board header’s **task filters** (active **group**, **priority**, **date range** with opened/closed/any mode) are **local UI state** today (see `preferences.ts`, `BoardTaskDateFilter.tsx`, filtering helpers in `boardStatusUtils.ts`). They are **agent-relevant** and belong in the CLI eventually — see [Future — Board-scoped task filters](#future--board-scoped-task-filters-cli-parity-with-header).
+**Not the same as view prefs:** the board header’s **task filters** (active **group**, **priority**, **date range** with opened/closed/any mode) are **agent-relevant**. They now belong to the API-backed board task query design in [ai-cli-design.md §3.11](./ai-cli-design.md#311-board-scoped-task-filters) and are tracked in [Phase 4b](#phase-4b--api-backed-board-task-filtering--server-owned-move-semantics).
 
 ---
 
@@ -18,10 +18,10 @@ These are **not** planned for the CLI: they exist for the web app and are not ne
 | [1](#phase-1--minimum-working-cli-read-only--server-control) | Minimum CLI: reads, search, server control | **Done** |
 | [2](#phase-2--ai-agent-integration) | AI agent integration (rules, docs, actionable errors) | **Done** |
 | [3](#phase-3--core-write-commands) | Core writes: boards, lists, tasks (+ emoji) | **Done** |
-| [4](#phase-4--board-structure--extended-mutations) | Task groups, priorities, deletes, reorder | Not started |
+| [4a](#phase-4a--board-structure--extended-mutations) | Missing CLI commands that can ship on the current API | **Done** |
+| [4b](#phase-4b--api-backed-board-task-filtering--server-owned-move-semantics) | API/UI cleanup for board filtering and ordering | **Done** |
 | [5](#phase-5--mcp-server) | MCP server wrapping the HTTP API | Not started |
 | [6](#phase-6--distribution--polish) | Distribution and polish | Partial (see phase) |
-| [Future A](#future--board-scoped-task-filters-cli-parity-with-header) | Board task filters (group, priority, status, date) | **Not in CLI yet** — no dedicated API; can filter after `GET /api/boards/:id` |
 | [Future B](#future--advanced-search-server-side-filtering) | Advanced FTS search + server-side filters | Blocked — **no API yet** |
 
 ---
@@ -40,7 +40,7 @@ These are **not** planned for the CLI: they exist for the web app and are not ne
 | 1.4 | Implement `src/cli/lib/api-client.ts` | `fetchApi(path)` → calls `http://localhost:{port}/api/{path}`, returns parsed JSON, handles connection refused |
 | 1.5 | Implement `src/cli/lib/output.ts` | `printJson(data)` to stdout, `printError(msg)` to stderr, set exit code |
 | 1.6 | Implement `hirotm boards list` | Calls `GET /api/boards`, prints result |
-| 1.7 | Implement `hirotm boards show` | Calls `GET /api/boards/:id`, prints **full** board (all tasks); no filter flags — see [Future A](#future--board-scoped-task-filters-cli-parity-with-header) |
+| 1.7 | Implement `hirotm boards show` | Calls `GET /api/boards/:id`, prints **full** board (all tasks); filtered board task output is planned in [Phase 4b](#phase-4b--api-backed-board-task-filtering--server-owned-move-semantics) |
 | 1.8 | Implement `hirotm statuses list` | Calls `GET /api/statuses`, prints result |
 | 1.9 | Implement `hirotm start` | Foreground: runs existing server startup. Background: `Bun.spawn` detached child |
 | 1.10 | Implement `hirotm status` | Check PID file + health endpoint |
@@ -80,27 +80,52 @@ First AI-first mutation commands: simple, non-interactive, JSON-first. Align wit
 | `hirotm lists add --board <id-or-slug> [name]` | `POST /api/boards/:id/lists` | Optional `--emoji`; append new list to end |
 | `hirotm tasks add --board <id-or-slug> --list <id> --group <id> ...` | `POST /api/boards/:id/tasks` | Optional `--emoji`; body via `--body`, `--body-file`, or `--body-stdin` |
 | `hirotm tasks update --board <id-or-slug> <task-id> ...` | `PATCH /api/boards/:id/tasks/:taskId` | Includes `emoji` with other mutable task fields |
-| `hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]` | `PATCH /api/boards/:id/tasks/:taskId` | Convenience wrapper; append-to-end semantics |
+| `hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]` | `PATCH /api/boards/:id/tasks/:taskId` | Initial Phase 3 surface; upgraded in Phase 4b to a dedicated move endpoint |
 
 Write commands should return compact normalized JSON objects, not full board payloads.
 
 ---
 
-## Phase 4 — Board Structure & Extended Mutations
+## Phase 4a — Board Structure & Extended Mutations
 
-**Status: Not started**
+**Status: Done** (canonical implementation details: [ai-cli-design.md §3.12, §4](./ai-cli-design.md#312-replace-style-board-structure-commands))
 
-Covers HTTP surfaces that go beyond single-task/list creation: **task group definitions**, **task priority definitions**, board/list lifecycle, and ordering — still excluding [view prefs and other UI-only](#cli-vs-ui-only-surface) endpoints.
+Covers the remaining **CLI commands** that can ship on top of the **current** server API: board structure and board/task-list lifecycle. It intentionally excludes API-backed board task filtering and move/reorder API cleanup, which are split into [Phase 4b](#phase-4b--api-backed-board-task-filtering--server-owned-move-semantics).
 
-| Area | HTTP / intent | Notes |
-|------|----------------|-------|
-| Task groups | `PATCH /api/boards/:id/groups` | Replace group rows (ids, labels, optional emoji per group) |
-| Task priorities | `PATCH /api/boards/:id/priorities` | Replace priority definitions for the board |
-| Board | `PATCH /api/boards/:id`, `DELETE /api/boards/:id` | Rename, slug, emoji; delete board |
-| Lists | `PATCH /api/boards/:id/lists/:listId`, `DELETE ...`, reorder | Name, color, emoji; delete; reorder |
-| Tasks | `DELETE /api/boards/:id/tasks/:taskId`, reorder-in-band | Delete task; explicit reorder when agents need exact placement |
+| Implemented CLI command | HTTP / implementation basis | Notes |
+|------------------------|-----------------------------|-------|
+| `hirotm boards update <id-or-slug>` | `PATCH /api/boards/:id` | Updates board metadata such as name, emoji, description, `cliAccess`, `boardColor` |
+| `hirotm boards delete <id-or-slug>` | `DELETE /api/boards/:id` | Deletes board |
+| `hirotm boards groups <id-or-slug>` | `PATCH /api/boards/:id/groups` | Replace-style set sync; CLI/help requirements and remap behavior live in design §3.12 |
+| `hirotm boards priorities <id-or-slug>` | `PATCH /api/boards/:id/priorities` | Replace-style set sync with built-in restrictions; see design §3.12 |
+| `hirotm lists update --board <id-or-slug> <list-id>` | `PATCH /api/boards/:id/lists/:listId` | Updates list `name`, `color`, `emoji` |
+| `hirotm lists delete --board <id-or-slug> <list-id>` | `DELETE /api/boards/:id/lists/:listId` | Deletes list |
+| `hirotm tasks delete --board <id-or-slug> <task-id>` | `DELETE /api/boards/:id/tasks/:taskId` | Deletes task |
 
-Exact command names (`hirotm boards patch`, `hirotm boards groups`, …) can follow the same Git-style pattern as Phase 3; details belong in [ai-cli.md](./ai-cli.md) when implemented.
+All Phase 4a items above ship on the **current** server API.
+
+Exact command names and flag shapes now live in [ai-cli.md](./ai-cli.md).
+
+---
+
+## Phase 4b — API-backed Board Task Filtering + Server-owned Move Semantics
+
+**Status: Done** (design: [ai-cli-design.md §3.11, §3.13, §4](./ai-cli-design.md#311-board-scoped-task-filters))
+
+This phase moves two areas out of CLI-side compensation and into cleaner API-backed behavior:
+
+- board-scoped task filtering via a dedicated board task query
+- list/task ordering via server-owned relative move semantics
+
+| Area | Implemented work | Notes |
+|------|------------------|-------|
+| Board tasks API | Added filtered board task endpoint | `GET /api/boards/:id/tasks` supports `listId`, `groupId`, repeated `priorityId`, repeated `status`, `dateMode`, `from`, `to` |
+| CLI | Added `hirotm boards tasks <id-or-slug> ...` | Dedicated filtered task query; `boards show` remains the full unfiltered board |
+| UI / shared semantics | Kept board header filtering aligned with the shared predicate | Server filtering reuses the shared board filter semantics instead of inventing a second ruleset |
+| Lists API | Added relative move endpoint for lists | `PUT /api/boards/:id/lists/move` with `listId` + `beforeListId` / `afterListId` / `position` |
+| Tasks API | Added relative move endpoint for tasks | `PUT /api/boards/:id/tasks/move` accepts task destination and relative placement; UI drag flows provide visible-order context when filters hide some tasks |
+| CLI | Added `hirotm lists move ...` and upgraded `hirotm tasks move ...` to use the new move endpoints | CLI no longer computes full order arrays for ordinary move operations |
+| UI | Updated drag/drop ordering flows to use the new move endpoints | List and task board interactions now reconcile from server-owned move responses |
 
 ---
 
@@ -118,7 +143,7 @@ Wrap the same HTTP API calls in an MCP tool server for native Cursor/Claude inte
 | `search_tasks` (or `search`) | `GET /api/search` |
 | `create_task` | `POST /api/boards/:id/tasks` |
 | `update_task` | `PATCH /api/boards/:id/tasks/:taskId` |
-| … | … (extend as Phases 3–4 ship) |
+| … | … (extend as Phases 3–4b ship) |
 
 MCP server runs as a stdio process configured in `.cursor/mcp.json`. It internally calls the same localhost HTTP API as the CLI.
 
@@ -138,29 +163,17 @@ MCP server runs as a stdio process configured in `.cursor/mcp.json`. It internal
 
 ---
 
-## Future — Board-scoped task filters (CLI parity with header)
-
-**Status: Not in CLI yet** — UI implements this; HTTP does not expose a filtered task list.
-
-On the board, the header combines up to **four** dimensions when deciding which tasks to show (same idea in stacked lanes and merged lists): **task group**, **priority** (subset of board priorities), **date** (inclusive range + mode: opened / closed / any — matches `createdAt` / `closedAt` per `taskMatchesDateFilter` in `boardStatusUtils.ts`), and **workflow status** (per column/band, or intersected with the board’s visible statuses).
-
-- **`hirotm boards show`** today returns the **entire** board payload. There is **no** CLI flag set equivalent to applying all four filters.
-- **No server endpoint** returns “tasks for board B matching these filters”; the web app loads the board and filters in memory.
-- **Plan:** add something like `hirotm boards tasks --board <id> …` or optional filters on `boards show` that **fetch once** then emit a filtered JSON task list (and/or narrow fields), reusing the same rules as the UI — ideally by moving shared pure filter helpers into `src/shared/` so CLI and UI stay aligned.
-
----
-
 ## Future — Advanced search (server-side filtering)
 
 **Status: Blocked — no API yet**
 
 A later iteration of **global** `hirotm search` / `GET /api/search` could filter server-side by **task group**, **priority**, **status**, date ranges, etc., in addition to FTS text. That requires **new HTTP API design and implementation**; the current search is FTS with optional `--board` scope only. Track server work separately; add CLI/MCP once the API exists.
 
-This is distinct from [Future A](#future--board-scoped-task-filters-cli-parity-with-header): board-scoped filters can ship **without** a new API by post-processing a board fetch; advanced search filtering needs **server** support for efficiency and consistent ranking across large datasets.
+This is distinct from Phase 4b board-scoped filters: board filters apply within one board via a dedicated board task API, while advanced search filtering needs broader **server-side search** semantics across boards.
 
 ---
 
 ## See also
 
 - [ai-cli-design.md](./ai-cli-design.md) — full CLI design (requirements, decisions, command reference, errors, safety)
-- [ai-cli.md](./ai-cli.md) — write-command spec for Phases 3–4
+- [ai-cli.md](./ai-cli.md) — write-command spec for Phases 3–4b

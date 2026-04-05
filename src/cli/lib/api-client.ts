@@ -1,13 +1,25 @@
 import {
   TASK_MANAGER_CLIENT_HEADER,
   TASK_MANAGER_CLIENT_HIROTM,
+  TASK_MANAGER_CLIENT_INSTANCE_HEADER,
+  TASK_MANAGER_CLIENT_NAME_HEADER,
 } from "../../shared/boardCliAccess";
+import {
+  TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+  TASK_MANAGER_MUTATION_RESPONSE_HEADER,
+} from "../../shared/mutationResults";
+import {
+  getRuntimeCliClientInstanceId,
+  getRuntimeCliClientName,
+} from "./clientIdentity";
 import { resolveApiKey, resolvePort, type ConfigOverrides } from "./config";
 import { CliError } from "./output";
 
 function taskManagerClientHeaders(): Record<string, string> {
   return {
     [TASK_MANAGER_CLIENT_HEADER]: TASK_MANAGER_CLIENT_HIROTM,
+    [TASK_MANAGER_CLIENT_NAME_HEADER]: getRuntimeCliClientName(),
+    [TASK_MANAGER_CLIENT_INSTANCE_HEADER]: getRuntimeCliClientInstanceId(),
   };
 }
 
@@ -90,7 +102,7 @@ export async function fetchApi<T>(
 
 export async function fetchApiMutate<T>(
   endpoint: string,
-  init: { method: "POST" | "PATCH"; body?: unknown },
+  init: { method: "POST" | "PATCH" | "PUT" | "DELETE"; body?: unknown },
   overrides: ConfigOverrides = {},
 ): Promise<T> {
   const baseUrl = buildBaseUrl(overrides);
@@ -98,6 +110,7 @@ export async function fetchApiMutate<T>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    [TASK_MANAGER_MUTATION_RESPONSE_HEADER]: TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
     ...taskManagerClientHeaders(),
   };
   if (apiKey) {
@@ -125,6 +138,10 @@ export async function fetchApiMutate<T>(
       url: `${baseUrl}/api${endpoint}`,
       ...extra,
     });
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;

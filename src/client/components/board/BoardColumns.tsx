@@ -7,7 +7,7 @@ import {
   DragDropProvider,
   DragOverlay as ReactDragOverlay,
 } from "@dnd-kit/react";
-import { useCreateList, usePatchBoardViewPrefs, useReorderLists } from "@/api/mutations";
+import { useCreateList, useMoveList, usePatchBoardViewPrefs } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
 import {
@@ -42,7 +42,7 @@ export function AddListSlot({
 }) {
   const qc = useQueryClient();
   const createList = useCreateList();
-  const reorderLists = useReorderLists();
+  const moveList = useMoveList();
   const boardKeyboardNav = useBoardKeyboardNavOptional();
   const [name, setName] = useState("");
   const [listEmoji, setListEmoji] = useState<string | null>(null);
@@ -78,27 +78,27 @@ export function AddListSlot({
     const prevOrder = [...beforeBoard.lists]
       .sort((x, y) => x.order - y.order)
       .map((l) => l.id);
-    const prevSet = new Set(prevOrder);
     const anchor = insertAfterListId;
 
     createList.mutate(
       { boardId, name: trimmed, emoji: listEmoji ?? null },
       {
         onSuccess: (data) => {
-          const newList = data.lists.find((l) => !prevSet.has(l.id));
+          const newList = data.entity;
           cancel();
           // After creating a list, make it current so the board follows the
           // user's last action instead of leaving the old selection in place.
-          if (newList) boardKeyboardNav?.selectList(newList.id);
-          if (anchor == null || !newList) return;
+          boardKeyboardNav?.selectList(newList.id);
+          if (anchor == null) return;
           const anchorIdx = prevOrder.indexOf(anchor);
           if (anchorIdx < 0) return;
-          const nextOrder = [
-            ...prevOrder.slice(0, anchorIdx + 1),
-            newList.id,
-            ...prevOrder.slice(anchorIdx + 1),
-          ];
-          reorderLists.mutate({ boardId: data.id, orderedListIds: nextOrder });
+          const nextListId = prevOrder[anchorIdx + 1];
+          moveList.mutate({
+            boardId: data.boardId,
+            listId: newList.id,
+            beforeListId: nextListId == null ? undefined : nextListId,
+            position: nextListId == null ? "last" : undefined,
+          });
         },
       },
     );

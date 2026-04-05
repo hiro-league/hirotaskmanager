@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Board } from "../../../shared/models";
-import { useReorderLists } from "@/api/mutations";
+import { useMoveList } from "@/api/mutations";
 import { parseListSortableId } from "./dndIds";
 import {
   getOperationSourceData,
@@ -27,7 +27,7 @@ export function sortedListIds(board: Board): number[] {
  */
 export function useHorizontalListReorderReact(board: Board) {
   const boardNav = useBoardKeyboardNavOptional();
-  const reorder = useReorderLists();
+  const moveList = useMoveList();
 
   const serverListIds = useMemo(() => sortedListIds(board), [board]);
 
@@ -141,12 +141,34 @@ export function useHorizontalListReorderReact(board: Board) {
 
       if (finalOrder.join(",") === serverOrder.join(",")) return;
 
-      reorder.mutate({
+      const movedListId =
+        isBoardColumnDragData(sourceData) ? sourceData.listId : sourceId;
+      if (movedListId == null) return;
+      const movedIndex = finalOrder.indexOf(movedListId);
+      if (movedIndex < 0) return;
+      if (movedIndex === 0) {
+        moveList.mutate({
+          boardId: boardRef.current.id,
+          listId: movedListId,
+          position: "first",
+        });
+        return;
+      }
+      if (movedIndex === finalOrder.length - 1) {
+        moveList.mutate({
+          boardId: boardRef.current.id,
+          listId: movedListId,
+          position: "last",
+        });
+        return;
+      }
+      moveList.mutate({
         boardId: boardRef.current.id,
-        orderedListIds: finalOrder,
+        listId: movedListId,
+        beforeListId: finalOrder[movedIndex + 1],
       });
     },
-    [reorder],
+    [moveList],
   );
 
   return {
@@ -155,6 +177,6 @@ export function useHorizontalListReorderReact(board: Board) {
     onDragStart,
     onDragOver,
     onDragEnd,
-    reorderPending: reorder.isPending,
+    reorderPending: moveList.isPending,
   };
 }

@@ -15,7 +15,8 @@
     "build": "vite build",
     "start": "NODE_ENV=production npx --yes bun src/server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "seed:perf": "bun run scripts/seed-perf-board.ts"
   },
   "dependencies": {
     "@dnd-kit/abstract": "^0.3.2",

@@ -1,8 +1,15 @@
 #!/usr/bin/env bun
 
 import { Command } from "commander";
-import type { Board, BoardIndexEntry, SearchHit, Status } from "../shared/models";
+import type {
+  Board,
+  BoardIndexEntry,
+  SearchHit,
+  Status,
+  Task,
+} from "../shared/models";
 import { fetchApi } from "./lib/api-client";
+import { setRuntimeCliClientName } from "./lib/clientIdentity";
 import { resolveDataDir, resolvePort } from "./lib/config";
 import {
   CliError,
@@ -13,14 +20,27 @@ import {
 import { readServerStatus, startServer } from "./lib/process";
 import {
   runBoardsAdd,
+  runBoardsDelete,
+  runBoardsGroups,
+  runBoardsPriorities,
+  runBoardsUpdate,
   runListsAdd,
+  runListsDelete,
+  runListsMove,
+  runListsUpdate,
   runTasksAdd,
+  runTasksDelete,
   runTasksMove,
   runTasksUpdate,
 } from "./lib/writeCommands";
 
 function addPortOption(command: Command): Command {
-  return command.option("-p, --port <port>", "Port for the local TaskManager API");
+  return command
+    .option("-p, --port <port>", "Port for the local TaskManager API")
+    .option(
+      "--client-name <name>",
+      "Human-friendly client label sent with API requests (for notifications)",
+    );
 }
 
 function parsePortOption(port: string | undefined): number | undefined {
@@ -37,7 +57,27 @@ function parsePortOption(port: string | undefined): number | undefined {
 const program = new Command();
 program
   .name("hirotm")
-  .description("TaskManager CLI for local app control and JSON queries");
+  .description("TaskManager CLI for local app control and JSON queries")
+  .option(
+    "--client-name <name>",
+    "Human-friendly client label sent with API requests (for notifications)",
+  );
+
+function readClientNameArg(argv: string[]): string | undefined {
+  for (let index = 0; index < argv.length; index += 1) {
+    const current = argv[index];
+    if (current === "--client-name") {
+      const next = argv[index + 1];
+      return typeof next === "string" ? next : undefined;
+    }
+    if (current.startsWith("--client-name=")) {
+      return current.slice("--client-name=".length);
+    }
+  }
+  return undefined;
+}
+
+setRuntimeCliClientName(readClientNameArg(process.argv.slice(2)));
 
 program
   .command("start")
@@ -111,20 +151,240 @@ addPortOption(
   }
 });
 
+function collectMultiValue(value: string, previous: string[] = []): string[] {
+  return [
+    ...previous,
+    ...value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  ];
+}
+
+addPortOption(
+  boardsCommand
+    .command("tasks")
+    .description("List filtered tasks for one board")
+    .argument("<id-or-slug>", "Board id or slug")
+    .option("--list <id>", "List id")
+    .option("--group <id>", "Task group id")
+    .option(
+      "--priority <id>",
+      "Task priority id (repeat or use comma-separated values)",
+      collectMultiValue,
+      [] as string[],
+    )
+    .option(
+      "--status <id>",
+      "Workflow status id (repeat or use comma-separated values)",
+      collectMultiValue,
+      [] as string[],
+    )
+    .option("--date-mode <mode>", "Date filter mode: opened, closed, or any")
+    .option("--from <yyyy-mm-dd>", "Inclusive start date")
+    .option("--to <yyyy-mm-dd>", "Inclusive end date"),
+).action(
+  async (
+    idOrSlug: string,
+    options: {
+      port?: string;
+      list?: string;
+      group?: string;
+      priority?: string[];
+      status?: string[];
+      dateMode?: string;
+      from?: string;
+      to?: string;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      const params = new URLSearchParams();
+      if (options.list?.trim()) params.set("listId", options.list.trim());
+      if (options.group?.trim()) params.set("groupId", options.group.trim());
+      for (const priority of options.priority ?? []) {
+        params.append("priorityId", priority);
+      }
+      for (const status of options.status ?? []) {
+        params.append("status", status);
+      }
+      if (options.dateMode?.trim()) params.set("dateMode", options.dateMode.trim());
+      if (options.from?.trim()) params.set("from", options.from.trim());
+      if (options.to?.trim()) params.set("to", options.to.trim());
+      const query = params.toString();
+      const tasks = await fetchApi<Task[]>(
+        `/boards/${encodeURIComponent(idOrSlug)}/tasks${query ? `?${query}` : ""}`,
+        { port },
+      );
+      printJson(tasks);
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
 addPortOption(
   boardsCommand
     .command("add")
     .description("Create a board")
     .argument("[name]", "Board name (default from server)")
-    .option("--emoji <text>", "Optional emoji before the board name"),
-).action(async (name: string | undefined, options: { port?: string; emoji?: string }) => {
+    .option("--emoji <text>", "Optional emoji before the board name")
+    .option("--description <text>", "Board description")
+    .option("--description-file <path>", "Read description from a UTF-8 file")
+    .option("--description-stdin", "Read description from stdin until EOF"),
+).action(
+  async (
+    name: string | undefined,
+    options: {
+      port?: string;
+      emoji?: string;
+      description?: string;
+      descriptionFile?: string;
+      descriptionStdin?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runBoardsAdd({
+        port,
+        name,
+        emoji: options.emoji,
+        description: options.description,
+        descriptionFile: options.descriptionFile,
+        descriptionStdin: options.descriptionStdin,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  boardsCommand
+    .command("update")
+    .description("Patch board metadata")
+    .argument("<id-or-slug>", "Board id or slug")
+    .option("--name <text>", "Board name")
+    .option("--emoji <text>", "Optional emoji before the board name")
+    .option("--clear-emoji", "Clear board emoji")
+    .option("--description <text>", "Board description")
+    .option("--description-file <path>", "Read description from a UTF-8 file")
+    .option("--description-stdin", "Read description from stdin until EOF")
+    .option("--clear-description", "Clear board description")
+    .option("--cli-access <mode>", "CLI access: none, read, or read_write")
+    .option(
+      "--board-color <preset>",
+      "Board color preset: stone, cyan, azure, indigo, violet, rose, amber, emerald, coral, sage",
+    )
+    .option("--clear-board-color", "Clear board color preset"),
+).action(
+  async (
+    idOrSlug: string,
+    options: {
+      port?: string;
+      name?: string;
+      emoji?: string;
+      clearEmoji?: boolean;
+      description?: string;
+      descriptionFile?: string;
+      descriptionStdin?: boolean;
+      clearDescription?: boolean;
+      cliAccess?: string;
+      boardColor?: string;
+      clearBoardColor?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runBoardsUpdate({
+        port,
+        board: idOrSlug,
+        name: options.name,
+        emoji: options.emoji,
+        clearEmoji: options.clearEmoji,
+        description: options.description,
+        descriptionFile: options.descriptionFile,
+        descriptionStdin: options.descriptionStdin,
+        clearDescription: options.clearDescription,
+        cliAccess: options.cliAccess,
+        boardColor: options.boardColor,
+        clearBoardColor: options.clearBoardColor,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  boardsCommand
+    .command("delete")
+    .description("Delete a board")
+    .argument("<id-or-slug>", "Board id or slug"),
+).action(async (idOrSlug: string, options: { port?: string }) => {
   try {
     const port = resolvePort({ port: parsePortOption(options.port) });
-    await runBoardsAdd({ port, name, emoji: options.emoji });
+    await runBoardsDelete({ port, board: idOrSlug });
   } catch (error) {
     exitWithError(error);
   }
 });
+
+addPortOption(
+  boardsCommand
+    .command("groups")
+    .description("Replace board task groups from JSON")
+    .argument("<id-or-slug>", "Board id or slug")
+    .option("--json <text>", "JSON array or object with taskGroups")
+    .option("--file <path>", "Read JSON from a UTF-8 file")
+    .option("--stdin", "Read JSON from stdin until EOF"),
+).action(
+  async (
+    idOrSlug: string,
+    options: { port?: string; json?: string; file?: string; stdin?: boolean },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runBoardsGroups({
+        port,
+        board: idOrSlug,
+        json: options.json,
+        file: options.file,
+        stdin: options.stdin,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  boardsCommand
+    .command("priorities")
+    .description("Replace board task priorities from JSON")
+    .argument("<id-or-slug>", "Board id or slug")
+    .option("--json <text>", "JSON array or object with taskPriorities")
+    .option("--file <path>", "Read JSON from a UTF-8 file")
+    .option("--stdin", "Read JSON from stdin until EOF"),
+).action(
+  async (
+    idOrSlug: string,
+    options: { port?: string; json?: string; file?: string; stdin?: boolean },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runBoardsPriorities({
+        port,
+        board: idOrSlug,
+        json: options.json,
+        file: options.file,
+        stdin: options.stdin,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
 
 const listsCommand = program
   .command("lists")
@@ -149,6 +409,111 @@ addPortOption(
         board: options.board,
         name,
         emoji: options.emoji,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  listsCommand
+    .command("update")
+    .description("Patch fields on a list")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<list-id>", "Numeric list id")
+    .option("--name <text>", "List name")
+    .option("--color <css>", "List color (CSS)")
+    .option("--clear-color", "Clear list color")
+    .option("--emoji <text>", "Optional emoji before the list name")
+    .option("--clear-emoji", "Clear list emoji"),
+).action(
+  async (
+    listId: string,
+    options: {
+      port?: string;
+      board: string;
+      name?: string;
+      color?: string;
+      clearColor?: boolean;
+      emoji?: string;
+      clearEmoji?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runListsUpdate({
+        port,
+        board: options.board,
+        listId,
+        name: options.name,
+        color: options.color,
+        clearColor: options.clearColor,
+        emoji: options.emoji,
+        clearEmoji: options.clearEmoji,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  listsCommand
+    .command("delete")
+    .description("Delete a list")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<list-id>", "Numeric list id"),
+).action(
+  async (
+    listId: string,
+    options: { port?: string; board: string },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runListsDelete({
+        port,
+        board: options.board,
+        listId,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  listsCommand
+    .command("move")
+    .description("Move a list with server-owned relative placement")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<list-id>", "Numeric list id")
+    .option("--before <list-id>", "Place before another list")
+    .option("--after <list-id>", "Place after another list")
+    .option("--first", "Move to the first position")
+    .option("--last", "Move to the last position"),
+).action(
+  async (
+    listId: string,
+    options: {
+      port?: string;
+      board: string;
+      before?: string;
+      after?: string;
+      first?: boolean;
+      last?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runListsMove({
+        port,
+        board: options.board,
+        listId,
+        before: options.before,
+        after: options.after,
+        first: options.first,
+        last: options.last,
       });
     } catch (error) {
       exitWithError(error);
@@ -283,19 +648,56 @@ addPortOption(
 
 addPortOption(
   tasksCommand
+    .command("delete")
+    .description("Delete a task")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<task-id>", "Numeric task id"),
+).action(
+  async (
+    taskId: string,
+    options: { port?: string; board: string },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runTasksDelete({
+        port,
+        board: options.board,
+        taskId,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  tasksCommand
     .command("move")
-    .description("Move a task to another list (append to end of band)")
+    .description("Move a task with server-owned relative placement")
     .requiredOption("--board <id-or-slug>", "Board id or slug")
     .requiredOption("--to-list <id>", "Destination list id")
     .argument("<task-id>", "Numeric task id")
     .option(
       "--to-status <id>",
       "Workflow status in the destination (default: keep current)",
-    ),
+    )
+    .option("--before-task <id>", "Place before another task in the destination band")
+    .option("--after-task <id>", "Place after another task in the destination band")
+    .option("--first", "Move to the first position in the destination band")
+    .option("--last", "Move to the last position in the destination band"),
 ).action(
   async (
     taskId: string,
-    options: { port?: string; board: string; toList: string; toStatus?: string },
+    options: {
+      port?: string;
+      board: string;
+      toList: string;
+      toStatus?: string;
+      beforeTask?: string;
+      afterTask?: string;
+      first?: boolean;
+      last?: boolean;
+    },
   ) => {
     try {
       const port = resolvePort({ port: parsePortOption(options.port) });
@@ -305,6 +707,10 @@ addPortOption(
         taskId,
         toList: options.toList,
         toStatus: options.toStatus,
+        beforeTask: options.beforeTask,
+        afterTask: options.afterTask,
+        first: options.first,
+        last: options.last,
       });
     } catch (error) {
       exitWithError(error);

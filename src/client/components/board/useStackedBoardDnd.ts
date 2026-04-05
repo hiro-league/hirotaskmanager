@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Board } from "../../../shared/models";
-import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
+import { useMoveTask } from "@/api/mutations";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import {
   useResolvedActiveTaskGroup,
@@ -18,10 +18,7 @@ import {
   listTasksMergedSorted,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
-import {
-  mergeFilteredOrderIntoFullBand,
-  useBoardTaskDndReact,
-} from "./useBoardTaskDndReact";
+import { useBoardTaskDndReact } from "./useBoardTaskDndReact";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 function buildStackedTaskContainerMap(
@@ -40,93 +37,37 @@ function buildStackedTaskContainerMap(
 
 async function persistStackedChanges(
   board: Board,
-  prev: Record<string, string[]>,
+  taskId: number,
+  _prev: Record<string, string[]>,
   next: Record<string, string[]>,
-  updateTask: ReturnType<typeof useUpdateTask>,
-  reorderBand: ReturnType<typeof useReorderTasksInBand>,
+  moveTask: ReturnType<typeof useMoveTask>,
 ): Promise<void> {
-  let b = board;
+  const movedTask = board.tasks.find((task) => task.id === taskId);
+  if (!movedTask) return;
 
-  const movedTasks: { taskId: number; newListId: number }[] = [];
-  for (const key of Object.keys(next)) {
-    const listId = parseStackedListContainerId(key);
-    if (listId == null) continue;
-    for (const sid of next[key]) {
-      const tid = parseTaskSortableId(sid);
-      if (tid == null) continue;
-      const t = b.tasks.find((x) => x.id === tid);
-      if (!t) continue;
-      if (t.listId !== listId) {
-        movedTasks.push({ taskId: tid, newListId: listId });
-      }
-    }
-  }
+  const activeSortableId = sortableTaskId(taskId);
+  const destinationKey = Object.keys(next).find((key) =>
+    (next[key] ?? []).includes(activeSortableId),
+  );
+  if (!destinationKey) return;
+  const toListId = parseStackedListContainerId(destinationKey);
+  if (toListId == null) return;
 
-  for (const { taskId, newListId } of movedTasks) {
-    const t = b.tasks.find((x) => x.id === taskId);
-    if (!t) continue;
-    b = await updateTask.mutateAsync({
-      boardId: b.id,
-      task: { ...t, listId: newListId },
+  const visibleOrderedTaskIds = (next[destinationKey] ?? [])
+    .map((sid) => parseTaskSortableId(sid))
+    .filter((tid): tid is number => tid != null)
+    .filter((tid) => {
+      if (tid === taskId) return true;
+      const task = board.tasks.find((entry) => entry.id === tid);
+      return task?.status === movedTask.status;
     });
-  }
 
-  const affectedBands = new Set<string>();
-  for (const key of Object.keys(next)) {
-    const listId = parseStackedListContainerId(key);
-    if (listId == null) continue;
-    const prevIds = prev[key] ?? [];
-    const nextIds = next[key];
-    if (prevIds.join(",") !== nextIds.join(",")) {
-      for (const sid of nextIds) {
-        const tid = parseTaskSortableId(sid);
-        if (tid == null) continue;
-        const t = b.tasks.find((x) => x.id === tid);
-        if (t) affectedBands.add(`${listId}:${t.status}`);
-      }
-      for (const sid of prevIds) {
-        const tid = parseTaskSortableId(sid);
-        if (tid == null) continue;
-        const t = b.tasks.find((x) => x.id === tid);
-        if (t) affectedBands.add(`${t.listId}:${t.status}`);
-      }
-    }
-  }
-
-  for (const bandKey of affectedBands) {
-    const sep = bandKey.indexOf(":");
-    const listId = Number(bandKey.slice(0, sep));
-    const status = bandKey.slice(sep + 1);
-
-    const containerKey = stackedListContainerId(listId);
-    const containerIds = next[containerKey] ?? [];
-
-    const filteredBandIds: number[] = [];
-    for (const sid of containerIds) {
-      const tid = parseTaskSortableId(sid);
-      if (tid == null) continue;
-      const t = b.tasks.find((x) => x.id === tid);
-      if (t && t.status === status) {
-        filteredBandIds.push(tid);
-      }
-    }
-
-    const serverBand = b.tasks
-      .filter((t) => t.listId === listId && t.status === status)
-      .sort((a, c) => a.order - c.order)
-      .map((t) => t.id);
-
-    const fullOrder = mergeFilteredOrderIntoFullBand(serverBand, filteredBandIds);
-
-    if (fullOrder.join(",") === serverBand.join(",")) continue;
-
-    b = await reorderBand.mutateAsync({
-      boardId: b.id,
-      listId,
-      status,
-      orderedTaskIds: fullOrder,
-    });
-  }
+  await moveTask.mutateAsync({
+    boardId: board.id,
+    taskId,
+    toListId,
+    visibleOrderedTaskIds,
+  });
 }
 
 export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {

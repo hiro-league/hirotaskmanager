@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import type { Board } from "../../../shared/models";
-import { useReorderTasksInBand, useUpdateTask } from "@/api/mutations";
+import { useMoveTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
@@ -20,7 +20,6 @@ import {
   type BoardTaskFilterState,
 } from "./boardStatusUtils";
 import {
-  mergeFilteredOrderIntoFullBand,
   useBoardTaskDndReact,
 } from "./useBoardTaskDndReact";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
@@ -60,81 +59,39 @@ export interface PersistLanesChangesOpts {
 
 async function persistLanesChanges(
   board: Board,
-  prev: Record<string, string[]>,
+  taskId: number,
+  _prev: Record<string, string[]>,
   next: Record<string, string[]>,
-  updateTask: ReturnType<typeof useUpdateTask>,
-  reorderBand: ReturnType<typeof useReorderTasksInBand>,
+  moveTask: ReturnType<typeof useMoveTask>,
   opts?: PersistLanesChangesOpts,
 ): Promise<void> {
-  let b = board;
+  const activeSortableId = sortableTaskId(taskId);
+  const destinationKey = Object.keys(next).find((key) =>
+    (next[key] ?? []).includes(activeSortableId),
+  );
+  if (!destinationKey) return;
+  const meta = parseLaneBandContainerId(destinationKey);
+  if (!meta) return;
 
-  const patchNeeded: { taskId: number; listId: number; status: string }[] = [];
-  for (const key of Object.keys(next)) {
-    const meta = parseLaneBandContainerId(key);
-    if (!meta) continue;
-    for (const sid of next[key]) {
-      const tid = parseTaskSortableId(sid);
-      if (tid == null) continue;
-      const t = b.tasks.find((x) => x.id === tid);
-      if (!t) continue;
-      if (t.listId !== meta.listId || t.status !== meta.status) {
-        patchNeeded.push({ taskId: tid, listId: meta.listId, status: meta.status });
-      }
-    }
+  const movedTask = board.tasks.find((task) => task.id === taskId);
+  if (!movedTask) return;
+  if (opts?.closedStatusIds.size && opts.onTaskClosed) {
+    const wasClosed = opts.closedStatusIds.has(movedTask.status);
+    const willClose = opts.closedStatusIds.has(meta.status);
+    if (!wasClosed && willClose) opts.onTaskClosed(taskId);
   }
 
-  for (const { taskId, listId, status } of patchNeeded) {
-    const t = b.tasks.find((x) => x.id === taskId);
-    if (!t) continue;
-    if (opts?.closedStatusIds.size && opts.onTaskClosed) {
-      const wasClosed = opts.closedStatusIds.has(t.status);
-      const willClose = opts.closedStatusIds.has(status);
-      if (!wasClosed && willClose) opts.onTaskClosed(taskId);
-    }
-    b = await updateTask.mutateAsync({
-      boardId: b.id,
-      task: { ...t, listId, status },
-    });
-  }
+  const visibleOrderedTaskIds = (next[destinationKey] ?? [])
+    .map((sid) => parseTaskSortableId(sid))
+    .filter((tid): tid is number => tid != null);
 
-  const changedKeys = new Set<string>();
-  for (const key of Object.keys(next)) {
-    const prevIds = prev[key] ?? [];
-    const nextIds = next[key];
-    if (prevIds.join(",") !== nextIds.join(",")) {
-      changedKeys.add(key);
-    }
-  }
-  for (const key of Object.keys(prev)) {
-    if (!next[key] && prev[key].length > 0) changedKeys.add(key);
-  }
-
-  for (const key of changedKeys) {
-    const meta = parseLaneBandContainerId(key);
-    if (!meta) continue;
-
-    const filteredIds: number[] = [];
-    for (const sid of next[key] ?? []) {
-      const tid = parseTaskSortableId(sid);
-      if (tid != null) filteredIds.push(tid);
-    }
-
-    const serverBand = b.tasks
-      .filter((t) => t.listId === meta.listId && t.status === meta.status)
-      .sort((a, c) => a.order - c.order)
-      .map((t) => t.id);
-
-    const fullOrder = mergeFilteredOrderIntoFullBand(serverBand, filteredIds);
-
-    if (fullOrder.join(",") === serverBand.join(",")) continue;
-
-    b = await reorderBand.mutateAsync({
-      boardId: b.id,
-      listId: meta.listId,
-      status: meta.status,
-      orderedTaskIds: fullOrder,
-    });
-  }
+  await moveTask.mutateAsync({
+    boardId: board.id,
+    taskId,
+    toListId: meta.listId,
+    toStatus: meta.status,
+    visibleOrderedTaskIds,
+  });
 }
 
 export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
@@ -208,12 +165,12 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
   const persistChanges = useCallback(
     async (
       b: Board,
+      taskId: number,
       prev: Record<string, string[]>,
       next: Record<string, string[]>,
-      updateTask: ReturnType<typeof useUpdateTask>,
-      reorderBand: ReturnType<typeof useReorderTasksInBand>,
+      moveTask: ReturnType<typeof useMoveTask>,
     ) => {
-      await persistLanesChanges(b, prev, next, updateTask, reorderBand, {
+      await persistLanesChanges(b, taskId, prev, next, moveTask, {
         closedStatusIds,
         onTaskClosed: celebration
           ? (taskId) => celebration.celebrateTaskCompletion({ taskId })

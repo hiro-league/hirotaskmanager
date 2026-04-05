@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
 import { usePreferencesStore } from "@/store/preferences";
+import { NotificationBell } from "./NotificationBell";
 import { resolveDark, useSystemDark } from "./ThemeRoot";
 
 export function AppHeader() {
@@ -54,6 +55,7 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <button
           type="button"
           disabled={!shortcutHelpAvailable}

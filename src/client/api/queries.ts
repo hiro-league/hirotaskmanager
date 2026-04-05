@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { withBrowserClientHeaders } from "./clientHeaders";
 import {
   boardStatsFilterSignature,
   buildBoardStatsSearchParams,
@@ -11,11 +12,18 @@ import {
   statusIdsInWorkflowOrder,
   type Board,
   type BoardIndexEntry,
+  type List,
   type Status,
+  type Task,
 } from "../../shared/models";
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(url, {
+    ...init,
+    // Send stable browser client metadata on every request so notifications can
+    // identify this session without special-casing each call site.
+    headers: withBrowserClientHeaders(init?.headers),
+  });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || res.statusText);
@@ -25,6 +33,20 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 
 export async function fetchBoard(id: string | number): Promise<Board> {
   return fetchJson<Board>(`/api/boards/${id}`);
+}
+
+export async function fetchBoardTask(
+  boardId: number,
+  taskId: number,
+): Promise<Task> {
+  return fetchJson<Task>(`/api/boards/${boardId}/tasks/${taskId}`);
+}
+
+export async function fetchBoardList(
+  boardId: number,
+  listId: number,
+): Promise<List> {
+  return fetchJson<List>(`/api/boards/${boardId}/lists/${listId}`);
 }
 
 /**

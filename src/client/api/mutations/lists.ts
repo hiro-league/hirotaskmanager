@@ -1,9 +1,22 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+  TASK_MANAGER_MUTATION_RESPONSE_HEADER,
+  type ListDeleteMutationResult,
+  type ListMutationResult,
+} from "../../../shared/mutationResults";
 import type { Board, List } from "../../../shared/models";
+import { invalidateNotificationQueries } from "../notifications";
 import { boardKeys, fetchJson, invalidateBoardStatsQueries } from "../queries";
 import { tempNumericId } from "./shared";
 
-const jsonHeaders = { "Content-Type": "application/json" } as const;
+const jsonHeaders = {
+  "Content-Type": "application/json",
+  [TASK_MANAGER_MUTATION_RESPONSE_HEADER]: TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
+} as const;
+
+/** Reorder returns a full `Board`; server ignores the granular mutation header on that route. */
+const jsonHeadersFullBoardOnly = { "Content-Type": "application/json" } as const;
 
 export function useCreateList() {
   const qc = useQueryClient();
@@ -13,7 +26,7 @@ export function useCreateList() {
       name: string;
       emoji?: string | null;
     }) => {
-      return fetchJson<Board>(`/api/boards/${input.boardId}/lists`, {
+      return fetchJson<ListMutationResult>(`/api/boards/${input.boardId}/lists`, {
         method: "POST",
         headers: jsonHeaders,
         body: JSON.stringify({
@@ -40,16 +53,31 @@ export function useCreateList() {
         updatedAt: new Date().toISOString(),
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
-      return { prev };
+      return { prev, optimisticListId: optimisticList.id };
     },
     onError: (_err, input, ctx) => {
       if (ctx?.prev) {
         qc.setQueryData<Board>(boardKeys.detail(input.boardId), ctx.prev);
       }
     },
-    onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+    onSuccess: (data, _input, ctx) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        const optimisticId = ctx?.optimisticListId;
+        const hasOptimistic =
+          optimisticId != null && current.lists.some((list) => list.id === optimisticId);
+        return {
+          ...current,
+          lists: hasOptimistic
+            ? current.lists.map((list) =>
+                list.id === optimisticId ? data.entity : list,
+              )
+            : [...current.lists, data.entity],
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -63,7 +91,7 @@ export function usePatchList() {
       listId: number;
       patch: { name?: string; emoji?: string | null };
     }) => {
-      return fetchJson<Board>(
+      return fetchJson<ListMutationResult>(
         `/api/boards/${input.boardId}/lists/${input.listId}`,
         {
           method: "PATCH",
@@ -97,8 +125,18 @@ export function usePatchList() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          lists: current.lists.map((list) =>
+            list.id === data.entity.id ? data.entity : list,
+          ),
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -107,9 +145,9 @@ export function useDeleteList() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { boardId: number; listId: number }) => {
-      return fetchJson<Board>(
+      return fetchJson<ListDeleteMutationResult>(
         `/api/boards/${input.boardId}/lists/${input.listId}`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: jsonHeaders },
       );
     },
     onMutate: async (input) => {
@@ -130,8 +168,46 @@ export function useDeleteList() {
       }
     },
     onSuccess: (data) => {
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          lists: current.lists.filter((list) => list.id !== data.deletedListId),
+          tasks: current.tasks.filter((task) => task.listId !== data.deletedListId),
+          updatedAt: data.boardUpdatedAt,
+        };
+      });
+      invalidateBoardStatsQueries(qc, data.boardId);
+      invalidateNotificationQueries(qc);
+    },
+  });
+}
+
+export function useMoveList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      boardId: number;
+      listId: number;
+      beforeListId?: number;
+      afterListId?: number;
+      position?: "first" | "last";
+    }) => {
+      return fetchJson<Board>(`/api/boards/${input.boardId}/lists/move`, {
+        method: "PUT",
+        headers: jsonHeadersFullBoardOnly,
+        body: JSON.stringify({
+          listId: input.listId,
+          beforeListId: input.beforeListId,
+          afterListId: input.afterListId,
+          position: input.position,
+        }),
+      });
+    },
+    onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
       invalidateBoardStatsQueries(qc, data.id);
+      invalidateNotificationQueries(qc);
     },
   });
 }
@@ -146,7 +222,7 @@ export function useReorderLists() {
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/lists/order`, {
         method: "PUT",
-        headers: jsonHeaders,
+        headers: jsonHeadersFullBoardOnly,
         body: JSON.stringify({ orderedListIds: input.orderedListIds }),
       });
     },
@@ -180,6 +256,7 @@ export function useReorderLists() {
     onSuccess: (data) => {
       qc.setQueryData<Board>(boardKeys.detail(data.id), data);
       invalidateBoardStatsQueries(qc, data.id);
+      invalidateNotificationQueries(qc);
     },
   });
 }

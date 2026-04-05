@@ -39,6 +39,8 @@ The `hirotm start` command launches the same API + web server that `npm run dev`
 | F8 | All commands output JSON by default (AI-first) |
 | F9 | All commands fail with a clear error and non-zero exit code if the server is unreachable |
 | F10 | `hirotm help` and `--help` on every command |
+| F11 | **Extended mutations** — CLI coverage for board/list/task lifecycle and structure beyond Phase 3: board update/delete; list update/delete/reorder; task delete/reorder-in-band; replace task **groups** and **priorities** definitions (same HTTP semantics as the web app). Detailed command shapes live in [ai-cli.md](./ai-cli.md) as they ship. |
+| F12 | **Board-scoped task filters** — agents can narrow tasks to match the web board header (active group, priority subset, workflow status, date range + opened/closed/any mode) without relying on the browser. See [§3.11](#311-board-scoped-task-filters). |
 
 ### Non-Functional
 
@@ -170,9 +172,160 @@ The CLI entry file uses:
 
 This tells the OS to run the script with Bun. It works on macOS/Linux. On Windows, Bun's global install handles `.ts` association, and the `bin` field in `package.json` does the wiring. No `.cmd` wrapper needed when installed via `bun install -g`.
 
+### 3.11 Board-scoped task filters
+
+The web board header applies up to four dimensions when deciding which tasks matter: **task group**, **priority** (subset of board priorities), **workflow status** (intersected with visible statuses), and **date** (inclusive range + mode: opened / closed / any).
+
+**Design choice:** filtering belongs to the **HTTP API**, not the CLI. The CLI should call a dedicated filtered-task endpoint rather than loading a full board and post-filtering it locally.
+
+Recommended API:
+
+- `GET /api/boards/:id/tasks`
+
+Recommended query parameters:
+
+- `listId`
+- `groupId`
+- `priorityId` (repeatable)
+- `status` (repeatable)
+- `dateMode=open|closed|any`
+- `from=<yyyy-mm-dd>`
+- `to=<yyyy-mm-dd>`
+
+Recommended CLI surface:
+
+- `hirotm boards tasks <id-or-slug> [filters...]`
+
+Required filter flags in the CLI surface:
+
+- `--list <list-id>`
+- `--group <group-id>`
+- `--priority <priority-id>` (repeatable or comma-separated subset)
+- `--status <status-id>` (repeatable or comma-separated subset)
+- `--date-mode opened|closed|any`
+- `--from <yyyy-mm-dd>`
+- `--to <yyyy-mm-dd>`
+
+`hirotm boards show <id-or-slug>` should remain the **unfiltered full board** command. Filtered task queries should use `hirotm boards tasks ...`.
+
+Implementation requirements:
+
+1. The server owns filter semantics so CLI and UI do not reimplement them independently.
+2. `--list <list-id>` is part of the same board-task query, not a separate list command.
+3. The endpoint should return task-focused JSON suitable for AI/CLI use without requiring the full board payload.
+4. The server-side filter logic should stay behaviorally aligned with the board UI’s header filters.
+
+### 3.12 Replace-style board structure commands
+
+The board-level **task groups** and **task priorities** commands are not row-at-a-time patch operations. They are **set-sync** commands: the CLI sends the desired array, and the server reconciles inserts, updates, and removals against the board’s current rows.
+
+This behavior must be documented in command help and examples because AI callers need to know whether they are editing one row or replacing the current set.
+
+#### Task groups
+
+- Existing rows are matched by `id`.
+- If an incoming `id` belongs to a group on the board, that row is **updated**.
+- If an incoming row has no matching stored id, it is **inserted**.
+- Stored groups omitted from the incoming set are **removed**.
+- Tasks assigned to removed groups are remapped to the **first kept group** in the submitted set.
+- The CLI help should explicitly say how to **extend** the current set safely: fetch existing groups first, keep the groups to preserve, then append new group rows before submitting.
+
+#### Task priorities
+
+- Existing rows are matched by `id`.
+- Built-in priorities are **required** to remain present in the submitted set.
+- Built-in priorities may change **label** and **color**.
+- Built-in priorities may **not** be deleted.
+- Built-in priorities may **not** change numeric `value`, so their relative order slots stay fixed.
+- Custom priorities may be inserted, updated, reordered by `value`, or removed.
+- When a custom priority is removed, tasks using it become **unassigned** (`null` priority).
+
+#### Help requirements
+
+The eventual CLI help / examples for these commands must expose:
+
+- which fields are mutable
+- which fields are immutable
+- what omission means
+- what happens to tasks when a referenced group/priority disappears
+- that server-returned ids are the source of truth after a write
+
+### 3.13 Relative move APIs for lists and tasks
+
+The current HTTP reorder routes are **full-order transport APIs**:
+
+- `PUT /api/boards/:id/lists/order` accepts the full `orderedListIds` array for the board
+- `PUT /api/boards/:id/tasks/reorder` accepts the full `orderedTaskIds` array for one `(list, status)` band
+
+That shape is acceptable for internal transport, but it is not the desired long-term product surface for CLI or UI-driven move operations.
+
+**Design decision:** do **not** make the CLI compute full ordered id arrays just to present a cleaner command. Instead, add server-side **relative move** APIs and migrate the UI to use them for normal list/task moves.
+
+Recommended CLI shapes:
+
+- `hirotm lists move --board <id-or-slug> --list <list-id> --before <other-list-id>`
+- `hirotm lists move --board <id-or-slug> --list <list-id> --after <other-list-id>`
+- `hirotm lists move --board <id-or-slug> --list <list-id> --first`
+- `hirotm lists move --board <id-or-slug> --list <list-id> --last`
+- `hirotm tasks move --board <id-or-slug> <task-id> --to-list <list-id> [--to-status <status-id>] --before-task <other-task-id>`
+- `hirotm tasks move --board <id-or-slug> <task-id> --to-list <list-id> [--to-status <status-id>] --after-task <other-task-id>`
+- `hirotm tasks move --board <id-or-slug> <task-id> --to-list <list-id> [--to-status <status-id>] --first`
+- `hirotm tasks move --board <id-or-slug> <task-id> --to-list <list-id> [--to-status <status-id>] --last`
+
+Recommended HTTP additions:
+
+- `PUT /api/boards/:id/lists/move`
+- `PUT /api/boards/:id/tasks/move`
+
+Illustrative request shapes:
+
+- list move: `{ "listId": 12, "beforeListId": 99 }`, `{ "listId": 12, "afterListId": 99 }`, `{ "listId": 12, "position": "first" }`, `{ "listId": 12, "position": "last" }`
+- task move: `{ "taskId": 55, "toListId": 12, "toStatus": "open", "beforeTaskId": 90 }`, `{ "taskId": 55, "toListId": 12, "toStatus": "open", "position": "last" }`
+
+API requirements:
+
+- The server owns all ordering calculations.
+- Validation errors must reject conflicting position inputs (`before*` + `after*`, etc.).
+- Task moves may change list and/or status in the same call.
+- The server returns compact write results for CLI use and enough information for the UI to refresh efficiently.
+
+UI requirements:
+
+- Board drag/drop flows should migrate from full-order reorder payloads to the new relative move endpoints.
+- Keyboard or shortcut-driven reordering should use the same move semantics.
+- Existing bulk reorder endpoints may remain temporarily for compatibility, but they become secondary once the move endpoints ship.
+
 ---
 
-## 4. Command Reference (Current + Proposed)
+## 4. Command Reference
+
+### Implemented / Shipped (F11–F12)
+
+The extensions below are now part of the implemented product surface; per-command flags and JSON shapes are specified in [ai-cli.md](./ai-cli.md).
+
+#### Can ship with the current server API
+
+| Intent | Existing HTTP transport | Planned CLI shape (illustrative) |
+|--------|--------------------------|-----------------------------------|
+| Update board metadata | `PATCH /api/boards/:id` | `hirotm boards update <id-or-slug>` with flags for name, emoji, description, `cliAccess`, `boardColor`, … |
+| Delete board | `DELETE /api/boards/:id` | `hirotm boards delete <id-or-slug>` |
+| Replace task groups | `PATCH /api/boards/:id/groups` | `hirotm boards groups <id-or-slug>`; semantics in [§3.12](#312-replace-style-board-structure-commands) |
+| Replace task priorities | `PATCH /api/boards/:id/priorities` | `hirotm boards priorities <id-or-slug>`; semantics in [§3.12](#312-replace-style-board-structure-commands) |
+| Update list | `PATCH /api/boards/:id/lists/:listId` | `hirotm lists update --board … <listId> …` |
+| Delete list | `DELETE …/lists/:listId` | `hirotm lists delete --board … <listId>` |
+| Delete task | `DELETE …/tasks/:taskId` | `hirotm tasks delete --board … <taskId>` |
+
+Destructive commands remain explicit; no interactive confirmation for non-interactive agent use.
+
+#### Shipped with the new server API
+
+| Intent | Implemented result |
+|--------|--------------------|
+| Board-scoped task filtering endpoint | Dedicated `GET /api/boards/:id/tasks` powers `hirotm boards tasks …`; `boards show` remains the full board read |
+| Relative move endpoints for lists/tasks | `PUT /api/boards/:id/lists/move` and `PUT /api/boards/:id/tasks/move` now own ordinary ordering semantics for CLI and UI flows |
+| Advanced search with server-side filters | Requires new search API semantics beyond current board fetch + local filter; tracked separately in `ai-cli-plan.md` |
+
+### Implemented
 
 ### `hirotm start`
 
@@ -315,17 +468,17 @@ Notes:
 
 ### `hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]`
 
-Moves a task using simple append semantics.
+Moves a task using the dedicated server-owned move endpoint.
 
 ```
-hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>] [--before-task <id> | --after-task <id> | --first | --last]
 ```
 
 Notes:
 
-- destination order is always append-to-end
 - omitted `--to-status` keeps the current status
-- implemented as a convenience wrapper over task patching
+- relative placement flags are mutually exclusive
+- the server owns final ordering semantics instead of the CLI patching + reordering locally
 
 ---
 

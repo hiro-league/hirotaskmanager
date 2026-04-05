@@ -5,6 +5,7 @@ Use the `hirotm` CLI for TaskManager board, list, task, status, and **search** o
 ## Rules
 
 - You must use `hirotm` as your only channel to access TaskManager data.
+- When using `hirotm` for agent-driven writes, include `--client-name "Cursor Agent"` so notifications show the writer clearly.
 - Never attempt accessing HTTP API, sqlite db or running taskmanager repo code directly to access or mutate TaskManager data.
 - Do not modify `data/taskmanager.db` directly.
 - Do not attempt to set CLI Access using the web app.
@@ -22,11 +23,11 @@ hirotm statuses list
 hirotm search "<query>"                    # all boards; JSON hits
 hirotm search "bug" --board <id-or-slug>   # one board
 hirotm search "drag" --format table        # fixed-width table
-hirotm boards add "Sprint" [--emoji <text>]
-hirotm lists add --board <id-or-slug> "Ready" [--emoji <text>]
-hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks update --board <id-or-slug> <task-id> [field flags...]
-hirotm tasks move --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm boards add --client-name "Cursor Agent" "Sprint" [--emoji <text>]
+hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> "Ready" [--emoji <text>]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [field flags...]
+hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm start --background
 ```
 

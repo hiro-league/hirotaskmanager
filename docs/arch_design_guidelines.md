@@ -4,9 +4,9 @@ Reference for future development. Update this file when architecture or scope ch
 
 ## Resolved decisions
 
-1. **Development runtime** — ~~CLOSED.~~ `npm run dev` runs two processes via `concurrently` (Bun API on fixed port **3001** + Vite dev server). Vite's built-in `server.proxy` forwards `/api` requests to `http://localhost:3001`. No port scanning, no `.dev/api-port` file, no custom proxy plugin.
+1. **Development runtime** — ~~CLOSED.~~ `npm run dev` runs two processes via `concurrently` (Bun API on fixed port **3002** + Vite dev server). Vite's built-in `server.proxy` forwards `/api` requests to `http://localhost:3002`. No port scanning, no `.dev/api-port` file, no custom proxy plugin.
 
-2. **Production serving** — ~~CLOSED.~~ `npm run build && npm start` runs a single Bun process. Hono serves API routes **and** the Vite-built SPA from `dist/` via `serveStatic` + an `index.html` fallback for client-side routing. Default port is **3001** (override with `PORT` env var). Persistent state lives in **`taskmanager.db`** (SQLite via `bun:sqlite`) under `~/.taskmanager/data` in production (override with `DATA_DIR`); in development it defaults to **`./data`** in the repo root.
+2. **Production serving** — ~~CLOSED.~~ `npm run build && npm start` runs a single Bun process through the installed bootstrap. Hono serves API routes **and** the Vite-built SPA from `dist/` via `serveStatic` + an `index.html` fallback for client-side routing. The installed app defaults to port **3001** under the `default` profile. Development uses the `dev` profile, port **3002**, repo-local SQLite (`./data/taskmanager.db`), and a separate auth path under `~/.taskmanager/profiles/dev/auth/`.
 
 ## Early development (data & migrations)
 
@@ -81,11 +81,11 @@ graph LR
   DBLayer --> DB
 ```
 
-**Process model (dev):** `npm run dev` runs two processes via `concurrently` — Bun API on port 3001 and Vite dev server. Vite's built-in `server.proxy` forwards `/api` to the API.
+**Process model (dev):** `npm run dev` runs two processes via `concurrently` — Bun API on port 3002 and Vite dev server. Vite's built-in `server.proxy` forwards `/api` to the API.
 
 **Process model (production):** `npm run build && npm start` runs a single Bun process serving both API routes and the built SPA from `dist/`.
 
-**Data directory:** Configurable via `DATA_DIR` env var. Defaults to `./data` in development, `~/.taskmanager/data` in production.
+**Data and auth paths:** Installed runtime uses the `default` profile under `~/.taskmanager/profiles/default/`. Development uses the `dev` profile for auth/config and repo-local SQLite at `./data/taskmanager.db`.
 
 **Server role:** Thin API layer — routes delegate to **`src/server/storage/`** (SQLite queries + transactions). No heavy domain logic in route handlers.
 
@@ -171,7 +171,7 @@ data/
 ```
 
 - **`src/server/db.ts`** opens the DB file and enables foreign keys; **`src/server/migrations/`** applies schema versions.
-- Data directory: `DATA_DIR` env var, else `./data` (dev) or `~/.taskmanager/data` (production).
+- Data and auth defaults: dev uses `./data/taskmanager.db` plus `~/.taskmanager/profiles/dev/auth/`; installed runtime uses `~/.taskmanager/profiles/default/`.
 
 ## API Routes
 

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "taskmanager",
+      "name": "@hiroleague/taskmanager",
       "dependencies": {
         "@dnd-kit/abstract": "^0.3.2",
         "@dnd-kit/helpers": "^0.3.2",

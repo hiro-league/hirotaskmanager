@@ -1,19 +1,41 @@
 {
-  "name": "taskmanager",
-  "version": "1.0.0",
-  "private": true,
+  "name": "@hiroleague/taskmanager",
+  "version": "0.0.1",
   "type": "module",
   "description": "Local-only task board app (Bun + Hono + React)",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiro-league/hirotaskmanager.git"
+  },
+  "homepage": "https://github.com/hiro-league/hirotaskmanager#readme",
+  "bugs": {
+    "url": "https://github.com/hiro-league/hirotaskmanager/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "bin": {
+    "hirotaskmanager": "./src/cli/app.ts",
     "hirotm": "./src/cli/index.ts"
   },
   "scripts": {
+    "app": "bun run src/cli/app.ts",
     "cli": "bun run src/cli/index.ts",
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "npx --yes bun --watch src/server/index.ts",
-    "dev:client": "npx --yes wait-on tcp:127.0.0.1:3001 && vite",
+    "dev:server": "npx --yes bun --watch src/server/bootstrapDev.ts",
+    "dev:client": "npx --yes wait-on tcp:127.0.0.1:3002 && vite",
     "build": "vite build",
-    "start": "NODE_ENV=production npx --yes bun src/server/index.ts",
+    "prepack": "npm run build",
+    "release:check": "npm run typecheck && bun test && npm run build && npm pack --dry-run",
+    "release:publish": "npm publish --access public",
+    "start": "npx --yes bun src/server/bootstrapInstalled.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "seed:perf": "bun run scripts/seed-perf-board.ts"

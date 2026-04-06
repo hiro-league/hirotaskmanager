@@ -1,12 +1,20 @@
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureCliHomeDir, resolveDataDir, type ConfigOverrides } from "./config";
+import {
+  getServerPidFilePath,
+  resolveDataDir,
+  resolvePort,
+  resolveProfileName,
+  resolveRuntimeKind,
+  type ConfigOverrides,
+} from "./config";
 import { fetchHealth } from "./api-client";
 import { CliError } from "./output";
 
@@ -23,12 +31,14 @@ export interface ServerStatus {
   url?: string;
 }
 
-function getPidFilePath(): string {
-  return path.join(ensureCliHomeDir(), "server.pid.json");
+type ServerReadyCallback = (status: ServerStatus) => void | Promise<void>;
+
+function getPidFilePath(overrides: ConfigOverrides = {}): string {
+  return getServerPidFilePath(overrides);
 }
 
-function readManagedServerRecord(): ManagedServerRecord | null {
-  const pidFilePath = getPidFilePath();
+function readManagedServerRecord(overrides: ConfigOverrides = {}): ManagedServerRecord | null {
+  const pidFilePath = getPidFilePath(overrides);
   if (!existsSync(pidFilePath)) return null;
 
   try {
@@ -39,12 +49,17 @@ function readManagedServerRecord(): ManagedServerRecord | null {
   }
 }
 
-function writeManagedServerRecord(record: ManagedServerRecord): void {
-  writeFileSync(getPidFilePath(), JSON.stringify(record, null, 2));
+function writeManagedServerRecord(
+  record: ManagedServerRecord,
+  overrides: ConfigOverrides = {},
+): void {
+  const pidFilePath = getPidFilePath(overrides);
+  mkdirSync(path.dirname(pidFilePath), { recursive: true });
+  writeFileSync(pidFilePath, JSON.stringify(record, null, 2));
 }
 
-function removeManagedServerRecord(): void {
-  const pidFilePath = getPidFilePath();
+function removeManagedServerRecord(overrides: ConfigOverrides = {}): void {
+  const pidFilePath = getPidFilePath(overrides);
   if (existsSync(pidFilePath)) rmSync(pidFilePath, { force: true });
 }
 
@@ -68,22 +83,26 @@ async function waitForHealth(port: number, timeoutMs: number): Promise<boolean> 
   return false;
 }
 
-function getServerEntryPath(): string {
-  return fileURLToPath(new URL("../../server/index.ts", import.meta.url));
+function getServerEntryPath(overrides: ConfigOverrides): string {
+  const runtime = resolveRuntimeKind(overrides);
+  const entrypoint =
+    runtime === "dev"
+      ? "../../server/bootstrapDev.ts"
+      : "../../server/bootstrapInstalled.ts";
+  return fileURLToPath(new URL(entrypoint, import.meta.url));
 }
 
 function buildServerEnv(overrides: ConfigOverrides): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    NODE_ENV: "production",
-    PORT: String(overrides.port),
+    TASKMANAGER_RUNTIME: resolveRuntimeKind(overrides),
+    TASKMANAGER_PROFILE: resolveProfileName(overrides),
+    TASKMANAGER_PORT: String(overrides.port),
   };
 
-  const dataDir = resolveDataDir(overrides);
-  if (dataDir) {
-    // Propagate an explicit DATA_DIR so the installed CLI can use user-chosen storage.
-    env.DATA_DIR = dataDir;
-  }
+  // Pass the resolved data directory explicitly so the child process uses the
+  // same profile-aware runtime config as the parent command.
+  env.TASKMANAGER_DATA_DIR = resolveDataDir(overrides);
 
   return env;
 }
@@ -91,13 +110,13 @@ function buildServerEnv(overrides: ConfigOverrides): NodeJS.ProcessEnv {
 export async function readServerStatus(
   overrides: ConfigOverrides = {},
 ): Promise<ServerStatus> {
-  const port = overrides.port;
+  const port = resolvePort(overrides);
   const healthy = await fetchHealth(overrides);
-  const managedRecord = readManagedServerRecord();
+  const managedRecord = readManagedServerRecord(overrides);
 
   if (healthy) {
     if (managedRecord && !isProcessAlive(managedRecord.pid)) {
-      removeManagedServerRecord();
+      removeManagedServerRecord(overrides);
       return {
         port,
         running: true,
@@ -114,7 +133,7 @@ export async function readServerStatus(
   }
 
   if (managedRecord && !isProcessAlive(managedRecord.pid)) {
-    removeManagedServerRecord();
+    removeManagedServerRecord(overrides);
   }
 
   return { running: false };
@@ -123,17 +142,21 @@ export async function readServerStatus(
 export async function startServer(
   overrides: ConfigOverrides = {},
   background = false,
+  onReady?: ServerReadyCallback,
 ): Promise<ServerStatus> {
   const port = overrides.port;
   if (!port) {
     throw new CliError("Port is required", 2);
   }
 
-  const currentStatus = await readServerStatus({ port });
-  if (currentStatus.running) return currentStatus;
+  const currentStatus = await readServerStatus({ ...overrides, port });
+  if (currentStatus.running) {
+    if (onReady) await onReady(currentStatus);
+    return currentStatus;
+  }
 
   const child = Bun.spawn({
-    cmd: [process.execPath, getServerEntryPath()],
+    cmd: [process.execPath, getServerEntryPath(overrides)],
     cwd: process.cwd(),
     detached: background,
     env: buildServerEnv({ ...overrides, port }),
@@ -153,12 +176,21 @@ export async function startServer(
       });
     }
 
+    if (onReady) {
+      await onReady({
+        pid: child.pid,
+        port,
+        running: true,
+        url: `http://127.0.0.1:${port}`,
+      });
+    }
+
     // Persist the pid so later status calls can report a CLI-managed background server.
     writeManagedServerRecord({
       pid: child.pid,
       port,
       startedAt: new Date().toISOString(),
-    });
+    }, overrides);
 
     return {
       pid: child.pid,
@@ -166,6 +198,26 @@ export async function startServer(
       running: true,
       url: `http://127.0.0.1:${port}`,
     };
+  }
+
+  // Wait for health before handing control back to the launcher so first-run
+  // browser open can happen without hiding the server logs users need.
+  const healthy = await waitForHealth(port, 8000);
+  if (!healthy) {
+    child.kill("SIGTERM");
+    throw new CliError("Server failed to start", 1, {
+      hint: "Try running `hirotm start` to inspect startup logs directly.",
+      url: `http://127.0.0.1:${port}`,
+    });
+  }
+
+  if (onReady) {
+    await onReady({
+      pid: child.pid,
+      port,
+      running: true,
+      url: `http://127.0.0.1:${port}`,
+    });
   }
 
   const forwardSignal = (signal: NodeJS.Signals) => {

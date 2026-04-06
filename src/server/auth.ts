@@ -8,6 +8,7 @@ import {
   type AuthPrincipalType,
   type AuthSessionResponse,
 } from "../shared/auth";
+import { resolveAuthDir } from "../shared/runtimeConfig";
 
 interface StoredAuthState {
   version: 1;
@@ -35,8 +36,7 @@ const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 400;
 let cachedAuthState: StoredAuthState | null | undefined;
 
 function resolveAuthRootDir(): string {
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
-  return path.join(home, ".taskmanager", "auth");
+  return resolveAuthDir();
 }
 
 function resolveAuthFilePath(): string {

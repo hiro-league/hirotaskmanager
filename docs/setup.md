@@ -1,8 +1,8 @@
 # Development environment setup
 
-This project is a **Bun** + **Hono** API and a **Vite** + **React** SPA. In development, the API listens on port **3001** and Vite serves the UI (default **5173**), proxying `/api` to the API. In production, a single Bun process serves both the API and the built SPA.
+This project is a **Bun** + **Hono** API and a **Vite** + **React** SPA. In development, the API listens on port **3002** and Vite serves the UI (default **5173**), proxying `/api` to the API. In production, a single Bun process serves both the API and the built SPA.
 
-Board data is **SQLite** (`taskmanager.db` under `DATA_DIR`); see [sqlite_data_model.md](./sqlite_data_model.md). **Authentication** uses a passphrase and session cookie; there is **no development bypass**—local dev matches production auth behavior. Overview: [auth-design.md](./auth-design.md).
+Board data is **SQLite** (`taskmanager.db` under the active profile's `data/` directory); see [sqlite_data_model.md](./sqlite_data_model.md). **Authentication** uses a passphrase and session cookie; there is **no development bypass**—local dev matches production auth behavior. Overview: [auth-design.md](./auth-design.md).
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ npm -v
 
 ### Bun (recommended)
 
-The API server runs on **Bun** (`src/server/index.ts`). Installing Bun globally is the smoothest experience; without it, `npm run dev` still works because `dev:server` uses `npx bun`.
+The API server runs on **Bun** (`src/server/bootstrapDev.ts` in development, `src/server/bootstrapInstalled.ts` for the installed/production path). Installing Bun globally is the smoothest experience; without it, `npm run dev` still works because `dev:server` uses `npx bun`.
 
 **Windows (PowerShell):**
 
@@ -60,13 +60,13 @@ bun install
 
 ## Development
 
-Starts the API (watch mode, port 3001) and Vite dev server together:
+Starts the API (watch mode, port 3002) and Vite dev server together:
 
 ```bash
 npm run dev
 ```
 
-Open the URL Vite prints (usually **http://localhost:5173**). The Vite proxy forwards `/api` requests to the Bun API on port 3001.
+Open the URL Vite prints (usually **http://localhost:5173**). The Vite proxy forwards `/api` requests to the Bun API on port 3002.
 
 **First-time auth:** If this install has not completed setup, the UI walks you through choosing a passphrase. The **recovery key** is printed **once** in the **API terminal** (the process running `dev:server` or `npm run dev`). Save it before continuing. Then **log in** at the Vite URL. The `hirotm` CLI and other callers without a browser session use **CLI** permissions—grant access per board from the web UI after login.
 
@@ -82,7 +82,7 @@ npm run dev:server
 npm run dev:client
 ```
 
-**Port conflict:** If port 3001 is taken, either free it or set `PORT=<other>` for the API and update `server.proxy` in `vite.config.ts` to match.
+**Port conflict:** If port 3002 is taken, either free it or update the dev profile config under `%USERPROFILE%\.taskmanager\profiles\dev\config.json` and keep `vite.config.ts` in sync.
 
 ---
 
@@ -106,14 +106,7 @@ npm run build
 npm start
 ```
 
-Override the port or data directory with environment variables:
-
-```bash
-PORT=8080 npm start
-DATA_DIR=/path/to/data npm start
-```
-
-By default, production stores the SQLite file under `~/.taskmanager/data`. In development, it lives in `./data` at the repo root. **Auth state** (hashed passphrase/session material) is stored separately under `~/.taskmanager/auth/` (not inside `DATA_DIR`).
+By default, production uses the `default` profile under `~/.taskmanager/profiles/default/`. Development uses the `dev` profile for auth and config, and its SQLite data defaults to `data/taskmanager.db` in the repo. Override with `%USERPROFILE%\.taskmanager\profiles\dev\config.json` if needed.
 
 ---
 
@@ -123,9 +116,9 @@ Open **Run and Debug** (`Ctrl+Shift+D`), pick a configuration, then **F5** (star
 
 | Configuration | What it runs |
 |---------------|----------------|
-| **Dev (API + Vite)** | `npm run dev` — API on 3001 + Vite (open **http://localhost:5173**) |
+| **Dev (API + Vite)** | `npm run dev` — API on 3002 + Vite (open **http://localhost:5173**) |
 | **Build** | `npm run build` — writes `dist/`, then exits |
-| **Start (production)** | Bun + `NODE_ENV=production` — serves API + SPA on **http://localhost:3001** (run **Build** first so `dist/` exists) |
+| **Start (production)** | Bun installed bootstrap — serves API + SPA on **http://localhost:3001** (run **Build** first so `dist/` exists) |
 | **Debug API (Bun only)** | Bun debugger + watch on the API only; run `npm run dev:client` in another terminal for full stack |
 
 The workspace recommends the **[Bun](https://marketplace.visualstudio.com/items?itemName=oven.bun-vscode)** extension (`oven.bun-vscode`) via `.vscode/extensions.json` for the last config.
@@ -143,4 +136,4 @@ If the Bun debugger misbehaves on Windows, see [bun-windows-cursor-debug.md](./b
 1. Install **Node.js** (and optionally **Bun**)
 2. `npm install`
 3. `npm run dev` — open the Vite URL; if prompted, complete **setup** and copy the recovery key from the **API** terminal; then **log in**. Confirm `/api/health` returns `{"ok":true}` (e.g. in the browser or with `curl`).
-4. `npm run build && npm start` — verify production mode on **http://localhost:3001** (setup/login as above if this is a fresh auth state)
+4. `npm run build && npm start` — verify the installed bootstrap flow on **http://localhost:3001** (setup/login as above if this is a fresh auth state)

@@ -1,45 +1,58 @@
 
 ## Why Hiro Task Manager
 
-- Open Source Transparency and Control.
-- Free, works on all Platforms: Windows, Linux, macOS.
-- Easy to install and configure. You can ask your AI Agent to install it for you.
-- Local First, runs on your own machine, with your own data and your own AI Agents.
-- Your data is yours, you can export it and use it with other tools.
-- If you want to change it, We have the documentation, agents, skill files to help your ai agents update it accurately for you.
+- Free and Open Source 
+  Use it, modify it, and extend it. We provide you with Docs and Agentic Skills to change it however you want.
+- Works on Any Platform, 
+  Windows, Linux, and macOS are supported.
+- Works with Any AI Agent.
+  Cursor IDE, Claude Caude, Github Copilot, Open Claw and more
+- Get Started Quickly
+  One line installer. or Install via AI Agents. It takes a minute.  
+- Your Data, Your Machine, Your Models.
+  Total Privacy, your choice to make.
 
+
+## Explore
+
+
+- Boards & Lists
+  Simplify your workflow
+  
+  - Create Unlimited Boards, Lists and Tasks.
+  - Organize Your Tasks
+    - Use Priorities, Statuses, and Groups to organize your tasks.
+  - Customize your View
+    - Board Themes, Custom Task Groups, Custom Statuses, Emojis, Multiple Board/Task Views.
+
+- Agentic Workflow
+
+  Chat about your Tasks
+  Chat to your Coding Agent about your tasks and let it do the heavy lifting.
+
+  - Manage your lists and tasks
+    Let your Agent create your tasks and organize them in lists and boards.
+  - Control Agent Access
+    Define exactly what your Agent can see or change.
+  - Cursor IDE, Claude Caude, Github Copilot.
+    works out of the box with any AI Agent that can execute CLI commands.
+  - Web Notifications
+    Stay informed about what your agents are doing on your boards.
+
+- Productivity
+  - Keyboard Shortcuts
+    Developer First, Desktop First, Keyboard Shortcuts for hardcore developers.
+  - Search and Filter
+    Filter by Any Field, Full Text Search.
+  - Instant Statistics
+    See Task Counts per list, per status.
 
 ## Features
 
 ### General
 
-- Create Boards, Lists and tasks.
 - Use Markdown for task details, the universal language of the AI Agents.
-- Easy Navigation, Drag and Drop, Keyboard Shortcuts for hardcore developers.
-- Organize your tasks with
-  - Priorities
-  - Groups
-
-### Agents
-
-- All Task Manager actions can be performed by CLI, as well as your AI Agents.
-- Works with any AI Agent that can execute CLI commands.
-- Predefined Agents.md and Skill files.
-- Works with Cursor IDE, Claude Caude, Github Copilot.
-- Control Access Levels for your AI Agents to specific boards and specific actions.
-- Notification system to let you know what your agents and your users are doing.
-
-### Search
-
-- Full Text search.
-
-
-### Statistics
-
 - Watch Instant Status about Task Counts per list, open vs closed.
-
-
-
 
 
 ## Hiro Task Manager — feature overview (draft)

@@ -1,16 +1,12 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { Database } from "bun:sqlite";
+import { resolveDataDir as resolveRuntimeDataDir } from "../shared/runtimeConfig";
 import { runPendingMigrations } from "./migrations/runner";
 
-/** Same rules as JSON storage — single place for DB path (see docs/sqlite_migration §5a). */
+/** Use the active runtime profile so installed and dev data stay isolated. */
 export function resolveDataDir(): string {
-  if (process.env.DATA_DIR) return path.resolve(process.env.DATA_DIR);
-  if (process.env.NODE_ENV === "production") {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
-    return path.join(home, ".taskmanager", "data");
-  }
-  return path.join(process.cwd(), "data");
+  return resolveRuntimeDataDir();
 }
 
 export function getDbFilePath(): string {

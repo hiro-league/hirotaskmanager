@@ -1,91 +1,75 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import path from "node:path";
+import {
+  getDefaultAuthDir,
+  getDefaultDataDir,
+  getProfileConfigFilePath,
+  getProfileRootDir,
+  getServerPidFilePath,
+  hasProfileConfigFile,
+  readProfileConfig,
+  resolveApiKey as resolveRuntimeApiKey,
+  resolveAuthDir as resolveRuntimeAuthDir,
+  resolveOpenBrowser as resolveRuntimeOpenBrowser,
+  resolvePort as resolveRuntimePort,
+  resolveDataDir as resolveRuntimeDataDir,
+  resolveProfileName,
+  resolveRuntimeKind,
+  setRuntimeConfigSelection,
+  writeProfileConfig,
+  type RuntimeConfigFile,
+  type RuntimeConfigOverrides,
+  type RuntimeKind,
+} from "../../shared/runtimeConfig";
 
-export interface ConfigOverrides {
-  port?: number;
-  dataDir?: string;
+export type ConfigOverrides = RuntimeConfigOverrides;
+export type CliConfigFile = RuntimeConfigFile;
+
+export function setRuntimeProfile(profile: string | undefined): void {
+  setRuntimeConfigSelection({ profile });
 }
 
-interface CliConfigFile {
-  api_key?: string;
-  data_dir?: string;
-  port?: number;
+export function setRuntimeKind(kind: RuntimeKind | undefined): void {
+  setRuntimeConfigSelection({ kind });
 }
 
-export function resolveHomeDir(): string {
-  return process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
+export {
+  getProfileConfigFilePath as getCliConfigFilePath,
+  getProfileRootDir as getCliHomeDir,
+  getServerPidFilePath,
+  hasProfileConfigFile as hasCliConfigFile,
+  readProfileConfig as readConfigFile,
+  resolveProfileName,
+  resolveRuntimeKind,
+  writeProfileConfig as writeConfigFile,
+};
+
+export function getDefaultInstalledDataDir(
+  overrides: ConfigOverrides = {},
+): string {
+  return getDefaultDataDir({ ...overrides, kind: "installed" });
 }
 
-export function getCliHomeDir(): string {
-  return path.join(resolveHomeDir(), ".hirotm");
-}
-
-export function ensureCliHomeDir(): string {
-  const cliHomeDir = getCliHomeDir();
-  // Keep CLI-managed state outside the caller's cwd so global installs behave consistently.
-  mkdirSync(cliHomeDir, { recursive: true });
-  return cliHomeDir;
-}
-
-function getConfigFileCandidates(): string[] {
-  const cliHomeDir = getCliHomeDir();
-  return [path.join(cliHomeDir, "config.json"), path.join(cliHomeDir, "config")];
-}
-
-function readConfigFile(): CliConfigFile {
-  for (const candidate of getConfigFileCandidates()) {
-    if (!existsSync(candidate)) continue;
-
-    try {
-      const raw = readFileSync(candidate, "utf8").trim();
-      if (!raw) return {};
-      return JSON.parse(raw) as CliConfigFile;
-    } catch {
-      return {};
-    }
-  }
-
-  return {};
-}
-
-function normalizePort(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isInteger(parsed) && parsed > 0) return parsed;
-  }
-
-  return undefined;
+export function getDefaultInstalledAuthDir(
+  overrides: ConfigOverrides = {},
+): string {
+  return getDefaultAuthDir({ ...overrides, kind: "installed" });
 }
 
 export function resolvePort(overrides: ConfigOverrides = {}): number {
-  const fileConfig = readConfigFile();
-  return (
-    normalizePort(overrides.port) ??
-    normalizePort(process.env.PORT) ??
-    normalizePort(fileConfig.port) ??
-    3001
-  );
+  return resolveRuntimePort(overrides);
 }
 
-export function resolveDataDir(overrides: ConfigOverrides = {}): string | undefined {
-  const fileConfig = readConfigFile();
-
-  if (overrides.dataDir?.trim()) return path.resolve(overrides.dataDir);
-  if (process.env.DATA_DIR?.trim()) return path.resolve(process.env.DATA_DIR);
-  if (fileConfig.data_dir?.trim()) return path.resolve(fileConfig.data_dir);
-
-  return undefined;
+export function resolveDataDir(overrides: ConfigOverrides = {}): string {
+  return resolveRuntimeDataDir(overrides);
 }
 
-export function resolveApiKey(): string | undefined {
-  const fileConfig = readConfigFile();
+export function resolveAuthDir(overrides: ConfigOverrides = {}): string {
+  return resolveRuntimeAuthDir(overrides);
+}
 
-  if (process.env.API_KEY?.trim()) return process.env.API_KEY;
-  if (fileConfig.api_key?.trim()) return fileConfig.api_key;
+export function resolveOpenBrowser(overrides: ConfigOverrides = {}): boolean {
+  return resolveRuntimeOpenBrowser(overrides);
+}
 
-  return undefined;
+export function resolveApiKey(overrides: ConfigOverrides = {}): string | undefined {
+  return resolveRuntimeApiKey(overrides);
 }

@@ -133,7 +133,8 @@ Auth state should live outside the repo working tree and outside `~/.hirotm/conf
 
 Recommended location:
 
-- `~/.taskmanager/auth/auth.json`
+- installed app: `~/.taskmanager/profiles/default/auth/auth.json`
+- development: `~/.taskmanager/profiles/dev/auth/auth.json`
 
 This keeps auth state separate from application board data and separate from CLI config intended for agents.
 

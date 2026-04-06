@@ -12,7 +12,13 @@ import {
   getRuntimeCliClientInstanceId,
   getRuntimeCliClientName,
 } from "./clientIdentity";
-import { resolveApiKey, resolvePort, type ConfigOverrides } from "./config";
+import {
+  resolveApiKey,
+  resolvePort,
+  resolveProfileName,
+  resolveRuntimeKind,
+  type ConfigOverrides,
+} from "./config";
 import { CliError } from "./output";
 
 function taskManagerClientHeaders(): Record<string, string> {
@@ -30,9 +36,15 @@ function buildBaseUrl(overrides: ConfigOverrides = {}): string {
 function buildStartCommand(overrides: ConfigOverrides = {}): string {
   const command = ["hirotm", "start", "--background"];
   const port = resolvePort(overrides);
+  const profile = resolveProfileName(overrides);
+  const runtime = resolveRuntimeKind(overrides);
+
+  if (runtime === "dev" || profile !== "default") {
+    command.push("--profile", profile);
+  }
 
   // Include the resolved port so agents can recover with a copy/pasteable command.
-  if (port !== 3001) {
+  if (port !== resolvePort({ kind: runtime, profile })) {
     command.push("--port", String(port));
   }
 
@@ -67,7 +79,7 @@ export async function fetchApi<T>(
   overrides: ConfigOverrides = {},
 ): Promise<T> {
   const baseUrl = buildBaseUrl(overrides);
-  const apiKey = resolveApiKey();
+  const apiKey = resolveApiKey(overrides);
 
   const headers: Record<string, string> = {
     ...taskManagerClientHeaders(),

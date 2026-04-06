@@ -26,19 +26,16 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "bun", "src/server/index.ts"],
+      "runtimeArgs": ["--yes", "bun", "src/server/bootstrapInstalled.ts"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen",
-      "env": {
-        "NODE_ENV": "production"
-      }
+      "internalConsoleOptions": "neverOpen"
     },
     {
       "name": "Debug API (Bun only)",
       "type": "bun",
       "request": "launch",
-      "program": "${workspaceFolder}/src/server/index.ts",
+      "program": "${workspaceFolder}/src/server/bootstrapDev.ts",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "stopOnEntry": false,

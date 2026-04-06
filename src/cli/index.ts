@@ -10,7 +10,11 @@ import type {
 } from "../shared/models";
 import { fetchApi } from "./lib/api-client";
 import { setRuntimeCliClientName } from "./lib/clientIdentity";
-import { resolveDataDir, resolvePort } from "./lib/config";
+import {
+  resolveDataDir,
+  resolvePort,
+  setRuntimeProfile,
+} from "./lib/config";
 import {
   CliError,
   exitWithError,
@@ -43,6 +47,13 @@ function addPortOption(command: Command): Command {
     );
 }
 
+function addProfileOption(command: Command): Command {
+  return command.option(
+    "--profile <name>",
+    "Runtime profile name for this command",
+  );
+}
+
 function parsePortOption(port: string | undefined): number | undefined {
   if (!port?.trim()) return undefined;
 
@@ -58,6 +69,7 @@ const program = new Command();
 program
   .name("hirotm")
   .description("TaskManager CLI for local app control and JSON queries")
+  .option("--profile <name>", "Runtime profile name (default: default, dev)")
   .option(
     "--client-name <name>",
     "Human-friendly client label sent with API requests (for notifications)",
@@ -77,14 +89,31 @@ function readClientNameArg(argv: string[]): string | undefined {
   return undefined;
 }
 
-setRuntimeCliClientName(readClientNameArg(process.argv.slice(2)));
+function readProfileArg(argv: string[]): string | undefined {
+  for (let index = 0; index < argv.length; index += 1) {
+    const current = argv[index];
+    if (current === "--profile") {
+      const next = argv[index + 1];
+      return typeof next === "string" ? next : undefined;
+    }
+    if (current.startsWith("--profile=")) {
+      return current.slice("--profile=".length);
+    }
+  }
+  return undefined;
+}
 
-program
-  .command("start")
-  .description("Start the local TaskManager server")
-  .option("-b, --background", "Run the server in the background")
-  .option("-p, --port <port>", "Port for the local TaskManager API")
-  .option("--data-dir <path>", "Override the task data directory")
+setRuntimeCliClientName(readClientNameArg(process.argv.slice(2)));
+setRuntimeProfile(readProfileArg(process.argv.slice(2)));
+
+addProfileOption(
+  program
+    .command("start")
+    .description("Start the local TaskManager server")
+    .option("-b, --background", "Run the server in the background")
+    .option("-p, --port <port>", "Port for the local TaskManager API")
+    .option("--data-dir <path>", "Override the task data directory"),
+)
   .action(async (options: { background?: boolean; dataDir?: string; port?: string }) => {
     try {
       const port = resolvePort({ port: parsePortOption(options.port) });
@@ -103,10 +132,12 @@ program
     }
   });
 
-addPortOption(
-  program
-    .command("status")
-    .description("Show whether the local TaskManager server is running"),
+addProfileOption(
+  addPortOption(
+    program
+      .command("status")
+      .description("Show whether the local TaskManager server is running"),
+  ),
 ).action(async (options: { port?: string }) => {
   try {
     const port = resolvePort({ port: parsePortOption(options.port) });

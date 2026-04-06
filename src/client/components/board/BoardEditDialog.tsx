@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import {
   BOARD_COLOR_LABELS,
   BOARD_COLOR_PRESETS,
@@ -6,9 +7,10 @@ import {
   resolvedBoardColor,
 } from "../../../shared/boardColor";
 import {
-  BOARD_CLI_ACCESS,
-  type BoardCliAccess,
-} from "../../../shared/boardCliAccess";
+  EMPTY_BOARD_CLI_POLICY,
+  FULL_BOARD_CLI_POLICY,
+  type BoardCliPolicy,
+} from "../../../shared/cliPolicy";
 import type { Board } from "../../../shared/models";
 import { usePatchBoard } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
@@ -19,11 +21,91 @@ import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
 import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
 import { useModalFocusTrap } from "./shortcuts/useModalFocusTrap";
 
-const CLI_LABELS: Record<BoardCliAccess, string> = {
-  none: "None (CLI blocked)",
-  read: "Read",
-  read_write: "Read/Write",
+type PolicyField = {
+  key: keyof BoardCliPolicy;
+  label: string;
+  hint?: string;
 };
+
+/** Grouped for two-column layout: access → tasks → lists → board-level. */
+const POLICY_GROUPS: { title: string; fields: PolicyField[] }[] = [
+  {
+    title: "Access",
+    fields: [
+      {
+        key: "readBoard",
+        label: "Read board",
+        hint: "Required for any other CLI action on this board.",
+      },
+    ],
+  },
+  {
+    title: "Tasks",
+    fields: [
+      { key: "createTasks", label: "Create tasks" },
+      {
+        key: "manageCliCreatedTasks",
+        label: "Manage CLI-created tasks",
+        hint: "Edit, move, or delete tasks the CLI created.",
+      },
+      {
+        key: "manageAnyTasks",
+        label: "Manage any task",
+        hint: "Also turns on managing CLI-created tasks.",
+      },
+    ],
+  },
+  {
+    title: "Lists",
+    fields: [
+      { key: "createLists", label: "Create lists" },
+      {
+        key: "manageCliCreatedLists",
+        label: "Manage CLI-created lists",
+      },
+      {
+        key: "manageAnyLists",
+        label: "Manage any list",
+        hint: "Also turns on managing CLI-created lists.",
+      },
+    ],
+  },
+  {
+    title: "Board",
+    fields: [
+      {
+        key: "manageStructure",
+        label: "Groups & priorities",
+        hint: "Edit task groups and priority definitions.",
+      },
+      {
+        key: "editBoard",
+        label: "Board metadata & view",
+        hint: "Name, emoji, description, theme, view prefs.",
+      },
+      { key: "deleteBoard", label: "Delete board" },
+    ],
+  },
+];
+
+function applyPolicyToggle(
+  policy: BoardCliPolicy,
+  key: keyof BoardCliPolicy,
+  checked: boolean,
+): BoardCliPolicy {
+  let next: BoardCliPolicy = { ...policy, [key]: checked };
+  if (key === "readBoard" && !checked) {
+    next = { ...EMPTY_BOARD_CLI_POLICY };
+  } else {
+    if (key === "manageAnyTasks" && checked) {
+      next = { ...next, manageCliCreatedTasks: true };
+    }
+    if (key === "manageAnyLists" && checked) {
+      next = { ...next, manageCliCreatedLists: true };
+    }
+  }
+  return next;
+}
 
 interface BoardEditDialogProps {
   board: Board;
@@ -33,15 +115,16 @@ interface BoardEditDialogProps {
 
 export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) {
   const titleId = useId();
+  const policyFieldBaseId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const patchBoard = usePatchBoard();
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [description, setDescription] = useState("");
-  const [cliAccess, setCliAccess] = useState<BoardCliAccess>("none");
   const [boardColor, setBoardColor] = useState<BoardColorPreset | undefined>(
     undefined,
   );
+  const [cliPolicy, setCliPolicy] = useState<BoardCliPolicy>(EMPTY_BOARD_CLI_POLICY);
   const [baseline, setBaseline] = useState("");
   const [showDiscard, setShowDiscard] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
@@ -53,20 +136,20 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
     const n = board.name.trim() || "Untitled";
     const e = board.emoji ?? null;
     const d = board.description ?? "";
-    const c = board.cliAccess ?? "none";
     const col = resolvedBoardColor(board);
+    const pol = board.cliPolicy ?? EMPTY_BOARD_CLI_POLICY;
     setName(n);
     setEmoji(e);
     setDescription(d);
-    setCliAccess(c);
     setBoardColor(col);
+    setCliPolicy(pol);
     setBaseline(
       JSON.stringify({
         name: n,
         emoji: e,
         description: d,
-        cliAccess: c,
         boardColor: col,
+        cliPolicy: pol,
       }),
     );
   }, [open, board]);
@@ -77,10 +160,10 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
         name: name.trim() || "Untitled",
         emoji,
         description: description.trim(),
-        cliAccess,
         boardColor,
+        cliPolicy,
       }),
-    [name, emoji, description, cliAccess, boardColor],
+    [name, emoji, description, boardColor, cliPolicy],
   );
 
   const isDirty = open && snapshot !== baseline;
@@ -121,8 +204,8 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
         name: trimmed,
         emoji,
         description: description.trim(),
-        cliAccess,
         boardColor,
+        cliPolicy,
       },
       { onSuccess: () => onClose() },
     );
@@ -141,24 +224,20 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
           aria-labelledby={titleId}
           ref={dialogRef}
           tabIndex={-1}
-          className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
+          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
           onClick={(e) => e.stopPropagation()}
         >
           <h2 id={titleId} className="text-lg font-semibold text-foreground">
             Edit board
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Name, icon, description, CLI access for hirotm, and board theme.
+            Name, icon, description, theme, and hirotm CLI permissions for this board.
           </p>
           {emojiFieldError ? (
             <p className="mt-2 text-sm text-destructive" role="alert">
               {emojiFieldError}
             </p>
           ) : null}
-          <p className="mt-3 text-xs text-amber-800 dark:text-amber-300">
-            New boards default to CLI access &quot;None&quot;. Grant Read or
-            Read/Write here so the hirotm CLI can open or edit this board.
-          </p>
 
           <label className="mt-4 block text-sm font-medium text-foreground">
             Name
@@ -196,25 +275,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
             />
           </label>
 
-          <label className="mt-4 block text-sm font-medium text-foreground">
-            CLI access (hirotm)
-            <select
-              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-              value={cliAccess}
-              disabled={busy}
-              onChange={(e) =>
-                setCliAccess(e.target.value as BoardCliAccess)
-              }
-            >
-              {BOARD_CLI_ACCESS.map((v) => (
-                <option key={v} value={v}>
-                  {CLI_LABELS[v]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="mt-4">
+          <div className="mt-6">
             <span className="text-sm font-medium text-foreground">
               Board theme
             </span>
@@ -245,6 +306,99 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
               ))}
             </div>
           </div>
+
+          <details className="group mt-6 rounded-lg border border-border bg-muted/15">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground marker:content-none [&::-webkit-details-marker]:hidden hover:bg-muted/40">
+              <ChevronRight
+                className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                aria-hidden
+              />
+              Hirotm CLI access
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                local API / hirotm
+              </span>
+            </summary>
+            <div className="space-y-4 border-t border-border px-3 pb-3 pt-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary underline-offset-4 hover:underline disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => setCliPolicy({ ...FULL_BOARD_CLI_POLICY })}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary underline-offset-4 hover:underline disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => setCliPolicy({ ...EMPTY_BOARD_CLI_POLICY })}
+                >
+                  Deselect all
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Permissions for unauthenticated local API clients. Turning off &quot;Read board&quot;
+                clears the rest.
+              </p>
+              {POLICY_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.title}
+                  </h4>
+                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {group.fields.map(({ key, label, hint }) => {
+                      const disabled =
+                        busy || (!cliPolicy.readBoard && key !== "readBoard");
+                      const id = `${policyFieldBaseId}-${key}`;
+                      const fullWidth =
+                        group.fields.length === 1 ||
+                        (group.title === "Access" && key === "readBoard");
+                      return (
+                        <li
+                          key={key}
+                          className={cn(
+                            "flex gap-2.5",
+                            fullWidth && "sm:col-span-2",
+                          )}
+                        >
+                          <input
+                            id={id}
+                            type="checkbox"
+                            className="mt-0.5 size-4 shrink-0 rounded border-input"
+                            checked={cliPolicy[key]}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              setCliPolicy(
+                                applyPolicyToggle(
+                                  cliPolicy,
+                                  key,
+                                  e.target.checked,
+                                ),
+                              )
+                            }
+                          />
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={id}
+                              className="text-sm font-medium leading-snug text-foreground"
+                            >
+                              {label}
+                            </label>
+                            {hint ? (
+                              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                                {hint}
+                              </p>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </details>
 
           <div className="mt-6 flex justify-end gap-2">
             <button

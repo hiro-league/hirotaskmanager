@@ -10,6 +10,8 @@ import { migration009 } from "./009_board_emoji";
 import { migration010 } from "./010_celebration_sounds_muted";
 import { migration011 } from "./011_board_cli_access";
 import { migration012 } from "./012_notification_event";
+import { migration013 } from "./013_cli_policy_and_provenance";
+import { migration014 } from "./014_drop_board_cli_access";
 import type { Migration } from "./types";
 
 /** Numbered migrations, ascending by version. */
@@ -26,4 +28,6 @@ export const migrations: Migration[] = [
   migration010,
   migration011,
   migration012,
+  migration013,
+  migration014,
 ];

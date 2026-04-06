@@ -52,7 +52,7 @@ export function searchTasks(options: {
   limit?: number;
   /** Default true: last token gets a `*` prefix suffix for partial matches. */
   prefixFinalToken?: boolean;
-  /** When true, omit hits on boards whose CLI access is `none` (hirotm global search). */
+  /** When true, omit hits on boards where CLI read is disabled (`board_cli_policy.read_board`). */
   excludeCliNoneBoards?: boolean;
 }): SearchHit[] {
   const db = getDb();
@@ -85,7 +85,9 @@ function runSearch(
            snippet(task_search, 4, '«', '»', ' … ', 28) AS snip_list,
            snippet(task_search, 5, '«', '»', ' … ', 28) AS snip_group,
            snippet(task_search, 6, '«', '»', ' … ', 20) AS snip_status`;
-  const cliFilter = opts.excludeCliNoneBoards ? "AND b.cli_access != 'none'" : "";
+  const cliFilter = opts.excludeCliNoneBoards
+    ? "AND EXISTS (SELECT 1 FROM board_cli_policy p WHERE p.board_id = b.id AND p.read_board != 0)"
+    : "";
 
   if (boardId !== undefined) {
     const rows = db

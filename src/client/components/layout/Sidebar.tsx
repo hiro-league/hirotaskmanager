@@ -1,6 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LayoutGrid, MoreVertical, Plus, X } from "lucide-react";
+import { LayoutGrid, MoreVertical, Plus, Settings, X } from "lucide-react";
 import { useBoard, useBoards } from "@/api/queries";
 import {
   useCreateBoard,
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
 import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { usePreferencesStore } from "@/store/preferences";
-import { useMatch, useNavigate } from "react-router-dom";
+import { NavLink, useMatch, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { boardDisplayName } from "../../../shared/models";
 
@@ -151,6 +151,7 @@ export function Sidebar() {
   const { data: boards = [], isLoading, isError, error } = useBoards();
   const navigate = useNavigate();
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
+  const settingsMatch = useMatch({ path: "/settings", end: true });
   const selectedBoardId = boardMatch?.params.boardId ?? null;
   const createBoard = useCreateBoard();
   const patchBoard = usePatchBoard();
@@ -306,6 +307,22 @@ export function Sidebar() {
               );
             })}
         </div>
+
+        <div className="mt-auto border-t border-sidebar-border p-2">
+          <NavLink
+            to="/settings"
+            title="Settings"
+            aria-current={settingsMatch ? "page" : undefined}
+            className={({ isActive }) =>
+              cn(
+                "flex w-full items-center justify-center rounded-md p-2 text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
+                isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+              )
+            }
+          >
+            <Settings className="size-5 shrink-0" aria-hidden />
+          </NavLink>
+        </div>
       </div>
     );
   }
@@ -317,6 +334,7 @@ export function Sidebar() {
         <span className="font-semibold tracking-tight">Boards</span>
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-1 overflow-y-auto p-2">
         {isLoading && (
           <p className="px-2 py-2 text-sm text-muted-foreground">Loading…</p>
@@ -470,6 +488,23 @@ export function Sidebar() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="border-t border-sidebar-border p-2">
+        <NavLink
+          to="/settings"
+          aria-current={settingsMatch ? "page" : undefined}
+          className={({ isActive }) =>
+            cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
+              isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+            )
+          }
+        >
+          <Settings className="size-4 shrink-0" aria-hidden />
+          Settings
+        </NavLink>
+      </div>
       </div>
 
       {/* Sidebar sits outside the board shortcut scope, so board deletion uses a local app dialog instead of `window.confirm`. */}

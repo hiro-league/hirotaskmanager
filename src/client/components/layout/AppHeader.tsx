@@ -1,5 +1,6 @@
-import { ChevronsLeft, ChevronsRight, Command, Moon, Sun } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Command, LogOut, Moon, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import { useLogout } from "@/api/auth";
 import { cn } from "@/lib/utils";
 import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
 import { usePreferencesStore } from "@/store/preferences";
@@ -8,6 +9,7 @@ import { resolveDark, useSystemDark } from "./ThemeRoot";
 
 export function AppHeader() {
   const { pathname } = useLocation();
+  const logout = useLogout();
   const shortcutHelpAvailable = pathname.startsWith("/board/");
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
   const toggleSidebar = usePreferencesStore((s) => s.toggleSidebarCollapsed);
@@ -79,6 +81,22 @@ export function AppHeader() {
           )}
         >
           <Command className="size-5 shrink-0" aria-hidden />
+        </button>
+        <button
+          type="button"
+          title="Log out"
+          aria-label="Log out"
+          disabled={logout.isPending}
+          onClick={() => logout.mutate()}
+          className={cn(
+            "inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/70 text-foreground shadow-sm",
+            "transition-[color,background-color,box-shadow] hover:bg-muted hover:shadow",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
+            "active:translate-y-px active:shadow-sm",
+            logout.isPending && "cursor-wait opacity-60",
+          )}
+        >
+          <LogOut className="size-5 shrink-0" aria-hidden />
         </button>
         <button
           type="button"

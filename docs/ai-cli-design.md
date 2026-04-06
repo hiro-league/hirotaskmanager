@@ -307,7 +307,7 @@ The extensions below are now part of the implemented product surface; per-comman
 
 | Intent | Existing HTTP transport | Planned CLI shape (illustrative) |
 |--------|--------------------------|-----------------------------------|
-| Update board metadata | `PATCH /api/boards/:id` | `hirotm boards update <id-or-slug>` with flags for name, emoji, description, `cliAccess`, `boardColor`, … |
+| Update board metadata | `PATCH /api/boards/:id` | `hirotm boards update <id-or-slug>` with flags for name, emoji, description, `boardColor`, … (granular CLI policy is web-only: Edit board) |
 | Delete board | `DELETE /api/boards/:id` | `hirotm boards delete <id-or-slug>` |
 | Replace task groups | `PATCH /api/boards/:id/groups` | `hirotm boards groups <id-or-slug>`; semantics in [§3.12](#312-replace-style-board-structure-commands) |
 | Replace task priorities | `PATCH /api/boards/:id/priorities` | `hirotm boards priorities <id-or-slug>`; semantics in [§3.12](#312-replace-style-board-structure-commands) |

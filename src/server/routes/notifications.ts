@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { NotificationFeedSourceFilter } from "../../shared/notifications";
+import { requireWebSession, type AppBindings } from "../auth";
 import { createNotificationEventsResponse } from "../notificationEvents";
 import { listNotifications, markAllNotificationsRead } from "../storage/notifications";
 
@@ -10,10 +11,12 @@ function parseSourceFilter(raw: string | undefined): NotificationFeedSourceFilte
   return "all";
 }
 
-export const notificationsRoute = new Hono();
+export const notificationsRoute = new Hono<AppBindings>();
 
 /** Phase 1: persisted feed + mark-all-read. Live SSE is Phase 3. */
 notificationsRoute.get("/", (c) => {
+  const blocked = requireWebSession(c);
+  if (blocked) return blocked;
   const scopeRaw = c.req.query("scope");
   const scope = scopeRaw === "board" ? "board" : "all";
   const boardIdRaw = c.req.query("boardId");
@@ -39,10 +42,14 @@ notificationsRoute.get("/", (c) => {
 });
 
 notificationsRoute.patch("/read-all", (c) => {
+  const blocked = requireWebSession(c);
+  if (blocked) return blocked;
   markAllNotificationsRead();
   return c.body(null, 204);
 });
 
 notificationsRoute.get("/events", (c) => {
+  const blocked = requireWebSession(c);
+  if (blocked) return blocked;
   return createNotificationEventsResponse(c.req.raw.signal);
 });

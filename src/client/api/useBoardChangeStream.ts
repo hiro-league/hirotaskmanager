@@ -15,8 +15,12 @@ function boardEventsUrl(eventBoardId: number): string {
   const path = `/api/events?boardId=${eventBoardId}`;
   if (import.meta.env.PROD) return path;
   const raw = import.meta.env.VITE_API_ORIGIN as string | undefined;
+  const fallbackOrigin =
+    typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:3001`
+      : "http://localhost:3001";
   const origin =
-    raw && raw.length > 0 ? raw.replace(/\/$/, "") : "http://127.0.0.1:3001";
+    raw && raw.length > 0 ? raw.replace(/\/$/, "") : fallbackOrigin;
   return `${origin}${path}`;
 }
 
@@ -37,7 +41,7 @@ export function useBoardChangeStream(
     if (eventBoardId == null) return;
 
     const sseUrl = boardEventsUrl(eventBoardId);
-    const es = new EventSource(sseUrl);
+    const es = new EventSource(sseUrl, { withCredentials: true });
 
     const boardCacheKeys: ReadonlyArray<readonly unknown[]> = [
       ...(routeKey != null ? [[...boardKeys.all, routeKey] as const] : []),

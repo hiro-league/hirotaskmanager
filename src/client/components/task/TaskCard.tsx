@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
-import { Check } from "lucide-react";
+import { Bot, Check } from "lucide-react";
 import {
   priorityDisplayLabel,
   priorityLabelForId,
@@ -130,6 +130,33 @@ interface TaskCardProps {
   skipNavRegistration?: boolean;
 }
 
+/** Shown when the task was created by the CLI principal (Phase 2 provenance). */
+function CliCreatedIndicator({
+  task,
+  compact,
+}: {
+  task: Task;
+  /** Smaller icon for dense / small card layout. */
+  compact?: boolean;
+}) {
+  if (task.createdByPrincipal !== "cli") return null;
+  const tip =
+    task.createdByLabel?.trim() || "Created via hirotm CLI";
+  return (
+    <span
+      className="inline-flex shrink-0 text-muted-foreground"
+      title={tip}
+      aria-label={tip}
+    >
+      <Bot
+        className={compact ? "size-3" : "size-3.5"}
+        strokeWidth={2}
+        aria-hidden
+      />
+    </span>
+  );
+}
+
 function PriorityPill({
   label,
   color,
@@ -257,8 +284,23 @@ function TaskCardContent({
           />
         </div>
       ) : (
-        <div className={cn("font-medium", viewSpec.titleClassName)}>
-          {taskDisplayTitle(task)}
+        <div
+          className={cn(
+            "flex min-w-0 items-start gap-1.5",
+            viewMode === "small" && "items-center",
+          )}
+        >
+          <div
+            className={cn(
+              "min-w-0 flex-1 font-medium",
+              viewSpec.titleClassName,
+            )}
+          >
+            {taskDisplayTitle(task)}
+          </div>
+          {viewMode === "small" ? (
+            <CliCreatedIndicator task={task} compact />
+          ) : null}
         </div>
       )}
       {viewMode !== "small" ? (
@@ -269,6 +311,7 @@ function TaskCardContent({
           {priorityLabel && priorityColor ? (
             <PriorityPill label={priorityLabel} color={priorityColor} />
           ) : null}
+          <CliCreatedIndicator task={task} />
         </div>
       ) : null}
       {preview ? (

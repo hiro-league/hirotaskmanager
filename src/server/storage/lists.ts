@@ -1,15 +1,8 @@
 import type { Board, List } from "../../shared/models";
+import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
 import { boardExists } from "./helpers";
 import { loadBoard } from "./board";
-
-type ListRow = {
-  id: number;
-  name: string;
-  sort_order: number;
-  color: string | null;
-  emoji: string | null;
-};
 
 export type ListWriteResult = {
   boardId: number;
@@ -23,6 +16,23 @@ export type ListDeleteResult = {
   deletedListId: number;
 };
 
+type ListRow = {
+  id: number;
+  name: string;
+  sort_order: number;
+  color: string | null;
+  emoji: string | null;
+  created_by_principal?: string | null;
+  created_by_label?: string | null;
+};
+
+function normalizePrincipal(
+  raw: string | null | undefined,
+): import("../../shared/provenance").CreatorPrincipalType | undefined {
+  if (raw === "web" || raw === "cli" || raw === "system") return raw;
+  return undefined;
+}
+
 function mapListRow(row: ListRow): List {
   return {
     id: row.id,
@@ -33,6 +43,8 @@ function mapListRow(row: ListRow): List {
       row.emoji != null && String(row.emoji).trim() !== ""
         ? String(row.emoji).trim()
         : null,
+    createdByPrincipal: normalizePrincipal(row.created_by_principal) ?? "web",
+    createdByLabel: row.created_by_label,
   };
 }
 
@@ -49,7 +61,7 @@ export function readListById(boardId: number, listId: number): List | null {
   const db = getDb();
   const row = db
     .query(
-      "SELECT id, name, sort_order, color, emoji FROM list WHERE id = ? AND board_id = ?",
+      "SELECT id, name, sort_order, color, emoji, created_by_principal, created_by_label FROM list WHERE id = ? AND board_id = ?",
     )
     .get(listId, boardId) as ListRow | null;
   return row ? mapListRow(row) : null;
@@ -58,12 +70,15 @@ export function readListById(boardId: number, listId: number): List | null {
 export function createListOnBoard(
   boardId: number,
   input: { name: string; emoji?: string | null },
+  provenance?: RowProvenance,
 ): ListWriteResult | null {
   const trimmed = input.name.trim() || "New list";
   const emoji = input.emoji ?? null;
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const now = new Date().toISOString();
+  const principal = provenance?.principal ?? "web";
+  const label = provenance?.label ?? null;
   let listId: number | null = null;
   withTransaction(db, () => {
     const maxRow = db
@@ -73,8 +88,8 @@ export function createListOnBoard(
       .get(boardId) as { m: number };
     const nextOrder = maxRow.m + 1;
     const result = db.run(
-      "INSERT INTO list (board_id, name, sort_order, color, emoji) VALUES (?, ?, ?, ?, ?)",
-      [boardId, trimmed, nextOrder, null, emoji],
+      "INSERT INTO list (board_id, name, sort_order, color, emoji, created_by_principal, created_by_label) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [boardId, trimmed, nextOrder, null, emoji, principal, label],
     );
     listId = Number(result.lastInsertRowid);
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);

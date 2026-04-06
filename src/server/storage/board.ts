@@ -1,8 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import type { Database } from "bun:sqlite";
 import { DEFAULT_BOARD_COLOR, parseBoardColor } from "../../shared/boardColor";
-import type { BoardCliAccess } from "../../shared/boardCliAccess";
-import { normalizeBoardCliAccessColumn } from "../../shared/boardCliAccess";
+import {
+  EMPTY_BOARD_CLI_POLICY,
+  normalizeBoardCliPolicyImplied,
+  type BoardCliPolicy,
+} from "../../shared/cliPolicy";
+import type { CreatorPrincipalType } from "../../shared/provenance";
 import {
   DEFAULT_STATUS_IDS,
   createDefaultTaskGroups,
@@ -24,6 +28,19 @@ import {
   parseJsonColumn,
   statusWorkflowOrder,
 } from "./helpers";
+import {
+  boardCliPolicyFromJoinColumns,
+  insertDefaultBoardCliPolicy,
+  insertFullBoardCliPolicy,
+  upsertBoardCliPolicy,
+} from "./cliPolicy";
+
+function normalizeCreatorPrincipal(
+  raw: string | null | undefined,
+): CreatorPrincipalType | undefined {
+  if (raw === "web" || raw === "cli" || raw === "system") return raw;
+  return undefined;
+}
 
 /** Ensures the data directory exists (see docs/sqlite_migration §5a / §5d). */
 export async function ensureDataDir(): Promise<void> {
@@ -57,9 +74,20 @@ function mapIndexRow(row: {
   name: string;
   emoji: string | null;
   description: string | null;
-  cli_access: string | null;
   created_at: string;
+  read_board: number | null;
+  create_tasks: number | null;
+  manage_cli_created_tasks: number | null;
+  manage_any_tasks: number | null;
+  create_lists: number | null;
+  manage_cli_created_lists: number | null;
+  manage_any_lists: number | null;
+  manage_structure: number | null;
+  delete_board: number | null;
+  edit_board: number | null;
 }): BoardIndexEntry {
+  const policy =
+    boardCliPolicyFromJoinColumns(row) ?? EMPTY_BOARD_CLI_POLICY;
   return {
     id: row.id,
     slug: row.slug,
@@ -69,26 +97,47 @@ function mapIndexRow(row: {
         ? String(row.emoji).trim()
         : null,
     description: row.description ?? "",
-    cliAccess: normalizeBoardCliAccessColumn(row.cli_access),
+    cliPolicy: policy,
     createdAt: row.created_at,
   };
 }
+
+const BOARD_INDEX_POLICY_COLS = `p.read_board, p.create_tasks, p.manage_cli_created_tasks, p.manage_any_tasks,
+    p.create_lists, p.manage_cli_created_lists, p.manage_any_lists, p.manage_structure, p.delete_board, p.edit_board`;
+
+type BoardRowWithPolicyJoin = {
+  id: number;
+  name: string;
+  slug: string;
+  emoji: string | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_principal: string | null;
+  created_by_label: string | null;
+  read_board: number | null;
+  create_tasks: number | null;
+  manage_cli_created_tasks: number | null;
+  manage_any_tasks: number | null;
+  create_lists: number | null;
+  manage_cli_created_lists: number | null;
+  manage_any_lists: number | null;
+  manage_structure: number | null;
+  delete_board: number | null;
+  edit_board: number | null;
+};
 
 export async function readBoardIndex(): Promise<BoardIndexEntry[]> {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board ORDER BY name COLLATE NOCASE",
+      `SELECT b.id, b.slug, b.name, b.emoji, b.description, b.created_at,
+              ${BOARD_INDEX_POLICY_COLS}
+       FROM board b
+       LEFT JOIN board_cli_policy p ON p.board_id = b.id
+       ORDER BY b.name COLLATE NOCASE`,
     )
-    .all() as {
-    id: number;
-    slug: string;
-    name: string;
-    emoji: string | null;
-    description: string | null;
-    cli_access: string | null;
-    created_at: string;
-  }[];
+    .all() as Parameters<typeof mapIndexRow>[0][];
   return rows.map(mapIndexRow);
 }
 
@@ -100,32 +149,24 @@ export async function entryByIdOrSlug(
   if (/^\d+$/.test(ref)) {
     const row = db
       .query(
-        "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board WHERE id = ?",
+        `SELECT b.id, b.slug, b.name, b.emoji, b.description, b.created_at,
+                ${BOARD_INDEX_POLICY_COLS}
+         FROM board b
+         LEFT JOIN board_cli_policy p ON p.board_id = b.id
+         WHERE b.id = ?`,
       )
-      .get(Number(ref)) as {
-      id: number;
-      slug: string;
-      name: string;
-      emoji: string | null;
-      description: string | null;
-      cli_access: string | null;
-      created_at: string;
-    } | null;
+      .get(Number(ref)) as Parameters<typeof mapIndexRow>[0] | null;
     if (row) return mapIndexRow(row);
   }
   const row2 = db
     .query(
-      "SELECT id, slug, name, emoji, description, cli_access, created_at FROM board WHERE slug = ?",
+      `SELECT b.id, b.slug, b.name, b.emoji, b.description, b.created_at,
+              ${BOARD_INDEX_POLICY_COLS}
+       FROM board b
+       LEFT JOIN board_cli_policy p ON p.board_id = b.id
+       WHERE b.slug = ?`,
     )
-    .get(ref) as {
-    id: number;
-    slug: string;
-    name: string;
-    emoji: string | null;
-    description: string | null;
-    cli_access: string | null;
-    created_at: string;
-  } | null;
+    .get(ref) as Parameters<typeof mapIndexRow>[0] | null;
   return row2 ? mapIndexRow(row2) : null;
 }
 
@@ -133,21 +174,20 @@ export function loadBoard(boardId: number): Board | null {
   const db = getDb();
   const boardRow = db
     .query(
-      "SELECT id, name, slug, emoji, cli_access, description, created_at, updated_at FROM board WHERE id = ?",
+      `SELECT b.id, b.name, b.slug, b.emoji, b.description, b.created_at, b.updated_at,
+              b.created_by_principal, b.created_by_label,
+              ${BOARD_INDEX_POLICY_COLS}
+       FROM board b
+       LEFT JOIN board_cli_policy p ON p.board_id = b.id
+       WHERE b.id = ?`,
     )
-    .get(boardId) as
-    | {
-        id: number;
-        name: string;
-        slug: string;
-        emoji: string | null;
-        cli_access: string | null;
-        description: string | null;
-        created_at: string;
-        updated_at: string;
-      }
-    | null;
+    .get(boardId) as BoardRowWithPolicyJoin | null;
   if (!boardRow) return null;
+
+  const policyRow =
+    boardCliPolicyFromJoinColumns(boardRow) ?? EMPTY_BOARD_CLI_POLICY;
+
+  const createdPrincipal = normalizeCreatorPrincipal(boardRow.created_by_principal);
 
   const prefs = db
     .query(
@@ -204,7 +244,7 @@ export function loadBoard(boardId: number): Board | null {
 
   const listRows = db
     .query(
-      "SELECT id, name, sort_order, color, emoji FROM list WHERE board_id = ? ORDER BY sort_order, id",
+      "SELECT id, name, sort_order, color, emoji, created_by_principal, created_by_label FROM list WHERE board_id = ? ORDER BY sort_order, id",
     )
     .all(boardId) as {
     id: number;
@@ -212,6 +252,8 @@ export function loadBoard(boardId: number): Board | null {
     sort_order: number;
     color: string | null;
     emoji: string | null;
+    created_by_principal: string | null;
+    created_by_label: string | null;
   }[];
 
   const lists: List[] = listRows.map((l) => ({
@@ -223,11 +265,14 @@ export function loadBoard(boardId: number): Board | null {
       l.emoji != null && String(l.emoji).trim() !== ""
         ? String(l.emoji).trim()
         : null,
+    createdByPrincipal: normalizeCreatorPrincipal(l.created_by_principal),
+    createdByLabel: l.created_by_label,
   }));
 
   const taskRows = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji,
+              created_at, updated_at, closed_at, created_by_principal, created_by_label
        FROM task WHERE board_id = ? ORDER BY list_id, status_id, sort_order, id`,
     )
     .all(boardId) as {
@@ -244,6 +289,8 @@ export function loadBoard(boardId: number): Board | null {
     created_at: string;
     updated_at: string;
     closed_at: string | null;
+    created_by_principal: string | null;
+    created_by_label: string | null;
   }[];
 
   const tasks: Task[] = taskRows.map((t) => ({
@@ -263,6 +310,8 @@ export function loadBoard(boardId: number): Board | null {
     createdAt: t.created_at,
     updatedAt: t.updated_at,
     closedAt: t.closed_at ?? undefined,
+    createdByPrincipal: normalizeCreatorPrincipal(t.created_by_principal),
+    createdByLabel: t.created_by_label,
   }));
 
   const rawVis = prefs?.visible_statuses
@@ -289,7 +338,9 @@ export function loadBoard(boardId: number): Board | null {
         ? String(boardRow.emoji).trim()
         : null,
     description: boardRow.description ?? "",
-    cliAccess: normalizeBoardCliAccessColumn(boardRow.cli_access),
+    cliPolicy: policyRow,
+    createdByPrincipal: createdPrincipal,
+    createdByLabel: boardRow.created_by_label,
     backgroundImage: prefs?.background_image ?? undefined,
     boardColor: parseBoardColor(prefs?.board_color ?? undefined),
     taskGroups,
@@ -339,19 +390,42 @@ export async function deleteBoardById(id: number): Promise<void> {
   db.run("DELETE FROM board WHERE id = ?", [id]);
 }
 
+export type CreateBoardOptions = {
+  /** Persisted on the board row for CLI vs web provenance. */
+  createdBy?: { principal: CreatorPrincipalType; label: string | null };
+  /**
+   * `web_default`: CLI locked out until a web user raises access (legacy `none`).
+   * `cli_full`: CLI-created board bootstrap (full `board_cli_policy` row).
+   */
+  cliBootstrap?: "web_default" | "cli_full";
+};
+
 /** Create board row, default groups/priorities, default view prefs; returns full board. */
 export async function createBoardWithDefaults(
   name: string,
   slug: string,
   emoji: string | null = null,
   description: string = "",
+  options: CreateBoardOptions = {},
 ): Promise<Board> {
   const now = new Date().toISOString();
+  const createdBy = options.createdBy ?? { principal: "web" as const, label: "User" };
+  const bootstrap = options.cliBootstrap ?? "web_default";
   const boardId = withTransaction(getDb(), () => {
     const db = getDb();
     const r = db.run(
-      "INSERT INTO board (name, slug, emoji, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [name, slug, emoji, description, now, now],
+      `INSERT INTO board (name, slug, emoji, description, created_by_principal, created_by_label, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        slug,
+        emoji,
+        description,
+        createdBy.principal,
+        createdBy.label,
+        now,
+        now,
+      ],
     );
     const id = Number(r.lastInsertRowid);
     const groups = createDefaultTaskGroups();
@@ -393,6 +467,11 @@ export async function createBoardWithDefaults(
         0,
       ],
     );
+    if (bootstrap === "cli_full") {
+      insertFullBoardCliPolicy(id);
+    } else {
+      insertDefaultBoardCliPolicy(id);
+    }
     return id;
   });
   const loaded = loadBoard(boardId);
@@ -577,17 +656,18 @@ export async function patchBoard(
   patch: {
     name?: string;
     emoji?: string | null;
-    cliAccess?: BoardCliAccess;
+    /** Granular policy (web-only); updates `board_cli_policy`. */
+    cliPolicy?: BoardCliPolicy;
     description?: string | null;
     boardColor?: Board["boardColor"];
   },
 ): Promise<Board | null> {
   const hasName = "name" in patch;
   const hasEmoji = "emoji" in patch;
-  const hasCli = "cliAccess" in patch;
+  const hasCliPolicy = "cliPolicy" in patch;
   const hasDesc = "description" in patch;
   const hasColor = "boardColor" in patch;
-  if (!hasName && !hasEmoji && !hasCli && !hasDesc && !hasColor) return null;
+  if (!hasName && !hasEmoji && !hasCliPolicy && !hasDesc && !hasColor) return null;
 
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
@@ -611,9 +691,9 @@ export async function patchBoard(
     nextEmoji = patch.emoji ?? null;
   }
 
-  const nextCli: BoardCliAccess = hasCli
-    ? patch.cliAccess!
-    : (existing.cliAccess ?? "none");
+  const normalizedPolicy = hasCliPolicy
+    ? normalizeBoardCliPolicyImplied(patch.cliPolicy!)
+    : null;
 
   const nextDesc = hasDesc
     ? (patch.description ?? "").trim()
@@ -625,7 +705,7 @@ export async function patchBoard(
   const metaChanged =
     (hasName && nextName !== existing.name) ||
     (hasEmoji && (nextEmoji ?? null) !== (existing.emoji ?? null)) ||
-    (hasCli && nextCli !== (existing.cliAccess ?? "none")) ||
+    (hasCliPolicy && normalizedPolicy !== null) ||
     (hasDesc && nextDesc !== (existing.description ?? ""));
 
   if (!metaChanged && !colorChanged) return existing;
@@ -634,9 +714,12 @@ export async function patchBoard(
   if (metaChanged) {
     withTransaction(db, () => {
       db.run(
-        "UPDATE board SET name = ?, slug = ?, emoji = ?, cli_access = ?, description = ?, updated_at = ? WHERE id = ?",
-        [nextName, nextSlug, nextEmoji, nextCli, nextDesc, now, boardId],
+        "UPDATE board SET name = ?, slug = ?, emoji = ?, description = ?, updated_at = ? WHERE id = ?",
+        [nextName, nextSlug, nextEmoji, nextDesc, now, boardId],
       );
+      if (hasCliPolicy && normalizedPolicy) {
+        upsertBoardCliPolicy(boardId, normalizedPolicy);
+      }
     });
   }
 

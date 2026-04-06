@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import type { SearchHit } from "../../shared/models";
-import { cliBoardAccessError, isCliRequest } from "../cliBoardGuard";
+import type { AppBindings } from "../auth";
+import { cliBoardReadError, isCliRequest } from "../cliPolicyGuard";
 import { entryByIdOrSlug } from "../storage/board";
 import { searchTasks } from "../storage/search";
 
-export const searchRoute = new Hono();
+export const searchRoute = new Hono<AppBindings>();
 
 /** Default: prefix-match on last token (`drag*`); `0`, `false`, `no` disables. */
 function parsePrefixQuery(raw: string | undefined): boolean {
@@ -39,7 +40,7 @@ searchRoute.get("/", async (c) => {
     if (!entry) {
       return c.json({ error: "Board not found" }, 404);
     }
-    const blocked = cliBoardAccessError(c, entry, "read");
+    const blocked = cliBoardReadError(c, entry);
     if (blocked) return blocked;
     boardId = entry.id;
   }

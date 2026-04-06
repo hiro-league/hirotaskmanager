@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { EMPTY_BOARD_CLI_POLICY } from "./cliPolicy";
 import { ALL_TASK_GROUPS } from "./models";
 import type { Board, List, Status, Task } from "./models";
 import {
@@ -33,7 +34,7 @@ function minimalBoard(overrides: Partial<Board> = {}): Board {
     id: 1,
     name: "B",
     description: "",
-    cliAccess: "none",
+    cliPolicy: EMPTY_BOARD_CLI_POLICY,
     taskGroups: [{ id: 0, label: "g" }],
     taskPriorities: [
       { id: 10, value: 10, label: "low", color: "#94a3b8", isSystem: true },

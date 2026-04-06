@@ -1,7 +1,6 @@
 import type { BoardColorPreset } from "./boardColor";
-import type { BoardCliAccess } from "./boardCliAccess";
-
-export type { BoardCliAccess } from "./boardCliAccess";
+import type { BoardCliPolicy } from "./cliPolicy";
+import type { CreatorPrincipalType } from "./provenance";
 
 /** Workflow status row from `GET /api/statuses` / `status` table. */
 export interface Status {
@@ -135,6 +134,9 @@ export interface List {
   color?: string;
   /** Optional emoji before the list name; not indexed for search. */
   emoji?: string | null;
+  /** Who created this list (`web` vs `cli`); optional on older payloads. */
+  createdByPrincipal?: CreatorPrincipalType;
+  createdByLabel?: string | null;
 }
 
 /** Visible list name: emoji + space + name when emoji is set. */
@@ -162,6 +164,9 @@ export interface Task {
   updatedAt: string;
   /** Set when the task is in a closed (`is_closed`) status; first close time is preserved. */
   closedAt?: string | null;
+  /** Who created this task (`web` vs `cli`); optional on older payloads. */
+  createdByPrincipal?: CreatorPrincipalType;
+  createdByLabel?: string | null;
 }
 
 /** Visible task title line: emoji + space + title when emoji is set. */
@@ -180,8 +185,8 @@ export interface BoardIndexEntry {
   emoji?: string | null;
   /** Plain-text notes; empty string when unset (same as full `Board`). */
   description: string;
-  /** Access level for hirotm CLI (`X-TaskManager-Client`); default `none`. */
-  cliAccess: BoardCliAccess;
+  /** Granular hirotm CLI permissions (`board_cli_policy`). */
+  cliPolicy: BoardCliPolicy;
   createdAt: string;
 }
 
@@ -212,8 +217,8 @@ export interface Board {
   emoji?: string | null;
   /** Plain-text notes for humans; not indexed for search yet. */
   description?: string;
-  /** Access level for hirotm CLI; default `none`. */
-  cliAccess: BoardCliAccess;
+  /** Granular hirotm CLI permissions (`board_cli_policy`). */
+  cliPolicy: BoardCliPolicy;
   backgroundImage?: string;
   /** Canvas color preset for the main column area; omitted reads as default (cyan) in UI. */
   boardColor?: BoardColorPreset;
@@ -234,6 +239,9 @@ export interface Board {
   tasks: Task[];
   createdAt: string;
   updatedAt: string;
+  /** Who created this board (`web` vs `cli`); optional on older payloads. */
+  createdByPrincipal?: CreatorPrincipalType;
+  createdByLabel?: string | null;
 }
 
 /** Visible board title line: emoji + space + name when emoji is set. */

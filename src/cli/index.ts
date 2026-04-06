@@ -271,7 +271,6 @@ addPortOption(
     .option("--description-file <path>", "Read description from a UTF-8 file")
     .option("--description-stdin", "Read description from stdin until EOF")
     .option("--clear-description", "Clear board description")
-    .option("--cli-access <mode>", "CLI access: none, read, or read_write")
     .option(
       "--board-color <preset>",
       "Board color preset: stone, cyan, azure, indigo, violet, rose, amber, emerald, coral, sage",
@@ -289,7 +288,6 @@ addPortOption(
       descriptionFile?: string;
       descriptionStdin?: boolean;
       clearDescription?: boolean;
-      cliAccess?: string;
       boardColor?: string;
       clearBoardColor?: boolean;
     },
@@ -306,7 +304,6 @@ addPortOption(
         descriptionFile: options.descriptionFile,
         descriptionStdin: options.descriptionStdin,
         clearDescription: options.clearDescription,
-        cliAccess: options.cliAccess,
         boardColor: options.boardColor,
         clearBoardColor: options.clearBoardColor,
       });

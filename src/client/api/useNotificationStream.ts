@@ -9,8 +9,12 @@ function notificationEventsUrl(): string {
   const path = "/api/notifications/events";
   if (import.meta.env.PROD) return path;
   const raw = import.meta.env.VITE_API_ORIGIN as string | undefined;
+  const fallbackOrigin =
+    typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:3001`
+      : "http://localhost:3001";
   const origin =
-    raw && raw.length > 0 ? raw.replace(/\/$/, "") : "http://127.0.0.1:3001";
+    raw && raw.length > 0 ? raw.replace(/\/$/, "") : fallbackOrigin;
   return `${origin}${path}`;
 }
 
@@ -21,7 +25,7 @@ export function useNotificationStream(): void {
   const pushToast = useNotificationUiStore((s) => s.pushToast);
 
   useEffect(() => {
-    const es = new EventSource(notificationEventsUrl());
+    const es = new EventSource(notificationEventsUrl(), { withCredentials: true });
     const browserInstanceId = getBrowserClientInstanceId();
 
     const onNotificationCreated = (raw: Event) => {

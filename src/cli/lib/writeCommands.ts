@@ -1,5 +1,4 @@
 import { parseBoardColor } from "../../shared/boardColor";
-import { parseBoardCliAccess } from "../../shared/boardCliAccess";
 import type { Board } from "../../shared/models";
 import type {
   ListDeleteMutationResult,
@@ -170,7 +169,6 @@ export async function runBoardsUpdate(opts: {
   name?: string;
   emoji?: string;
   clearEmoji?: boolean;
-  cliAccess?: string;
   boardColor?: string;
   clearBoardColor?: boolean;
   description?: string;
@@ -216,13 +214,6 @@ export async function runBoardsUpdate(opts: {
   else if (opts.emoji !== undefined) {
     const emojiOpt = parseOptionalEmojiFlag(opts.emoji);
     if (!emojiOpt.omit) patch.emoji = emojiOpt.value;
-  }
-  if (opts.cliAccess !== undefined) {
-    const cliAccess = parseBoardCliAccess(opts.cliAccess.trim());
-    if (!cliAccess) {
-      throw new CliError("Invalid cliAccess", 2, { cliAccess: opts.cliAccess });
-    }
-    patch.cliAccess = cliAccess;
   }
   if (opts.clearBoardColor) {
     patch.boardColor = null;

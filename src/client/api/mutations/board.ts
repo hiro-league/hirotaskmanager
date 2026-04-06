@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_BOARD_COLOR } from "../../../shared/boardColor";
-import type { BoardCliAccess } from "../../../shared/boardCliAccess";
+import {
+  EMPTY_BOARD_CLI_POLICY,
+  type BoardCliPolicy,
+} from "../../../shared/cliPolicy";
 import {
   createDefaultTaskGroups,
   createDefaultTaskPriorities,
@@ -26,7 +29,7 @@ function buildOptimisticBoard(id: number, name: string): Board {
     name,
     emoji: null,
     description: "",
-    cliAccess: "none",
+    cliPolicy: EMPTY_BOARD_CLI_POLICY,
     taskGroups,
     taskPriorities,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
@@ -68,7 +71,7 @@ export function useCreateBoard() {
         name,
         emoji: null,
         description: "",
-        cliAccess: "none",
+        cliPolicy: EMPTY_BOARD_CLI_POLICY,
         createdAt: new Date().toISOString(),
       };
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) => [
@@ -103,7 +106,7 @@ export function useCreateBoard() {
                   name: data.name,
                   emoji: data.emoji ?? null,
                   description: data.description ?? "",
-                  cliAccess: data.cliAccess ?? "none",
+                  cliPolicy: data.cliPolicy,
                   createdAt: data.createdAt,
                 }
               : e,
@@ -125,14 +128,14 @@ export function usePatchBoard() {
       boardId: number;
       name?: string;
       emoji?: string | null;
-      cliAccess?: BoardCliAccess;
+      cliPolicy?: BoardCliPolicy;
       description?: string | null;
       boardColor?: Board["boardColor"];
     }) => {
       const body: Record<string, unknown> = {};
       if (input.name !== undefined) body.name = input.name;
       if (input.emoji !== undefined) body.emoji = input.emoji;
-      if (input.cliAccess !== undefined) body.cliAccess = input.cliAccess;
+      if (input.cliPolicy !== undefined) body.cliPolicy = input.cliPolicy;
       if (input.description !== undefined) body.description = input.description;
       if (input.boardColor !== undefined) body.boardColor = input.boardColor;
       return fetchJson<Board>(`/api/boards/${input.boardId}`, {
@@ -154,8 +157,8 @@ export function usePatchBoard() {
                 ...e,
                 ...(trimmed !== undefined ? { name: trimmed } : {}),
                 ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
-                ...(input.cliAccess !== undefined
-                  ? { cliAccess: input.cliAccess }
+                ...(input.cliPolicy !== undefined
+                  ? { cliPolicy: input.cliPolicy }
                   : {}),
                 ...(input.description !== undefined
                   ? { description: input.description ?? "" }
@@ -169,8 +172,8 @@ export function usePatchBoard() {
           ...prevDetail,
           ...(trimmed !== undefined ? { name: trimmed } : {}),
           ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
-          ...(input.cliAccess !== undefined
-            ? { cliAccess: input.cliAccess }
+          ...(input.cliPolicy !== undefined
+            ? { cliPolicy: input.cliPolicy }
             : {}),
           ...(input.description !== undefined
             ? { description: input.description ?? "" }
@@ -201,7 +204,7 @@ export function usePatchBoard() {
                 slug: data.slug ?? e.slug,
                 emoji: data.emoji ?? null,
                 description: data.description ?? "",
-                cliAccess: data.cliAccess,
+                cliPolicy: data.cliPolicy,
               }
             : e,
         ),

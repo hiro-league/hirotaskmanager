@@ -94,7 +94,7 @@ Covers the remaining **CLI commands** that can ship on top of the **current** se
 
 | Implemented CLI command | HTTP / implementation basis | Notes |
 |------------------------|-----------------------------|-------|
-| `hirotm boards update <id-or-slug>` | `PATCH /api/boards/:id` | Updates board metadata such as name, emoji, description, `cliAccess`, `boardColor` |
+| `hirotm boards update <id-or-slug>` | `PATCH /api/boards/:id` | Updates board metadata such as name, emoji, description, `boardColor` (CLI policy: web app Edit board only) |
 | `hirotm boards delete <id-or-slug>` | `DELETE /api/boards/:id` | Deletes board |
 | `hirotm boards groups <id-or-slug>` | `PATCH /api/boards/:id/groups` | Replace-style set sync; CLI/help requirements and remap behavior live in design §3.12 |
 | `hirotm boards priorities <id-or-slug>` | `PATCH /api/boards/:id/priorities` | Replace-style set sync with built-in restrictions; see design §3.12 |

@@ -1055,11 +1055,11 @@ export function BoardView({ boardId }: BoardViewProps) {
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
-              {data.cliAccess === "none" ? (
+              {!data.cliPolicy.readBoard ? (
                 <span
                   className="inline-flex shrink-0 text-muted-foreground"
-                  title="CLI access off — hirotm cannot open this board until access is enabled in Edit board"
-                  aria-label="CLI access disabled for this board"
+                  title="CLI read off — hirotm cannot open this board until enabled in Edit board"
+                  aria-label="CLI read disabled for this board"
                 >
                   <Terminal className="size-4" strokeWidth={2} aria-hidden />
                 </span>

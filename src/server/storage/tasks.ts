@@ -1,5 +1,7 @@
 import { coerceTaskStatus } from "../../shared/models";
 import type { Board, Task } from "../../shared/models";
+import type { CreatorPrincipalType } from "../../shared/provenance";
+import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
 import { boardExists, statusIsClosed } from "./helpers";
 import { loadBoard } from "./board";
@@ -18,7 +20,16 @@ type TaskRow = {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  created_by_principal?: string | null;
+  created_by_label?: string | null;
 };
+
+function normalizeTaskPrincipal(
+  raw: string | null | undefined,
+): CreatorPrincipalType | undefined {
+  if (raw === "web" || raw === "cli" || raw === "system") return raw;
+  return undefined;
+}
 
 export type TaskWriteResult = {
   boardId: number;
@@ -50,6 +61,8 @@ function mapTaskRow(t: TaskRow): Task {
     createdAt: t.created_at,
     updatedAt: t.updated_at,
     closedAt: t.closed_at ?? undefined,
+    createdByPrincipal: normalizeTaskPrincipal(t.created_by_principal) ?? "web",
+    createdByLabel: t.created_by_label,
   };
 }
 
@@ -58,7 +71,8 @@ export function readTaskById(boardId: number, taskId: number): Task | null {
   const db = getDb();
   const row = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji,
+              created_at, updated_at, closed_at, created_by_principal, created_by_label
        FROM task WHERE id = ? AND board_id = ?`,
     )
     .get(taskId, boardId) as TaskRow | null;
@@ -76,6 +90,7 @@ export function createTaskOnBoard(
     priorityId?: number | null;
     emoji?: string | null;
   },
+  provenance?: RowProvenance,
 ): TaskWriteResult | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
@@ -118,12 +133,15 @@ export function createTaskOnBoard(
   const now = new Date().toISOString();
   const closedAt = statusIsClosed(db, statusId) ? now : null;
   const emoji = input.emoji ?? null;
+  const principal = provenance?.principal ?? "web";
+  const label = provenance?.label ?? null;
   let taskId: number | null = null;
   withTransaction(db, () => {
     const result = db.run(
       `INSERT INTO task (list_id, group_id, priority_id, board_id, status_id,
-         title, body, sort_order, color, emoji, created_at, updated_at, closed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         title, body, sort_order, color, emoji, created_at, updated_at, closed_at,
+         created_by_principal, created_by_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.listId,
         input.groupId,
@@ -138,6 +156,8 @@ export function createTaskOnBoard(
         now,
         now,
         closedAt,
+        principal,
+        label,
       ],
     );
     taskId = Number(result.lastInsertRowid);

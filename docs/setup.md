@@ -2,6 +2,8 @@
 
 This project is a **Bun** + **Hono** API and a **Vite** + **React** SPA. In development, the API listens on port **3001** and Vite serves the UI (default **5173**), proxying `/api` to the API. In production, a single Bun process serves both the API and the built SPA.
 
+Board data is **SQLite** (`taskmanager.db` under `DATA_DIR`); see [sqlite_data_model.md](./sqlite_data_model.md). **Authentication** uses a passphrase and session cookie; there is **no development bypass**—local dev matches production auth behavior. Overview: [auth-design.md](./auth-design.md).
+
 ## Prerequisites
 
 ### Node.js
@@ -66,6 +68,8 @@ npm run dev
 
 Open the URL Vite prints (usually **http://localhost:5173**). The Vite proxy forwards `/api` requests to the Bun API on port 3001.
 
+**First-time auth:** If this install has not completed setup, the UI walks you through choosing a passphrase. The **recovery key** is printed **once** in the **API terminal** (the process running `dev:server` or `npm run dev`). Save it before continuing. Then **log in** at the Vite URL. The `hirotm` CLI and other callers without a browser session use **CLI** permissions—grant access per board from the web UI after login.
+
 **Run API only:**
 
 ```bash
@@ -109,7 +113,7 @@ PORT=8080 npm start
 DATA_DIR=/path/to/data npm start
 ```
 
-By default, production stores data in `~/.taskmanager/data`. In development, data lives in `./data` at the repo root.
+By default, production stores the SQLite file under `~/.taskmanager/data`. In development, it lives in `./data` at the repo root. **Auth state** (hashed passphrase/session material) is stored separately under `~/.taskmanager/auth/` (not inside `DATA_DIR`).
 
 ---
 
@@ -138,5 +142,5 @@ If the Bun debugger misbehaves on Windows, see [bun-windows-cursor-debug.md](./b
 
 1. Install **Node.js** (and optionally **Bun**)
 2. `npm install`
-3. `npm run dev` — open Vite URL, confirm `/api/health` returns `{"ok":true}`
-4. `npm run build && npm start` — verify production mode on **http://localhost:3001**
+3. `npm run dev` — open the Vite URL; if prompted, complete **setup** and copy the recovery key from the **API** terminal; then **log in**. Confirm `/api/health` returns `{"ok":true}` (e.g. in the browser or with `curl`).
+4. `npm run build && npm start` — verify production mode on **http://localhost:3001** (setup/login as above if this is a fresh auth state)

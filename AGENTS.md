@@ -8,7 +8,7 @@ Use the `hirotm` CLI for TaskManager board, list, task, status, and **search** o
 - When using `hirotm` for agent-driven writes, include `--client-name "Cursor Agent"` so notifications show the writer clearly.
 - Never attempt accessing HTTP API, sqlite db or running taskmanager repo code directly to access or mutate TaskManager data.
 - Do not modify `data/taskmanager.db` directly.
-- Do not attempt to set CLI Access using the web app.
+- Do not change CLI access policy by calling the HTTP API or editing the database directly unless the user explicitly asks; in normal use, the human configures CLI access in the web app after logging in.
 - Do not write raw SQL unless the user explicitly asks for database-level work.
 - Treat CLI JSON output as the source of truth for current TaskManager state.
 - If a query command reports `Server not reachable`, run the exact `hirotm start ...` command from the error hint before retrying.

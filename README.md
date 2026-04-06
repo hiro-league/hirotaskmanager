@@ -1,10 +1,10 @@
 # TaskManager
 
-Local-first task board in the browser. Boards, lists, and tasks are stored as **JSON on disk** (readable and editable outside the app). No cloud account or database server.
+Local-first task board in the browser. Boards, lists, and tasks are stored in **SQLite** (`taskmanager.db` under your [data directory](#data-directory)). No cloud account. The web UI is protected by **passphrase login**; local automation uses a scoped **CLI** principal (see [Authentication and CLI access](#authentication-and-cli-access)).
 
 ## Features
 
-- **Boards** — Multiple boards; sidebar catalog backed by `_index.json`
+- **Boards** — Multiple boards; sidebar catalog in the SQLite-backed store
 - **List columns** — Each list is a column; tasks grouped by **status bands** (stacked vertically)
 - **Task types** — Boards define task types; filter the board by active type
 - **Markdown** — Task bodies with edit + preview
@@ -23,6 +23,14 @@ Use **either** Bun **or** Node.js — you do not need both.
 |------|------------------|
 | **Bun** | [Bun](https://bun.sh) — installs dependencies, runs `vite build`, and runs the server |
 | **Node.js** | [Node.js](https://nodejs.org) (LTS or Current) with `npm` / `npx`. `npm start` runs the server via `npx bun` (downloads Bun if needed). |
+
+## Authentication and CLI access
+
+- **First run:** The server runs in **setup** mode until auth is initialized. In the browser, choose a **passphrase**. The **recovery key** is printed **once in the terminal** where the server runs—save it outside the app; it is not kept in plaintext after setup.
+- **Web:** After setup, open the app URL and **log in** with your passphrase. The server sets an **HttpOnly** session cookie. Use **logout** in the UI to clear the session.
+- **Where auth lives:** `~/.taskmanager/auth/auth.json` (Windows: `%USERPROFILE%\.taskmanager\auth\auth.json`). This is **separate** from `DATA_DIR` and stores only hashed material.
+- **CLI and local HTTP:** Requests **without** a valid browser session are the **CLI** principal (including `hirotm`). They are allowed only what **CLI access** grants per board; configure that in the **web app after logging in**. Details: [docs/auth-design.md](docs/auth-design.md).
+- **Development:** There is **no auth bypass** in dev—the flow matches production. Complete setup once if needed, then log in at the Vite dev URL.
 
 ## Install and run (production)
 
@@ -97,7 +105,7 @@ On **macOS / Linux**, if `npm start` does not set `NODE_ENV` correctly, run:
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | HTTP port (default `3001`) |
-| `DATA_DIR` | Root directory for JSON data (see [Data directory](#data-directory)) |
+| `DATA_DIR` | Root directory for app data; contains `taskmanager.db` (see [Data directory](#data-directory)) |
 
 Set `DATA_DIR` with the same shell rules as `NODE_ENV`. Examples:
 
@@ -111,22 +119,24 @@ If you use the **Node** path and do not have `bun` on `PATH`, replace `bun src/s
 
 ## Data directory
 
-Layout:
+App database file:
 
 ```
 <DATA_DIR>/
-  _index.json       # board catalog
-  boards/
-    <id>.json       # full board document (lists + tasks)
+  taskmanager.db    # SQLite (boards, lists, tasks, FTS, CLI policy, …)
 ```
 
-**How the app picks the directory**
+Schema and tables: [docs/sqlite_data_model.md](docs/sqlite_data_model.md).
+
+**How the app picks `DATA_DIR`**
 
 1. If **`DATA_DIR`** is set → that path (relative paths are resolved from the current working directory)
 2. Else if **`NODE_ENV=production`** → `~/.taskmanager/data` (Windows: `%USERPROFILE%\.taskmanager\data`)
 3. Else (development) → `./data` under the current working directory (usually the repo root)
 
-`data/` is in `.gitignore`; local boards are not committed unless you change that.
+**Auth state** (passphrase/session hashes) is **not** under `DATA_DIR`; it lives under `~/.taskmanager/auth/` (see [Authentication and CLI access](#authentication-and-cli-access)).
+
+`data/` is in `.gitignore`; local databases are not committed unless you change that.
 
 ## Clone for development
 
@@ -142,7 +152,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**. API: **http://localhost:3001** (Vite proxies `/api`).
+Open **http://localhost:5173**. API: **http://localhost:3001** (Vite proxies `/api`). On first launch, complete **setup** in the browser and watch the **API terminal** for the recovery key; then **log in** (same as production—see [Authentication and CLI access](#authentication-and-cli-access)).
 
 **With Bun:**
 
@@ -160,7 +170,7 @@ The `dev` script may still invoke **`npm`** for subprocesses. If `bun run dev` f
 
 Other commands: `npm run typecheck` or `bun run typecheck`; `npm run build` or `bun run build`.
 
-More detail: [docs/setup.md](docs/setup.md). Architecture: [docs/arch_design_guidelines.md](docs/arch_design_guidelines.md).
+More detail: [docs/setup.md](docs/setup.md). Auth requirements: [docs/auth-requirements.md](docs/auth-requirements.md). Architecture: [docs/arch_design_guidelines.md](docs/arch_design_guidelines.md).
 
 ## Contributing
 

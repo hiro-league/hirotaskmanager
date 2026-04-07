@@ -18,6 +18,7 @@ import {
   Search,
   Terminal,
 } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import {
   boardKeys,
   useBoard,
@@ -38,6 +39,12 @@ import {
   type Board,
 } from "../../../shared/models";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
+
+/** Board GET returns 404 JSON when the board is gone or in Trash; send users to the Trash page instead of a raw error. */
+function isBoardDetailNotFound(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.toLowerCase().includes("not found");
+}
 import {
   usePreferencesStore,
   useResolvedActiveTaskGroup,
@@ -902,6 +909,9 @@ export function BoardView({ boardId }: BoardViewProps) {
   }
 
   if (isError || !data) {
+    if (boardId && isError && isBoardDetailNotFound(error)) {
+      return <Navigate to="/trash" replace />;
+    }
     return (
       <div className="flex min-h-0 flex-1 flex-col p-8">
         <p className="text-destructive">

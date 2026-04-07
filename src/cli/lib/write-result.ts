@@ -36,18 +36,19 @@ export type WriteTaskEntity = {
   closedAt: string | null | undefined;
 };
 
-export type WriteDeletedEntity = {
+/** Board/list/task was moved to Trash (soft delete), not permanently removed. */
+export type WriteTrashedEntity = {
   type: "board" | "list" | "task";
   id: number;
   slug?: string;
-  deleted: true;
+  trashed: true;
 };
 
 export type WriteEntity =
   | WriteBoardEntity
   | WriteListEntity
   | WriteTaskEntity
-  | WriteDeletedEntity;
+  | WriteTrashedEntity;
 
 export type WriteSuccessEnvelope = {
   ok: true;
@@ -57,12 +58,12 @@ export type WriteSuccessEnvelope = {
   entity: WriteEntity;
 };
 
-export type WriteDeleteEnvelope = {
+export type WriteTrashMoveEnvelope = {
   ok: true;
   boardId: number;
   boardSlug: string;
   boardUpdatedAt?: string;
-  deleted: WriteDeletedEntity;
+  trashed: WriteTrashedEntity;
 };
 
 export function compactBoardEntity(board: Board): WriteBoardEntity {
@@ -119,28 +120,28 @@ export function writeSuccess(
   };
 }
 
-export function deletedEntity(
-  type: WriteDeletedEntity["type"],
+export function trashedEntity(
+  type: WriteTrashedEntity["type"],
   id: number,
   slug?: string,
-): WriteDeletedEntity {
+): WriteTrashedEntity {
   return {
     type,
     id,
     slug,
-    deleted: true,
+    trashed: true,
   };
 }
 
-export function writeDeleted(
+export function writeTrashMove(
   board: Pick<Board, "id"> & { slug?: string; updatedAt?: string },
-  deleted: WriteDeletedEntity,
-): WriteDeleteEnvelope {
+  trashed: WriteTrashedEntity,
+): WriteTrashMoveEnvelope {
   return {
     ok: true,
     boardId: board.id,
     boardSlug: board.slug ?? "",
     boardUpdatedAt: board.updatedAt,
-    deleted,
+    trashed,
   };
 }

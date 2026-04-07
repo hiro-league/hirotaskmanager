@@ -14,9 +14,9 @@ import {
   compactBoardEntity,
   compactListEntity,
   compactTaskEntity,
-  deletedEntity,
-  writeDeleted,
+  trashedEntity,
   writeSuccess,
+  writeTrashMove,
 } from "./write-result";
 
 function parsePositiveInt(
@@ -271,9 +271,9 @@ export async function runBoardsDelete(opts: {
       { port: opts.port },
     );
     printJson(
-      writeDeleted(
+      writeTrashMove(
         { id: board.id, slug: board.slug },
-        deletedEntity("board", board.id, board.slug),
+        trashedEntity("board", board.id, board.slug),
       ),
     );
   } catch (e) {
@@ -476,13 +476,13 @@ export async function runListsDelete(opts: {
       { port: opts.port },
     );
     printJson(
-      writeDeleted(
+      writeTrashMove(
         {
           id: result.boardId,
           slug: result.boardSlug,
           updatedAt: result.boardUpdatedAt,
         },
-        deletedEntity("list", result.deletedListId),
+        trashedEntity("list", result.deletedListId),
       ),
     );
   } catch (e) {
@@ -799,13 +799,13 @@ export async function runTasksDelete(opts: {
       { port: opts.port },
     );
     printJson(
-      writeDeleted(
+      writeTrashMove(
         {
           id: result.boardId,
           slug: result.boardSlug,
           updatedAt: result.boardUpdatedAt,
         },
-        deletedEntity("task", result.deletedTaskId),
+        trashedEntity("task", result.deletedTaskId),
       ),
     );
   } catch (e) {

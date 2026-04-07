@@ -37,6 +37,12 @@ hirotm statuses list
 hirotm search "<query>"
 hirotm search "<query>" --board <id-or-slug>
 hirotm search "<query>" --format table
+hirotm trash boards   # trashed boards (JSON)
+hirotm trash lists
+hirotm trash tasks
+hirotm boards restore <id-or-slug> | hirotm boards purge <id-or-slug>
+hirotm lists restore <list-id> | hirotm lists purge <list-id>
+hirotm tasks restore <task-id> | hirotm tasks purge <task-id>
 hirotm start --background
 ```
 

@@ -311,7 +311,7 @@ export function ListHeader({
                   handleDelete();
                 }}
               >
-                Delete
+                Move to Trash
               </button>
             </div>
           ) : null}
@@ -322,9 +322,9 @@ export function ListHeader({
       <ConfirmDialog
         open={listDeleteConfirmOpen}
         scope="list-delete-confirmation"
-        title="Delete this list?"
-        message={`Delete list “${displayName}”? Tasks in this list will be removed. This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Move this list to Trash?"
+        message={`Move list “${displayName}” to Trash? Its tasks move with it; you can restore from Trash or delete permanently there.`}
+        confirmLabel="Move to Trash"
         cancelLabel="Cancel"
         variant="destructive"
         onCancel={() => setListDeleteConfirmOpen(false)}

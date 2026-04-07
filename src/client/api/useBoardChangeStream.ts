@@ -123,9 +123,16 @@ export function useBoardChangeStream(
       }
     };
 
-    const onTaskDeleted = (raw: Event) => {
+    const onTaskRemovedFromLiveBoard = (raw: Event) => {
       const event = JSON.parse((raw as MessageEvent<string>).data) as BoardEvent;
-      if (event.kind !== "task-deleted" || isAlreadyApplied(event)) return;
+      if (
+        (event.kind !== "task-deleted" &&
+          event.kind !== "task-trashed" &&
+          event.kind !== "task-purged") ||
+        isAlreadyApplied(event)
+      ) {
+        return;
+      }
       setBoardCaches((current) => ({
         ...current,
         tasks: current.tasks.filter((task) => task.id !== event.taskId),
@@ -162,9 +169,16 @@ export function useBoardChangeStream(
       }
     };
 
-    const onListDeleted = (raw: Event) => {
+    const onListRemovedFromLiveBoard = (raw: Event) => {
       const event = JSON.parse((raw as MessageEvent<string>).data) as BoardEvent;
-      if (event.kind !== "list-deleted" || isAlreadyApplied(event)) return;
+      if (
+        (event.kind !== "list-deleted" &&
+          event.kind !== "list-trashed" &&
+          event.kind !== "list-purged") ||
+        isAlreadyApplied(event)
+      ) {
+        return;
+      }
       setBoardCaches((current) => ({
         ...current,
         lists: current.lists.filter((list) => list.id !== event.listId),
@@ -174,21 +188,44 @@ export function useBoardChangeStream(
       invalidateBoard();
     };
 
+    const onTaskOrListRestored = (raw: Event) => {
+      const event = JSON.parse((raw as MessageEvent<string>).data) as BoardEvent;
+      if (
+        (event.kind !== "task-restored" && event.kind !== "list-restored") ||
+        isAlreadyApplied(event)
+      ) {
+        return;
+      }
+      invalidateBoard();
+    };
+
     es.addEventListener("board-changed", onBoardChanged);
     es.addEventListener("task-created", onTaskCreatedOrUpdated);
     es.addEventListener("task-updated", onTaskCreatedOrUpdated);
-    es.addEventListener("task-deleted", onTaskDeleted);
+    es.addEventListener("task-deleted", onTaskRemovedFromLiveBoard);
+    es.addEventListener("task-trashed", onTaskRemovedFromLiveBoard);
+    es.addEventListener("task-purged", onTaskRemovedFromLiveBoard);
+    es.addEventListener("task-restored", onTaskOrListRestored);
     es.addEventListener("list-created", onListCreatedOrUpdated);
     es.addEventListener("list-updated", onListCreatedOrUpdated);
-    es.addEventListener("list-deleted", onListDeleted);
+    es.addEventListener("list-deleted", onListRemovedFromLiveBoard);
+    es.addEventListener("list-trashed", onListRemovedFromLiveBoard);
+    es.addEventListener("list-purged", onListRemovedFromLiveBoard);
+    es.addEventListener("list-restored", onTaskOrListRestored);
     return () => {
       es.removeEventListener("board-changed", onBoardChanged);
       es.removeEventListener("task-created", onTaskCreatedOrUpdated);
       es.removeEventListener("task-updated", onTaskCreatedOrUpdated);
-      es.removeEventListener("task-deleted", onTaskDeleted);
+      es.removeEventListener("task-deleted", onTaskRemovedFromLiveBoard);
+      es.removeEventListener("task-trashed", onTaskRemovedFromLiveBoard);
+      es.removeEventListener("task-purged", onTaskRemovedFromLiveBoard);
+      es.removeEventListener("task-restored", onTaskOrListRestored);
       es.removeEventListener("list-created", onListCreatedOrUpdated);
       es.removeEventListener("list-updated", onListCreatedOrUpdated);
-      es.removeEventListener("list-deleted", onListDeleted);
+      es.removeEventListener("list-deleted", onListRemovedFromLiveBoard);
+      es.removeEventListener("list-trashed", onListRemovedFromLiveBoard);
+      es.removeEventListener("list-purged", onListRemovedFromLiveBoard);
+      es.removeEventListener("list-restored", onTaskOrListRestored);
       es.close();
     };
   }, [eventBoardId, qc, routeKey]);

@@ -37,11 +37,51 @@ export type ListDeletedEvent = BoardEventBase & {
   listId: number;
 };
 
+/** Task moved to Trash (soft delete). */
+export type TaskTrashedEvent = BoardEventBase & {
+  kind: "task-trashed";
+  taskId: number;
+};
+
+/** List moved to Trash (soft delete). */
+export type ListTrashedEvent = BoardEventBase & {
+  kind: "list-trashed";
+  listId: number;
+};
+
+export type TaskRestoredEvent = BoardEventBase & {
+  kind: "task-restored";
+  taskId: number;
+};
+
+export type ListRestoredEvent = BoardEventBase & {
+  kind: "list-restored";
+  listId: number;
+};
+
+/** Task permanently deleted from Trash. */
+export type TaskPurgedEvent = BoardEventBase & {
+  kind: "task-purged";
+  taskId: number;
+};
+
+/** List permanently deleted from Trash. */
+export type ListPurgedEvent = BoardEventBase & {
+  kind: "list-purged";
+  listId: number;
+};
+
 export type BoardEvent =
   | BoardChangedEvent
   | TaskCreatedEvent
   | TaskUpdatedEvent
   | TaskDeletedEvent
+  | TaskTrashedEvent
+  | TaskRestoredEvent
+  | TaskPurgedEvent
   | ListCreatedEvent
   | ListUpdatedEvent
-  | ListDeletedEvent;
+  | ListDeletedEvent
+  | ListTrashedEvent
+  | ListRestoredEvent
+  | ListPurgedEvent;

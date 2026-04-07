@@ -27,13 +27,13 @@ export function BoardTaskDeleteConfirm({
     <ConfirmDialog
       open={open}
       scope="task-delete-confirmation"
-      title="Delete this task?"
+      title="Move this task to Trash?"
       message={
         task
-          ? `Delete “${taskDisplayTitle(task)}”? This cannot be undone.`
-          : "Delete this task? This cannot be undone."
+          ? `Move “${taskDisplayTitle(task)}” to Trash? You can restore from Trash or delete permanently there.`
+          : "Move this task to Trash? You can restore from Trash or delete permanently there."
       }
-      confirmLabel="Delete"
+      confirmLabel="Move to Trash"
       cancelLabel="Cancel"
       variant="destructive"
       onCancel={onClose}

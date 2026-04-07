@@ -1,3 +1,4 @@
+import type { RestoreOutcome } from "../../shared/trashApi";
 import { coerceTaskStatus } from "../../shared/models";
 import type { Board, Task } from "../../shared/models";
 import type { CreatorPrincipalType } from "../../shared/provenance";
@@ -67,13 +68,29 @@ function mapTaskRow(t: TaskRow): Task {
 }
 
 /** Phase 2: small task writes read back one task row instead of reloading the full board. */
-export function readTaskById(boardId: number, taskId: number): Task | null {
+/** Task row for CLI policy when the task may be trashed. */
+export function readTaskSnapshotById(boardId: number, taskId: number): Task | null {
   const db = getDb();
   const row = db
     .query(
       `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji,
               created_at, updated_at, closed_at, created_by_principal, created_by_label
        FROM task WHERE id = ? AND board_id = ?`,
+    )
+    .get(taskId, boardId) as TaskRow | null;
+  return row ? mapTaskRow(row) : null;
+}
+
+export function readTaskById(boardId: number, taskId: number): Task | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji,
+              t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
     )
     .get(taskId, boardId) as TaskRow | null;
   return row ? mapTaskRow(row) : null;
@@ -96,7 +113,9 @@ export function createTaskOnBoard(
   if (!boardExists(db, boardId)) return null;
 
   const listRow = db
-    .query("SELECT id FROM list WHERE id = ? AND board_id = ?")
+    .query(
+      "SELECT l.id FROM list l INNER JOIN board b ON b.id = l.board_id WHERE l.id = ? AND l.board_id = ? AND l.deleted_at IS NULL AND b.deleted_at IS NULL",
+    )
     .get(input.listId, boardId) as { id: number } | null;
   if (!listRow) return null;
 
@@ -122,7 +141,9 @@ export function createTaskOnBoard(
 
   const bandRows = db
     .query(
-      `SELECT sort_order FROM task WHERE board_id = ? AND list_id = ? AND status_id = ?`,
+      `SELECT t.sort_order FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.list_id = ? AND t.status_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL`,
     )
     .all(boardId, input.listId, statusId) as { sort_order: number }[];
   const maxOrder = bandRows.reduce(
@@ -189,8 +210,11 @@ export function patchTaskOnBoard(
 
   const trow = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
-       FROM task WHERE id = ? AND board_id = ?`,
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.created_at, t.updated_at, t.closed_at
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
     )
     .get(taskId, boardId) as TaskRow | null;
   if (!trow) return null;
@@ -210,7 +234,9 @@ export function patchTaskOnBoard(
       : trow.status_id;
 
   const listOk = db
-    .query("SELECT id FROM list WHERE id = ? AND board_id = ?")
+    .query(
+      "SELECT l.id FROM list l INNER JOIN board b ON b.id = l.board_id WHERE l.id = ? AND l.board_id = ? AND l.deleted_at IS NULL AND b.deleted_at IS NULL",
+    )
     .get(listId, boardId) as { id: number } | null;
   if (!listOk) return null;
 
@@ -233,7 +259,9 @@ export function patchTaskOnBoard(
   if (statusChanged || listChanged) {
     const others = db
       .query(
-        `SELECT sort_order FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? AND id != ?`,
+        `SELECT t.sort_order FROM task t
+         INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+         WHERE t.board_id = ? AND t.list_id = ? AND t.status_id = ? AND t.id != ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL`,
       )
       .all(boardId, listId, statusId, taskId) as { sort_order: number }[];
     order = others.reduce((m, r) => Math.max(m, r.sort_order), -1) + 1;
@@ -285,6 +313,7 @@ export function patchTaskOnBoard(
   return { boardId, boardUpdatedAt: now, task };
 }
 
+/** Normal delete: move task to Trash (soft delete). */
 export function deleteTaskOnBoard(
   boardId: number,
   taskId: number,
@@ -292,8 +321,63 @@ export function deleteTaskOnBoard(
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
   const row = db
-    .query("SELECT id FROM task WHERE id = ? AND board_id = ?")
+    .query(
+      `SELECT t.id FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
+    )
     .get(taskId, boardId) as { id: number } | null;
+  if (!row) return null;
+  const now = new Date().toISOString();
+  withTransaction(db, () => {
+    db.run("UPDATE task SET deleted_at = ? WHERE id = ?", [now, taskId]);
+    db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
+  });
+  return { boardId, boardUpdatedAt: now, deletedTaskId: taskId };
+}
+
+export function restoreTaskOnBoard(
+  boardId: number,
+  taskId: number,
+): RestoreOutcome<TaskWriteResult> {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT t.deleted_at AS td, l.deleted_at AS ld, b.deleted_at AS bd
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.board_id = ?`,
+    )
+    .get(taskId, boardId) as {
+    td: string | null;
+    ld: string | null;
+    bd: string | null;
+  } | null;
+  if (!row || row.td == null) return { ok: false, reason: "not_found" };
+  if (row.bd != null || row.ld != null) return { ok: false, reason: "conflict" };
+  const now = new Date().toISOString();
+  withTransaction(db, () => {
+    db.run("UPDATE task SET deleted_at = NULL WHERE id = ?", [taskId]);
+    db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
+  });
+  const task = readTaskById(boardId, taskId);
+  if (!task) return { ok: false, reason: "not_found" };
+  return { ok: true, value: { boardId, boardUpdatedAt: now, task } };
+}
+
+/** Permanent delete from Trash (row must be explicitly trashed). */
+export function purgeTaskOnBoard(
+  boardId: number,
+  taskId: number,
+): TaskDeleteResult | null {
+  const db = getDb();
+  const row = db
+    .query(
+      "SELECT id FROM task WHERE board_id = ? AND id = ? AND deleted_at IS NOT NULL",
+    )
+    .get(boardId, taskId) as { id: number } | null;
   if (!row) return null;
   const now = new Date().toISOString();
   withTransaction(db, () => {
@@ -321,7 +405,10 @@ export function reorderTasksInBand(
 
   const band = db
     .query(
-      `SELECT id FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? ORDER BY sort_order, id`,
+      `SELECT t.id FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.list_id = ? AND t.status_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
+       ORDER BY t.sort_order, t.id`,
     )
     .all(boardId, listId, statusId) as { id: number }[];
 
@@ -384,8 +471,11 @@ export function moveTaskOnBoard(
 
   const taskRow = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, created_at, updated_at, closed_at
-       FROM task WHERE id = ? AND board_id = ?`,
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.created_at, t.updated_at, t.closed_at
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
     )
     .get(input.taskId, boardId) as TaskRow | null;
   if (!taskRow) return null;
@@ -398,7 +488,9 @@ export function moveTaskOnBoard(
 
   const toListId = input.toListId ?? taskRow.list_id;
   const listOk = db
-    .query("SELECT id FROM list WHERE id = ? AND board_id = ?")
+    .query(
+      "SELECT l.id FROM list l INNER JOIN board b ON b.id = l.board_id WHERE l.id = ? AND l.board_id = ? AND l.deleted_at IS NULL AND b.deleted_at IS NULL",
+    )
     .get(toListId, boardId) as { id: number } | null;
   if (!listOk) return null;
 
@@ -415,20 +507,31 @@ export function moveTaskOnBoard(
 
   const sourceBandIds = (
     db.query(
-      `SELECT id FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? ORDER BY sort_order ASC, id ASC`,
+      `SELECT t.id FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.list_id = ? AND t.status_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
+       ORDER BY t.sort_order ASC, t.id ASC`,
     ).all(boardId, sourceListId, sourceStatus) as { id: number }[]
   ).map((row) => row.id);
 
   const destinationBandWithoutTask = (
     db.query(
-      `SELECT id FROM task WHERE board_id = ? AND list_id = ? AND status_id = ? AND id != ? ORDER BY sort_order ASC, id ASC`,
+      `SELECT t.id FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.list_id = ? AND t.status_id = ? AND t.id != ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
+       ORDER BY t.sort_order ASC, t.id ASC`,
     ).all(boardId, toListId, toStatus, input.taskId) as { id: number }[]
   ).map((row) => row.id);
 
   if (input.beforeTaskId != null) {
     if (input.beforeTaskId === input.taskId) return null;
     const target = db
-      .query("SELECT list_id, status_id FROM task WHERE id = ? AND board_id = ?")
+      .query(
+        `SELECT t.list_id, t.status_id FROM task t
+         INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+         INNER JOIN board b ON b.id = t.board_id
+         WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
+      )
       .get(input.beforeTaskId, boardId) as {
       list_id: number;
       status_id: string;
@@ -438,7 +541,12 @@ export function moveTaskOnBoard(
   if (input.afterTaskId != null) {
     if (input.afterTaskId === input.taskId) return null;
     const target = db
-      .query("SELECT list_id, status_id FROM task WHERE id = ? AND board_id = ?")
+      .query(
+        `SELECT t.list_id, t.status_id FROM task t
+         INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+         INNER JOIN board b ON b.id = t.board_id
+         WHERE t.id = ? AND t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
+      )
       .get(input.afterTaskId, boardId) as {
       list_id: number;
       status_id: string;

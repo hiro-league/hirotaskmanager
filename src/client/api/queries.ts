@@ -16,6 +16,11 @@ import {
   type Status,
   type Task,
 } from "../../shared/models";
+import type {
+  TrashedBoardItem,
+  TrashedListItem,
+  TrashedTaskItem,
+} from "../../shared/trashApi";
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -57,6 +62,47 @@ export const boardKeys = {
   all: ["boards"] as const,
   detail: (id: number) => ["boards", id] as const,
 };
+
+/** TanStack Query keys for Trash tab fetches (`GET /api/trash/...`). */
+export const trashKeys = {
+  all: ["trash"] as const,
+  boards: () => [...trashKeys.all, "boards"] as const,
+  lists: () => [...trashKeys.all, "lists"] as const,
+  tasks: () => [...trashKeys.all, "tasks"] as const,
+};
+
+export async function fetchTrashedBoards(): Promise<TrashedBoardItem[]> {
+  return fetchJson<TrashedBoardItem[]>("/api/trash/boards");
+}
+
+export async function fetchTrashedLists(): Promise<TrashedListItem[]> {
+  return fetchJson<TrashedListItem[]>("/api/trash/lists");
+}
+
+export async function fetchTrashedTasks(): Promise<TrashedTaskItem[]> {
+  return fetchJson<TrashedTaskItem[]>("/api/trash/tasks");
+}
+
+export function useTrashedBoards() {
+  return useQuery({
+    queryKey: trashKeys.boards(),
+    queryFn: fetchTrashedBoards,
+  });
+}
+
+export function useTrashedLists() {
+  return useQuery({
+    queryKey: trashKeys.lists(),
+    queryFn: fetchTrashedLists,
+  });
+}
+
+export function useTrashedTasks() {
+  return useQuery({
+    queryKey: trashKeys.tasks(),
+    queryFn: fetchTrashedTasks,
+  });
+}
 
 /**
  * React Query detail key must match board mutation cache writes (`board.id` is always a number).

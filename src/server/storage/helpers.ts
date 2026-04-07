@@ -44,9 +44,18 @@ export function normalizeBoardViewState(
   return { visibleStatuses: vis, statusBandWeights: weights };
 }
 
-export function boardExists(db: Database, boardId: number): boolean {
+/** Row exists (any trash state). Use for migrations or future trash/purge paths. */
+export function boardRowExists(db: Database, boardId: number): boolean {
   const row = db
     .query("SELECT 1 AS ok FROM board WHERE id = ?")
+    .get(boardId) as { ok: number } | null;
+  return row != null;
+}
+
+/** Live surfaces: board exists and is not soft-deleted. */
+export function boardExists(db: Database, boardId: number): boolean {
+  const row = db
+    .query("SELECT 1 AS ok FROM board WHERE id = ? AND deleted_at IS NULL")
     .get(boardId) as { ok: number } | null;
   return row != null;
 }

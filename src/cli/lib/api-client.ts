@@ -159,6 +159,54 @@ export async function fetchApiMutate<T>(
   return (await response.json()) as T;
 }
 
+/**
+ * POST/DELETE to `/api/trash/...` without the board mutation entity header used by
+ * `fetchApiMutate` — trash restore/purge are separate routes.
+ */
+export async function fetchApiTrashMutate<T>(
+  endpoint: string,
+  init: { method: "POST" | "DELETE" },
+  overrides: ConfigOverrides = {},
+): Promise<T> {
+  const baseUrl = buildBaseUrl(overrides);
+  const apiKey = resolveApiKey();
+
+  const headers: Record<string, string> = {
+    ...taskManagerClientHeaders(),
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api${endpoint}`, {
+      method: init.method,
+      headers,
+    });
+  } catch {
+    throw new CliError("Server not reachable", 1, {
+      hint: `Run: ${buildStartCommand(overrides)}`,
+      url: baseUrl,
+    });
+  }
+
+  if (!response.ok) {
+    const { message, extra } = await parseErrorResponse(response);
+    throw new CliError(message, 1, {
+      status: response.status,
+      url: `${baseUrl}/api${endpoint}`,
+      ...extra,
+    });
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
 export async function fetchHealth(overrides: ConfigOverrides = {}): Promise<boolean> {
   const baseUrl = buildBaseUrl(overrides);
 

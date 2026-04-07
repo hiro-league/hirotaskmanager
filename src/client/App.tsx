@@ -5,6 +5,7 @@ import { AuthScreen } from "@/components/auth/AuthScreen";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { TrashPage } from "@/components/trash/TrashPage";
 import { BoardPage } from "@/components/routing/BoardPage";
 import { HomeRedirect } from "@/components/routing/HomeRedirect";
 import { NavigationRegistrar } from "@/components/routing/NavigationRegistrar";
@@ -31,6 +32,7 @@ function AuthenticatedApp() {
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/trash" element={<TrashPage />} />
             <Route path="/board/:boardId" element={<BoardPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -28,13 +28,13 @@ export function BoardListDeleteConfirm({
     <ConfirmDialog
       open={open}
       scope="list-delete-confirmation"
-      title="Delete this list?"
+      title="Move this list to Trash?"
       message={
         list
-          ? `Delete list “${listDisplayName(list)}”? Tasks in this list will be removed. This cannot be undone.`
-          : "Delete this list? Tasks in this list will be removed. This cannot be undone."
+          ? `Move list “${listDisplayName(list)}” to Trash? Its tasks move with it; you can restore from Trash or delete permanently there.`
+          : "Move this list to Trash? Its tasks move with it; you can restore from Trash or delete permanently there."
       }
-      confirmLabel="Delete"
+      confirmLabel="Move to Trash"
       cancelLabel="Cancel"
       variant="destructive"
       onCancel={onClose}

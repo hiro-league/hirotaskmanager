@@ -20,6 +20,7 @@ import {
   type Task,
   type TaskPriorityDefinition,
 } from "../../shared/models";
+import type { RestoreOutcome } from "../../shared/trashApi";
 import { slugify, uniqueSlug } from "../../shared/slug";
 import { getDb, resolveDataDir, withTransaction } from "../db";
 import {
@@ -135,6 +136,7 @@ export async function readBoardIndex(): Promise<BoardIndexEntry[]> {
               ${BOARD_INDEX_POLICY_COLS}
        FROM board b
        LEFT JOIN board_cli_policy p ON p.board_id = b.id
+       WHERE b.deleted_at IS NULL
        ORDER BY b.name COLLATE NOCASE`,
     )
     .all() as Parameters<typeof mapIndexRow>[0][];
@@ -153,7 +155,7 @@ export async function entryByIdOrSlug(
                 ${BOARD_INDEX_POLICY_COLS}
          FROM board b
          LEFT JOIN board_cli_policy p ON p.board_id = b.id
-         WHERE b.id = ?`,
+         WHERE b.id = ? AND b.deleted_at IS NULL`,
       )
       .get(Number(ref)) as Parameters<typeof mapIndexRow>[0] | null;
     if (row) return mapIndexRow(row);
@@ -164,10 +166,27 @@ export async function entryByIdOrSlug(
               ${BOARD_INDEX_POLICY_COLS}
        FROM board b
        LEFT JOIN board_cli_policy p ON p.board_id = b.id
-       WHERE b.slug = ?`,
+       WHERE b.slug = ? AND b.deleted_at IS NULL`,
     )
     .get(ref) as Parameters<typeof mapIndexRow>[0] | null;
   return row2 ? mapIndexRow(row2) : null;
+}
+
+/** Board index entry for policy checks even when the board is trashed (Trash API). */
+export async function boardIndexEntryById(
+  boardId: number,
+): Promise<BoardIndexEntry | null> {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT b.id, b.slug, b.name, b.emoji, b.description, b.created_at,
+              ${BOARD_INDEX_POLICY_COLS}
+       FROM board b
+       LEFT JOIN board_cli_policy p ON p.board_id = b.id
+       WHERE b.id = ?`,
+    )
+    .get(boardId) as Parameters<typeof mapIndexRow>[0] | null;
+  return row ? mapIndexRow(row) : null;
 }
 
 export function loadBoard(boardId: number): Board | null {
@@ -179,7 +198,7 @@ export function loadBoard(boardId: number): Board | null {
               ${BOARD_INDEX_POLICY_COLS}
        FROM board b
        LEFT JOIN board_cli_policy p ON p.board_id = b.id
-       WHERE b.id = ?`,
+       WHERE b.id = ? AND b.deleted_at IS NULL`,
     )
     .get(boardId) as BoardRowWithPolicyJoin | null;
   if (!boardRow) return null;
@@ -244,7 +263,7 @@ export function loadBoard(boardId: number): Board | null {
 
   const listRows = db
     .query(
-      "SELECT id, name, sort_order, color, emoji, created_by_principal, created_by_label FROM list WHERE board_id = ? ORDER BY sort_order, id",
+      "SELECT id, name, sort_order, color, emoji, created_by_principal, created_by_label FROM list WHERE board_id = ? AND deleted_at IS NULL ORDER BY sort_order, id",
     )
     .all(boardId) as {
     id: number;
@@ -271,9 +290,12 @@ export function loadBoard(boardId: number): Board | null {
 
   const taskRows = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji,
-              created_at, updated_at, closed_at, created_by_principal, created_by_label
-       FROM task WHERE board_id = ? ORDER BY list_id, status_id, sort_order, id`,
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji,
+              t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
+       ORDER BY t.list_id, t.status_id, t.sort_order, t.id`,
     )
     .all(boardId) as {
     id: number;
@@ -385,9 +407,47 @@ export async function generateSlug(
   return uniqueSlug(slugify(name), taken);
 }
 
-export async function deleteBoardById(id: number): Promise<void> {
+/** Move board to Trash (normal delete). */
+export function trashBoardById(
+  boardId: number,
+): { boardId: number; boardUpdatedAt: string } | null {
   const db = getDb();
-  db.run("DELETE FROM board WHERE id = ?", [id]);
+  const row = db
+    .query("SELECT id FROM board WHERE id = ? AND deleted_at IS NULL")
+    .get(boardId) as { id: number } | null;
+  if (!row) return null;
+  const now = new Date().toISOString();
+  db.run("UPDATE board SET deleted_at = ?, updated_at = ? WHERE id = ?", [
+    now,
+    now,
+    boardId,
+  ]);
+  return { boardId, boardUpdatedAt: now };
+}
+
+export function restoreBoardById(
+  boardId: number,
+): RestoreOutcome<{ boardId: number; boardUpdatedAt: string }> {
+  const db = getDb();
+  const row = db
+    .query("SELECT id FROM board WHERE id = ? AND deleted_at IS NOT NULL")
+    .get(boardId) as { id: number } | null;
+  if (!row) return { ok: false, reason: "not_found" };
+  const now = new Date().toISOString();
+  db.run("UPDATE board SET deleted_at = NULL, updated_at = ? WHERE id = ?", [
+    now,
+    boardId,
+  ]);
+  return { ok: true, value: { boardId, boardUpdatedAt: now } };
+}
+
+/** Hard-delete board (Trash purge only). Row must be explicitly trashed. */
+export async function purgeBoardById(boardId: number): Promise<boolean> {
+  const db = getDb();
+  const r = db.run("DELETE FROM board WHERE id = ? AND deleted_at IS NOT NULL", [
+    boardId,
+  ]);
+  return r.changes > 0;
 }
 
 export type CreateBoardOptions = {

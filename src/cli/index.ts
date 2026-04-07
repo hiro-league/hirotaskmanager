@@ -37,6 +37,17 @@ import {
   runTasksMove,
   runTasksUpdate,
 } from "./lib/writeCommands";
+import {
+  runBoardsPurge,
+  runBoardsRestore,
+  runListsPurge,
+  runListsRestore,
+  runTasksPurge,
+  runTasksRestore,
+  runTrashBoards,
+  runTrashLists,
+  runTrashTasks,
+} from "./lib/trashCommands";
 
 function addPortOption(command: Command): Command {
   return command
@@ -347,12 +358,40 @@ addPortOption(
 addPortOption(
   boardsCommand
     .command("delete")
-    .description("Delete a board")
+    .description("Move a board to Trash (same as the app; restore or purge from Trash)")
     .argument("<id-or-slug>", "Board id or slug"),
 ).action(async (idOrSlug: string, options: { port?: string }) => {
   try {
     const port = resolvePort({ port: parsePortOption(options.port) });
     await runBoardsDelete({ port, board: idOrSlug });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  boardsCommand
+    .command("restore")
+    .description("Restore a board from Trash to the active board list")
+    .argument("<id-or-slug>", "Trashed board numeric id, or slug from Trash"),
+).action(async (idOrSlug: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runBoardsRestore({ port, board: idOrSlug });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  boardsCommand
+    .command("purge")
+    .description("Permanently delete a board from Trash (cannot be undone)")
+    .argument("<id-or-slug>", "Trashed board numeric id, or slug from Trash"),
+).action(async (idOrSlug: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runBoardsPurge({ port, board: idOrSlug });
   } catch (error) {
     exitWithError(error);
   }
@@ -489,7 +528,7 @@ addPortOption(
 addPortOption(
   listsCommand
     .command("delete")
-    .description("Delete a list")
+    .description("Move a list to Trash (lists restore / purge use the list id only)")
     .requiredOption("--board <id-or-slug>", "Board id or slug")
     .argument("<list-id>", "Numeric list id"),
 ).action(
@@ -509,6 +548,34 @@ addPortOption(
     }
   },
 );
+
+addPortOption(
+  listsCommand
+    .command("restore")
+    .description("Restore a list from Trash (board must be active)")
+    .argument("<list-id>", "Numeric list id (see: hirotm trash lists)"),
+).action(async (listId: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runListsRestore({ port, listId });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  listsCommand
+    .command("purge")
+    .description("Permanently delete a list from Trash (cannot be undone)")
+    .argument("<list-id>", "Numeric list id"),
+).action(async (listId: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runListsPurge({ port, listId });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
 
 addPortOption(
   listsCommand
@@ -677,7 +744,7 @@ addPortOption(
 addPortOption(
   tasksCommand
     .command("delete")
-    .description("Delete a task")
+    .description("Move a task to Trash (tasks restore / purge use the task id only)")
     .requiredOption("--board <id-or-slug>", "Board id or slug")
     .argument("<task-id>", "Numeric task id"),
 ).action(
@@ -697,6 +764,34 @@ addPortOption(
     }
   },
 );
+
+addPortOption(
+  tasksCommand
+    .command("restore")
+    .description("Restore a task from Trash (board and list must allow it)")
+    .argument("<task-id>", "Numeric task id (see: hirotm trash tasks)"),
+).action(async (taskId: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runTasksRestore({ port, taskId });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  tasksCommand
+    .command("purge")
+    .description("Permanently delete a task from Trash (cannot be undone)")
+    .argument("<task-id>", "Numeric task id"),
+).action(async (taskId: string, options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runTasksPurge({ port, taskId });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
 
 addPortOption(
   tasksCommand
@@ -757,6 +852,43 @@ addPortOption(
     const port = resolvePort({ port: parsePortOption(options.port) });
     const statuses = await fetchApi<Status[]>("/statuses", { port });
     printJson(statuses);
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+const trashCommand = program
+  .command("trash")
+  .description("Inspect Trash (same JSON shapes as GET /api/trash/...)");
+
+addPortOption(
+  trashCommand.command("boards").description("List boards in Trash"),
+).action(async (options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runTrashBoards({ port });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  trashCommand.command("lists").description("Lists in Trash (includes board name and canRestore)"),
+).action(async (options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runTrashLists({ port });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  trashCommand.command("tasks").description("Tasks in Trash (includes board/list names and canRestore)"),
+).action(async (options: { port?: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runTrashTasks({ port });
   } catch (error) {
     exitWithError(error);
   }

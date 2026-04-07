@@ -34,7 +34,7 @@ import {
   createListOnBoard,
   moveListOnBoard,
   createTaskOnBoard,
-  deleteBoardById,
+  trashBoardById,
   deleteListOnBoard,
   deleteTaskOnBoard,
   entryByIdOrSlug,
@@ -73,17 +73,17 @@ import { provenanceForWrite } from "../provenance";
 import { publishBoardChanged, publishBoardEvent } from "../events";
 import {
   recordBoardCreated,
-  recordBoardDeleted,
+  recordBoardTrashed,
   recordBoardPatched,
   recordBoardTaskGroups,
   recordBoardTaskPriorities,
   recordListCreated,
-  recordListDeleted,
+  recordListTrashed,
   recordListMoved,
   recordListUpdated,
   recordListsReordered,
   recordTaskCreated,
-  recordTaskDeleted,
+  recordTaskTrashed,
   recordTaskMoved,
   recordTaskUpdated,
   recordTasksReordered,
@@ -591,14 +591,15 @@ boardsRoute.delete("/:id/lists/:listId", async (c) => {
   const result = deleteListOnBoard(entry.id, listId);
   if (!result) return c.json({ error: "List not found" }, 404);
   publishBoardEvent({
-    kind: "list-deleted",
+    kind: "list-trashed",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
     listId: result.deletedListId,
   });
+  publishBoardChanged(result.boardId, result.boardUpdatedAt);
   {
     const board = loadBoard(entry.id);
-    if (board && listSnapshot) recordListDeleted(c, entry, board, listSnapshot, result);
+    if (board && listSnapshot) recordListTrashed(c, entry, board, listSnapshot, result);
   }
   return listDeleteResponse(c, {
     boardId: result.boardId,
@@ -997,14 +998,15 @@ boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
   const result = deleteTaskOnBoard(entry.id, taskId);
   if (!result) return c.json({ error: "Task not found" }, 404);
   publishBoardEvent({
-    kind: "task-deleted",
+    kind: "task-trashed",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
     taskId: result.deletedTaskId,
   });
+  publishBoardChanged(result.boardId, result.boardUpdatedAt);
   {
     const board = loadBoard(entry.id);
-    if (board && taskSnapshot) recordTaskDeleted(c, entry, board, taskSnapshot, result);
+    if (board && taskSnapshot) recordTaskTrashed(c, entry, board, taskSnapshot, result);
   }
   return taskDeleteResponse(c, {
     boardId: result.boardId,
@@ -1186,8 +1188,9 @@ boardsRoute.delete("/:id", async (c) => {
   if (blocked) return blocked;
   const snapshot = loadBoard(entry.id);
   if (!snapshot) return c.json({ error: "Board not found" }, 404);
-  await deleteBoardById(entry.id);
-  publishBoardChanged(entry.id, new Date().toISOString());
-  if (snapshot) recordBoardDeleted(c, entry, snapshot);
+  const trashed = trashBoardById(entry.id);
+  if (!trashed) return c.json({ error: "Board not found" }, 404);
+  publishBoardChanged(entry.id, trashed.boardUpdatedAt);
+  recordBoardTrashed(c, entry, snapshot);
   return c.body(null, 204);
 });

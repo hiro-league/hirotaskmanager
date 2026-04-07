@@ -22,17 +22,26 @@ Use simple Git-style nested commands:
 hirotm boards add
 hirotm boards update
 hirotm boards delete
+hirotm boards restore
+hirotm boards purge
 hirotm boards groups
 hirotm boards priorities
 hirotm boards tasks
 hirotm lists add
 hirotm lists update
 hirotm lists delete
+hirotm lists restore
+hirotm lists purge
 hirotm lists move
 hirotm tasks add
 hirotm tasks update
 hirotm tasks delete
+hirotm tasks restore
+hirotm tasks purge
 hirotm tasks move
+hirotm trash boards
+hirotm trash lists
+hirotm trash tasks
 ```
 
 Why:
@@ -129,7 +138,7 @@ Rules:
 
 ### `hirotm boards delete`
 
-Delete a board.
+Move a board to Trash (soft delete). Use `boards restore` / `boards purge` for Trash.
 
 ```bash
 hirotm boards delete <id-or-slug>
@@ -139,7 +148,33 @@ Rules:
 
 - `<id-or-slug>` is required
 - no interactive confirmation
-- output is a compact delete result, not a board payload
+- output is a compact trash-move result (`trashed`), not a board payload
+
+### `hirotm boards restore`
+
+Restore a board from Trash.
+
+```bash
+hirotm boards restore <id-or-slug>
+```
+
+Rules:
+
+- `<id-or-slug>` is a numeric board id, or a slug as shown in `hirotm trash boards`
+- output is the same success envelope as `boards update` (compact board entity)
+
+### `hirotm boards purge`
+
+Permanently delete a board from Trash.
+
+```bash
+hirotm boards purge <id-or-slug>
+```
+
+Rules:
+
+- same id/slug resolution as `boards restore`
+- output is `{ "ok": true, "purged": { "type": "board", "id": <n> } }`
 
 ### `hirotm boards groups`
 
@@ -235,7 +270,7 @@ Rules:
 
 ### `hirotm lists delete`
 
-Delete one list.
+Move one list to Trash.
 
 ```bash
 hirotm lists delete --board <id-or-slug> <list-id>
@@ -244,7 +279,23 @@ hirotm lists delete --board <id-or-slug> <list-id>
 Rules:
 
 - `--board` and `<list-id>` are required
-- output is a compact delete result
+- output is a compact trash-move result (`trashed`)
+
+### `hirotm lists restore`
+
+Restore a list from Trash (numeric list id only; see `hirotm trash lists`).
+
+```bash
+hirotm lists restore <list-id>
+```
+
+### `hirotm lists purge`
+
+Permanently delete a list from Trash.
+
+```bash
+hirotm lists purge <list-id>
+```
 
 ### `hirotm lists move`
 
@@ -376,7 +427,7 @@ hirotm tasks move --board sprint-planning 42 --to-list 15 --before-task 99
 
 ### `hirotm tasks delete`
 
-Delete one task.
+Move one task to Trash.
 
 ```bash
 hirotm tasks delete --board <id-or-slug> <task-id>
@@ -385,7 +436,33 @@ hirotm tasks delete --board <id-or-slug> <task-id>
 Rules:
 
 - `--board` and `<task-id>` are required
-- output is a compact delete result
+- output is a compact trash-move result (`trashed`)
+
+### `hirotm tasks restore`
+
+Restore a task from Trash (numeric task id; see `hirotm trash tasks`).
+
+```bash
+hirotm tasks restore <task-id>
+```
+
+### `hirotm tasks purge`
+
+Permanently delete a task from Trash.
+
+```bash
+hirotm tasks purge <task-id>
+```
+
+### `hirotm trash boards` / `lists` / `tasks`
+
+JSON listing of Trash rows (same shapes as `GET /api/trash/...`).
+
+```bash
+hirotm trash boards
+hirotm trash lists
+hirotm trash tasks
+```
 
 ## Body Input Rules
 
@@ -431,7 +508,7 @@ Recommended command-specific payloads:
 - `lists add` → `entity` contains compact list fields
 - `lists update` / `lists move` → `entity` contains compact list fields
 - `tasks add` / `tasks update` / `tasks move` → `entity` contains the final task fields
-- `boards delete` / `lists delete` / `tasks delete` → `deleted` contains the deleted target descriptor
+- `boards delete` / `lists delete` / `tasks delete` → `trashed` contains the moved-to-trash target descriptor (`trashed: true`)
 
 Recommended task result shape:
 

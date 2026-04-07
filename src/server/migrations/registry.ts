@@ -12,6 +12,7 @@ import { migration011 } from "./011_board_cli_access";
 import { migration012 } from "./012_notification_event";
 import { migration013 } from "./013_cli_policy_and_provenance";
 import { migration014 } from "./014_drop_board_cli_access";
+import { migration015 } from "./015_trash_deleted_at";
 import type { Migration } from "./types";
 
 /** Numbered migrations, ascending by version. */
@@ -30,4 +31,5 @@ export const migrations: Migration[] = [
   migration012,
   migration013,
   migration014,
+  migration015,
 ];

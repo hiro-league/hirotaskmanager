@@ -104,7 +104,7 @@ export function recordBoardCreated(c: Context, board: Board): void {
   });
 }
 
-export function recordBoardDeleted(
+export function recordBoardTrashed(
   c: Context,
   entry: BoardIndexEntry,
   snapshot: Board,
@@ -114,8 +114,8 @@ export function recordBoardDeleted(
     listId: null,
     taskId: null,
     entityType: "board",
-    actionType: "board.deleted",
-    message: `Board deleted: ${boardDisplayName(snapshot)}`,
+    actionType: "board.trashed",
+    message: `Board moved to Trash: ${boardDisplayName(snapshot)}`,
     payload: payloadBoard(entry, snapshot),
   });
 }
@@ -200,7 +200,7 @@ export function recordListUpdated(
   });
 }
 
-export function recordListDeleted(
+export function recordListTrashed(
   c: Context,
   entry: BoardIndexEntry,
   board: Board,
@@ -212,8 +212,8 @@ export function recordListDeleted(
     listId: result.deletedListId,
     taskId: null,
     entityType: "list",
-    actionType: "list.deleted",
-    message: `List deleted: ${listSnapshot.name}`,
+    actionType: "list.trashed",
+    message: `List moved to Trash: ${listSnapshot.name}`,
     payload: payloadList(entry, board, listSnapshot),
   });
 }
@@ -351,7 +351,7 @@ export function recordTaskUpdated(
   }
 }
 
-export function recordTaskDeleted(
+export function recordTaskTrashed(
   c: Context,
   entry: BoardIndexEntry,
   board: Board,
@@ -364,8 +364,8 @@ export function recordTaskDeleted(
     listId: taskSnapshot.listId,
     taskId: result.deletedTaskId,
     entityType: "task",
-    actionType: "task.deleted",
-    message: `Task deleted: ${taskSnapshot.title || "Untitled"}`,
+    actionType: "task.trashed",
+    message: `Task moved to Trash: ${taskSnapshot.title || "Untitled"}`,
     payload: payloadTask(entry, board, list ?? null, taskSnapshot),
   });
 }
@@ -416,5 +416,118 @@ export function recordTasksReordered(
       listEmoji: list?.emoji ?? null,
       detail: status,
     },
+  });
+}
+
+export function recordBoardRestored(
+  c: Context,
+  entry: BoardIndexEntry,
+  board: Board,
+): void {
+  commit(c, {
+    boardId: entry.id,
+    listId: null,
+    taskId: null,
+    entityType: "board",
+    actionType: "board.restored",
+    message: `Board restored: ${boardDisplayName(board)}`,
+    payload: payloadBoard(entry, board),
+  });
+}
+
+export function recordBoardPurged(c: Context, entry: BoardIndexEntry): void {
+  commit(c, {
+    boardId: entry.id,
+    listId: null,
+    taskId: null,
+    entityType: "board",
+    actionType: "board.permanently_deleted",
+    message: `Board permanently deleted: ${boardDisplayName(entry)}`,
+    payload: payloadBoard(entry, null),
+  });
+}
+
+export function recordListRestored(
+  c: Context,
+  entry: BoardIndexEntry,
+  board: Board,
+  list: List,
+): void {
+  commit(c, {
+    boardId: entry.id,
+    listId: list.id,
+    taskId: null,
+    entityType: "list",
+    actionType: "list.restored",
+    message: `List restored: ${list.name}`,
+    payload: payloadList(entry, board, list),
+  });
+}
+
+export function recordListPurged(
+  c: Context,
+  entry: BoardIndexEntry,
+  board: Board | null,
+  listSnapshot: List,
+): void {
+  const payload = board
+    ? payloadList(entry, board, listSnapshot)
+    : {
+        ...payloadBoard(entry, null),
+        listName: listSnapshot.name,
+        listEmoji: listSnapshot.emoji ?? null,
+      };
+  commit(c, {
+    boardId: entry.id,
+    listId: listSnapshot.id,
+    taskId: null,
+    entityType: "list",
+    actionType: "list.permanently_deleted",
+    message: `List permanently deleted: ${listSnapshot.name}`,
+    payload,
+  });
+}
+
+export function recordTaskRestored(
+  c: Context,
+  entry: BoardIndexEntry,
+  board: Board,
+  task: Task,
+): void {
+  const list = board.lists.find((l) => l.id === task.listId);
+  commit(c, {
+    boardId: entry.id,
+    listId: task.listId,
+    taskId: task.id,
+    entityType: "task",
+    actionType: "task.restored",
+    message: `Task restored: ${task.title.trim() || "Untitled"}`,
+    payload: payloadTask(entry, board, list ?? null, task),
+  });
+}
+
+export function recordTaskPurged(
+  c: Context,
+  entry: BoardIndexEntry,
+  board: Board | null,
+  taskSnapshot: Task,
+): void {
+  const list = board?.lists.find((l) => l.id === taskSnapshot.listId);
+  const payload =
+    board != null
+      ? payloadTask(entry, board, list ?? null, taskSnapshot)
+      : {
+          ...payloadBoard(entry, null),
+          taskTitle: taskSnapshot.title,
+          taskEmoji: taskSnapshot.emoji ?? null,
+        };
+  commit(c, {
+    boardId: entry.id,
+    listId: taskSnapshot.listId,
+    taskId: taskSnapshot.id,
+    entityType: "task",
+    actionType: "task.permanently_deleted",
+    message: `Task permanently deleted: ${taskSnapshot.title.trim() || "Untitled"}`,
+    payload,
   });
 }

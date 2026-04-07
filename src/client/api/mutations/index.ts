@@ -21,3 +21,11 @@ export {
   useReorderTasksInBand,
   useUpdateTask,
 } from "./tasks";
+export {
+  usePurgeBoard,
+  usePurgeList,
+  usePurgeTask,
+  useRestoreBoard,
+  useRestoreList,
+  useRestoreTask,
+} from "./trash";

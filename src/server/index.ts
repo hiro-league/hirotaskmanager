@@ -15,6 +15,7 @@ import { createBoardEventsResponse } from "./events";
 import { authRoute } from "./routes/auth";
 import { cliGlobalPolicyRoute } from "./routes/cliGlobalPolicy";
 import { boardsRoute } from "./routes/boards";
+import { trashRoute } from "./routes/trash";
 import { notificationsRoute } from "./routes/notifications";
 import { searchRoute } from "./routes/search";
 import { statusesRoute } from "./routes/statuses";
@@ -60,6 +61,7 @@ export function createTaskManagerApp(kind: RuntimeKind): Hono<AppBindings> {
   app.route("/api/cli-global-policy", cliGlobalPolicyRoute);
   app.route("/api/statuses", statusesRoute);
   app.route("/api/boards", boardsRoute);
+  app.route("/api/trash", trashRoute);
   app.route("/api/notifications", notificationsRoute);
   app.route("/api/search", searchRoute);
 

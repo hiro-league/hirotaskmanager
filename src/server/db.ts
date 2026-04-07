@@ -24,6 +24,21 @@ export function getDb(): Database {
   return dbInstance;
 }
 
+/**
+ * Swap the process-wide DB (for unit tests: open `:memory:`, run migrations, then attach here).
+ * Passing `null` clears the handle so the next `getDb()` opens the on-disk file again.
+ */
+export function replaceDbForTesting(next: Database | null): void {
+  if (dbInstance && dbInstance !== next) {
+    try {
+      dbInstance.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  dbInstance = next;
+}
+
 export function withTransaction<T>(db: Database, fn: () => T): T {
   return db.transaction(fn)();
 }

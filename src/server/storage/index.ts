@@ -3,9 +3,12 @@ export {
   listStatuses,
   readBoardIndex,
   entryByIdOrSlug,
+  boardIndexEntryById,
   loadBoard,
   generateSlug,
-  deleteBoardById,
+  trashBoardById,
+  restoreBoardById,
+  purgeBoardById,
   createBoardWithDefaults,
   patchBoard,
   patchBoardViewPrefs,
@@ -17,8 +20,11 @@ export {
   moveListOnBoard,
   patchListOnBoard,
   deleteListOnBoard,
+  restoreListOnBoard,
+  purgeListOnBoard,
   reorderListsOnBoard,
   readListById,
+  readListSnapshotById,
   type ListDeleteResult,
   type ListWriteResult,
 } from "./lists";
@@ -27,9 +33,17 @@ export {
   moveTaskOnBoard,
   patchTaskOnBoard,
   deleteTaskOnBoard,
+  restoreTaskOnBoard,
+  purgeTaskOnBoard,
   reorderTasksInBand,
   readTaskById,
+  readTaskSnapshotById,
   type TaskDeleteResult,
   type TaskWriteResult,
 } from "./tasks";
 export { searchTasks } from "./search";
+export {
+  readTrashedBoards,
+  readTrashedLists,
+  readTrashedTasks,
+} from "./trash";

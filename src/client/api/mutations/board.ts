@@ -17,7 +17,7 @@ import { appNavigate } from "@/lib/appNavigate";
 import { boardPath, parseBoardIdFromPath } from "@/lib/boardPath";
 import { withBrowserClientHeaders } from "../clientHeaders";
 import { invalidateNotificationQueries } from "../notifications";
-import { boardKeys, fetchJson } from "../queries";
+import { boardKeys, fetchJson, trashKeys } from "../queries";
 import { tempNumericId } from "./shared";
 
 function buildOptimisticBoard(id: number, name: string): Board {
@@ -369,6 +369,7 @@ export function useDeleteBoard() {
       }
     },
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: trashKeys.all });
       invalidateNotificationQueries(qc);
     },
   });

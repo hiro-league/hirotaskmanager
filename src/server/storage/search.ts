@@ -105,7 +105,8 @@ function runSearch(
          INNER JOIN board AS b ON b.id = task_search.board_id
          INNER JOIN task AS t ON t.id = task_search.task_id
          INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-         WHERE task_search MATCH ? AND task_search.board_id = ? ${cliFilter}
+         WHERE task_search MATCH ? AND task_search.board_id = ?
+           AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
          ORDER BY score
          LIMIT ?`,
       )
@@ -128,7 +129,8 @@ function runSearch(
        INNER JOIN board AS b ON b.id = task_search.board_id
        INNER JOIN task AS t ON t.id = task_search.task_id
        INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-       WHERE task_search MATCH ? ${cliFilter}
+       WHERE task_search MATCH ?
+         AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
        ORDER BY score
        LIMIT ?`,
     )

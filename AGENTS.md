@@ -28,6 +28,12 @@ hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> "Ready" [--em
 hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
 hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [field flags...]
 hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm trash boards                        # JSON: trashed boards
+hirotm trash lists | hirotm trash tasks    # JSON: trashed lists/tasks
+hirotm boards restore <id-or-slug>       # restore board from Trash
+hirotm boards purge <id-or-slug>           # permanently delete board in Trash
+hirotm lists restore <list-id> | hirotm lists purge <list-id>
+hirotm tasks restore <task-id> | hirotm tasks purge <task-id>
 hirotm start --background
 ```
 

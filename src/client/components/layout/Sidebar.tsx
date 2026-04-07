@@ -1,6 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LayoutGrid, MoreVertical, Plus, Settings, X } from "lucide-react";
+import { LayoutGrid, MoreVertical, Plus, Settings, Trash2, X } from "lucide-react";
 import { useBoard, useBoards } from "@/api/queries";
 import {
   useCreateBoard,
@@ -152,6 +152,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
   const settingsMatch = useMatch({ path: "/settings", end: true });
+  const trashMatch = useMatch({ path: "/trash", end: true });
   const selectedBoardId = boardMatch?.params.boardId ?? null;
   const createBoard = useCreateBoard();
   const patchBoard = usePatchBoard();
@@ -308,7 +309,20 @@ export function Sidebar() {
             })}
         </div>
 
-        <div className="mt-auto border-t border-sidebar-border p-2">
+        <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border p-2">
+          <NavLink
+            to="/trash"
+            title="Trash"
+            aria-current={trashMatch ? "page" : undefined}
+            className={({ isActive }) =>
+              cn(
+                "flex w-full items-center justify-center rounded-md p-2 text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
+                isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+              )
+            }
+          >
+            <Trash2 className="size-5 shrink-0" aria-hidden />
+          </NavLink>
           <NavLink
             to="/settings"
             title="Settings"
@@ -428,7 +442,7 @@ export function Sidebar() {
                               requestDelete(b.id, b.name);
                             }}
                           >
-                            Delete
+                            Move to Trash
                           </DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Portal>
@@ -492,11 +506,24 @@ export function Sidebar() {
 
       <div className="border-t border-sidebar-border p-2">
         <NavLink
+          to="/trash"
+          aria-current={trashMatch ? "page" : undefined}
+          className={({ isActive }) =>
+            cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
+              isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+            )
+          }
+        >
+          <Trash2 className="size-4 shrink-0" aria-hidden />
+          Trash
+        </NavLink>
+        <NavLink
           to="/settings"
           aria-current={settingsMatch ? "page" : undefined}
           className={({ isActive }) =>
             cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
+              "mt-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50",
               isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
             )
           }
@@ -510,13 +537,13 @@ export function Sidebar() {
       {/* Sidebar sits outside the board shortcut scope, so board deletion uses a local app dialog instead of `window.confirm`. */}
       <SidebarConfirmDialog
         open={boardDeleteCandidate !== null}
-        title="Delete this board?"
+        title="Move this board to Trash?"
         message={
           boardDeleteCandidate
-            ? `Delete board “${boardDeleteCandidate.name}”? Lists and tasks in this board will be removed. This cannot be undone.`
+            ? `Move board “${boardDeleteCandidate.name}” to Trash? You can restore it later from Trash, or delete it permanently there.`
             : ""
         }
-        confirmLabel="Delete"
+        confirmLabel="Move to Trash"
         cancelLabel="Cancel"
         busy={deleteBoard.isPending}
         confirmDisabled={deleteConfirmDisabled}
@@ -534,15 +561,15 @@ export function Sidebar() {
           <div className="space-y-3">
             <p className="text-sm font-medium text-destructive">
               This board has {deleteTaskCount} tasks. Are you sure you want to
-              delete it?
+              move it to Trash?
             </p>
-            {/* Require the exact task count before destructive board deletion so boards with tasks get a stronger confirmation than empty boards. */}
+            {/* Require the exact task count before moving a board with tasks to Trash so it is harder to do by mistake than for an empty board. */}
             <div className="space-y-1.5">
               <label
                 htmlFor="sidebar-delete-board-task-count"
                 className="text-sm text-foreground"
               >
-                To delete, please type below the number of tasks.
+                To move to Trash, type the number of tasks below.
               </label>
               <input
                 id="sidebar-delete-board-task-count"
@@ -556,7 +583,7 @@ export function Sidebar() {
               />
               {!deleteTaskCountMatches && deleteTaskCountInput.trim() ? (
                 <p className="text-xs text-muted-foreground">
-                  Enter `{deleteTaskCount}` to enable deletion.
+                  Enter `{deleteTaskCount}` to enable Move to Trash.
                 </p>
               ) : null}
             </div>

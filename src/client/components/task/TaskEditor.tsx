@@ -425,7 +425,7 @@ export function TaskEditor({
                 disabled={busy}
                 onClick={() => setShowDeleteConfirm(true)}
               >
-                Delete
+                Move to Trash
               </button>
             )}
             <button
@@ -460,9 +460,9 @@ export function TaskEditor({
       <ConfirmDialog
         open={showDeleteConfirm}
         scope="task-delete-confirmation"
-        title="Delete this task?"
-        message="This cannot be undone."
-        confirmLabel="Delete"
+        title="Move this task to Trash?"
+        message="You can restore it from Trash or delete it permanently there."
+        confirmLabel="Move to Trash"
         cancelLabel="Cancel"
         variant="destructive"
         onCancel={() => setShowDeleteConfirm(false)}

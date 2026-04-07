@@ -7,7 +7,12 @@ import {
 } from "../../../shared/mutationResults";
 import type { Board, List } from "../../../shared/models";
 import { invalidateNotificationQueries } from "../notifications";
-import { boardKeys, fetchJson, invalidateBoardStatsQueries } from "../queries";
+import {
+  boardKeys,
+  fetchJson,
+  invalidateBoardStatsQueries,
+  trashKeys,
+} from "../queries";
 import { tempNumericId } from "./shared";
 
 const jsonHeaders = {
@@ -178,6 +183,7 @@ export function useDeleteList() {
         };
       });
       invalidateBoardStatsQueries(qc, data.boardId);
+      void qc.invalidateQueries({ queryKey: trashKeys.all });
       invalidateNotificationQueries(qc);
     },
   });

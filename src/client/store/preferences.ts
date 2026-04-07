@@ -56,6 +56,14 @@ export const TASK_CARD_VIEW_MODE_LABELS: Record<TaskCardViewMode, string> = {
   larger: "Larger",
 };
 
+/** Compact header label for card-size cycling (S / N / L / XL). */
+export const TASK_CARD_VIEW_MODE_SHORT: Record<TaskCardViewMode, string> = {
+  small: "S",
+  normal: "N",
+  large: "L",
+  larger: "XL",
+};
+
 export interface TaskCardViewSpec {
   containerClassName?: string;
   titleClassName?: string;

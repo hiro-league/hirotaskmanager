@@ -2,6 +2,8 @@
 
 Use the `hirotm` CLI for TaskManager board, list, task, status, and **search** operations (including creating boards, lists, and tasks and updating or moving tasks).
 
+**Dev server (`npm run dev`, API port 3002):** add **`--profile dev`** right after `hirotm` on each command (e.g. `hirotm --profile dev boards list`), or set **`TASKMANAGER_PROFILE=dev`** once in the shell. Skip this when using an installed app on port 3001.
+
 ## Rules
 
 - You must use `hirotm` as your only channel to access TaskManager data.
@@ -11,7 +13,7 @@ Use the `hirotm` CLI for TaskManager board, list, task, status, and **search** o
 - Do not change CLI access policy by calling the HTTP API or editing the database directly unless the user explicitly asks; in normal use, the human configures CLI access in the web app after logging in.
 - Do not write raw SQL unless the user explicitly asks for database-level work.
 - Treat CLI JSON output as the source of truth for current TaskManager state.
-- If a query command reports `Server not reachable`, run the exact `hirotm start ...` command from the error hint before retrying.
+- If a query command reports `Server not reachable`, run the exact `hirotm start ...` command from the error hint before retrying (add `--profile dev` when the hint targets port 3002 / dev).
 
 ## Common Commands
 

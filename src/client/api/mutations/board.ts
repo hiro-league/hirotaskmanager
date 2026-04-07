@@ -8,11 +8,12 @@ import {
   createDefaultTaskGroups,
   createDefaultTaskPriorities,
   DEFAULT_STATUS_IDS,
+  sortTaskGroupsForDisplay,
   type Board,
   type BoardIndexEntry,
-  type GroupDefinition,
   type TaskPriorityDefinition,
 } from "../../../shared/models";
+import type { PatchBoardTaskGroupConfigInput } from "../../../shared/taskGroupConfig";
 import { appNavigate } from "@/lib/appNavigate";
 import { boardPath, parseBoardIdFromPath } from "@/lib/boardPath";
 import { withBrowserClientHeaders } from "../clientHeaders";
@@ -24,6 +25,7 @@ function buildOptimisticBoard(id: number, name: string): Board {
   const now = new Date().toISOString();
   const taskGroups = createDefaultTaskGroups();
   const taskPriorities = createDefaultTaskPriorities();
+  const firstGroupId = sortTaskGroupsForDisplay(taskGroups)[0]?.id ?? 0;
   return {
     id,
     name,
@@ -31,6 +33,8 @@ function buildOptimisticBoard(id: number, name: string): Board {
     description: "",
     cliPolicy: EMPTY_BOARD_CLI_POLICY,
     taskGroups,
+    defaultTaskGroupId: firstGroupId,
+    deletedGroupFallbackId: firstGroupId,
     taskPriorities,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
     boardLayout: "stacked",
@@ -294,12 +298,12 @@ export function usePatchBoardTaskGroups() {
   return useMutation({
     mutationFn: async (input: {
       boardId: number;
-      taskGroups: GroupDefinition[];
+      config: PatchBoardTaskGroupConfigInput;
     }) => {
       return fetchJson<Board>(`/api/boards/${input.boardId}/groups`, {
         method: "PATCH",
         headers: jsonHeaders,
-        body: JSON.stringify({ taskGroups: input.taskGroups }),
+        body: JSON.stringify(input.config),
       });
     },
     onSuccess: (data) => {

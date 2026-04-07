@@ -1,5 +1,6 @@
 import { parseBoardColor } from "../../shared/boardColor";
 import type { Board } from "../../shared/models";
+import { parsePatchBoardTaskGroupConfigBody } from "../../shared/taskGroupConfig";
 import type {
   ListDeleteMutationResult,
   ListMutationResult,
@@ -128,6 +129,35 @@ async function loadJsonArrayInput(
     `${label} must be a JSON array or an object with ${propertyName}`,
     2,
   );
+}
+
+async function loadJsonObjectInput(
+  label: string,
+  options: {
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  const resolved = resolveExclusiveTextInput(label, {
+    text: options.json,
+    file: options.file,
+    stdin: options.stdin,
+  });
+  if (!resolved) {
+    throw new CliError(`One ${label} input source is required`, 2);
+  }
+  const text = await loadTextInput(label, resolved);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new CliError(`Invalid ${label} JSON`, 2);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new CliError(`${label} must be a JSON object`, 2);
+  }
+  return parsed as Record<string, unknown>;
 }
 
 export async function runBoardsAdd(opts: {
@@ -295,12 +325,16 @@ export async function runBoardsGroups(opts: {
   if (!boardId) {
     throw new CliError("Missing required argument: <id-or-slug>", 2);
   }
-  const taskGroups = await loadJsonArrayInput("task groups", opts, "taskGroups");
+  const raw = await loadJsonObjectInput("task groups", opts);
+  const parsed = parsePatchBoardTaskGroupConfigBody(raw);
+  if (!parsed.ok) {
+    throw new CliError(parsed.error, 2);
+  }
 
   try {
     const board = await fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}/groups`,
-      { method: "PATCH", body: { taskGroups } },
+      { method: "PATCH", body: parsed.value },
       { port: opts.port },
     );
     printJson(writeSuccess(board, compactBoardEntity(board)));

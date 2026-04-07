@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
   ALL_TASK_GROUPS,
+  effectiveDefaultTaskGroupId,
   groupDisplayLabelForId,
   type Board,
   type List,
@@ -249,7 +250,7 @@ export function ListStatusBand({
     const defaultGroupId =
       activeGroup !== ALL_TASK_GROUPS
         ? Number(activeGroup)
-        : board.taskGroups[0]?.id ?? 0;
+        : effectiveDefaultTaskGroupId(board);
     createTask.mutate(
       {
         boardId: board.id,

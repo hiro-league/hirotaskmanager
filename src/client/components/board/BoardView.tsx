@@ -11,13 +11,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import {
-  ChevronDown,
-  ChevronUp,
-  MoreHorizontal,
-  Search,
-  Terminal,
-} from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, MoreVertical } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import {
   boardKeys,
@@ -36,6 +30,7 @@ import {
   priorityLabelForId,
   resolvedBoardLayout,
   sortPrioritiesByValue,
+  sortTaskGroupsForDisplay,
   type Board,
 } from "../../../shared/models";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
@@ -251,7 +246,9 @@ function BoardShortcutBindings({
           queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
         const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
         if (!task || currentBoard.taskGroups.length === 0) return;
-        const groupOrder = currentBoard.taskGroups.map((group) => group.id);
+        const groupOrder = sortTaskGroupsForDisplay(
+          currentBoard.taskGroups,
+        ).map((group) => group.id);
         const currentIndex = Math.max(0, groupOrder.indexOf(task.groupId));
         const nextGroupId = groupOrder[(currentIndex + 1) % groupOrder.length];
         if (nextGroupId == null || nextGroupId === task.groupId) return;
@@ -1027,53 +1024,6 @@ export function BoardView({ boardId }: BoardViewProps) {
                   {boardEmojiFieldError}
                 </p>
               ) : null}
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
-                    title="Board menu"
-                    aria-label="Board menu"
-                  >
-                    <MoreHorizontal className="size-4 shrink-0" aria-hidden />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    className="z-[100] min-w-[12rem] rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
-                    sideOffset={4}
-                    align="start"
-                  >
-                    <DropdownMenu.Item
-                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
-                      onSelect={() => setBoardEditOpen(true)}
-                    >
-                      Edit board…
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
-                      onSelect={() => setGroupsEditorOpen(true)}
-                    >
-                      Task groups
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
-                      onSelect={() => setPrioritiesEditorOpen(true)}
-                    >
-                      Task priorities
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
-              {!data.cliPolicy.readBoard ? (
-                <span
-                  className="inline-flex shrink-0 text-muted-foreground"
-                  title="CLI read off — hirotm cannot open this board until enabled in Edit board"
-                  aria-label="CLI read disabled for this board"
-                >
-                  <Terminal className="size-4" strokeWidth={2} aria-hidden />
-                </span>
-              ) : null}
               <EmojiPickerMenuButton
                 emoji={data.emoji}
                 disabled={patchBoard.isPending}
@@ -1142,18 +1092,68 @@ export function BoardView({ boardId }: BoardViewProps) {
                   {data.name.trim() || "Untitled"}
                 </button>
               )}
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
-                  title="Search tasks (K or F3)"
-                  aria-label="Search tasks on this board"
-                  onClick={() => openSearch()}
-                >
-                  <Search className="size-4 shrink-0" aria-hidden />
-                </button>
-                <BoardCelebrationSoundToggle board={data} />
-              </div>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.06]"
+                    title="Board menu"
+                    aria-label="Board menu"
+                  >
+                    <MoreVertical className="size-4 shrink-0" aria-hidden />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="z-[100] min-w-[12rem] rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+                    sideOffset={4}
+                    align="start"
+                  >
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setBoardEditOpen(true)}
+                    >
+                      Edit board…
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setGroupsEditorOpen(true)}
+                    >
+                      Task groups
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground"
+                      onSelect={() => setPrioritiesEditorOpen(true)}
+                    >
+                      Task priorities
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+              <span
+                className="inline-flex shrink-0 items-center"
+                title={
+                  data.cliPolicy.readBoard
+                    ? "CLI Access: Yes"
+                    : "CLI Access: Off"
+                }
+                aria-label={
+                  data.cliPolicy.readBoard
+                    ? "CLI access enabled for this board"
+                    : "CLI access off for this board"
+                }
+              >
+                <Bot
+                  className={cn(
+                    "size-4",
+                    data.cliPolicy.readBoard
+                      ? "text-muted-foreground"
+                      : "text-destructive",
+                  )}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </span>
               {activeGroupLabel ? (
                 // Surface the active group near the title so expanded filters read at a glance.
                 <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
@@ -1213,56 +1213,54 @@ export function BoardView({ boardId }: BoardViewProps) {
                 )
               ) : null}
             </div>
-            {!filterCollapsed ? (
-              <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 justify-self-center">
-                {/* Keep horizontal scrolling next to board-level appearance controls, not at the far edge of the header. */}
+            {/* Board chrome (color, layout, card size, stats, sound): same cell as collapse chevron whether filters are expanded or minimized. */}
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 justify-self-center">
+              {/* Keep horizontal scrolling next to board-level appearance controls, not at the far edge of the header. */}
+              <div
+                ref={headerScrollTrackRef}
+                role="scrollbar"
+                aria-controls={boardSurfaceId ?? undefined}
+                aria-orientation="horizontal"
+                aria-valuemin={0}
+                aria-valuemax={headerScrollMaxLeft}
+                aria-valuenow={Math.round(boardScrollMetrics.scrollLeft)}
+                aria-label="Scroll board lists"
+                data-board-no-pan
+                className={cn(
+                  "relative h-8 rounded-full border border-border/70 bg-muted/35 transition-opacity",
+                  headerScrollVisible
+                    ? "pointer-events-auto opacity-100"
+                    : "pointer-events-none opacity-0",
+                )}
+                style={{ width: `${HEADER_SCROLL_TRACK_WIDTH}px` }}
+                onPointerDown={startHeaderScrollDrag}
+                onPointerMove={moveHeaderScrollDrag}
+                onPointerUp={endHeaderScrollDrag}
+                onPointerCancel={endHeaderScrollDrag}
+                onLostPointerCapture={() => {
+                  headerScrollDragRef.current = null;
+                  setHeaderScrollDragging(false);
+                }}
+              >
+                <div className="pointer-events-none absolute inset-x-2 top-1/2 h-1 -translate-y-1/2 rounded-full bg-border/70" />
                 <div
-                  ref={headerScrollTrackRef}
-                  role="scrollbar"
-                  aria-controls={boardSurfaceId ?? undefined}
-                  aria-orientation="horizontal"
-                  aria-valuemin={0}
-                  aria-valuemax={headerScrollMaxLeft}
-                  aria-valuenow={Math.round(boardScrollMetrics.scrollLeft)}
-                  aria-label="Scroll board lists"
-                  data-board-no-pan
+                  data-board-scroll-thumb
                   className={cn(
-                    "relative h-8 rounded-full border border-border/70 bg-muted/35 transition-opacity",
-                    headerScrollVisible
-                      ? "pointer-events-auto opacity-100"
-                      : "pointer-events-none opacity-0",
+                    "absolute top-1/2 h-5 -translate-y-1/2 rounded-full border border-border bg-background/95 shadow-sm",
+                    headerScrollDragging && "cursor-grabbing",
                   )}
-                  style={{ width: `${HEADER_SCROLL_TRACK_WIDTH}px` }}
-                  onPointerDown={startHeaderScrollDrag}
-                  onPointerMove={moveHeaderScrollDrag}
-                  onPointerUp={endHeaderScrollDrag}
-                  onPointerCancel={endHeaderScrollDrag}
-                  onLostPointerCapture={() => {
-                    headerScrollDragRef.current = null;
-                    setHeaderScrollDragging(false);
+                  style={{
+                    left: `${headerScrollThumbOffset}px`,
+                    width: `${headerScrollThumbWidth}px`,
                   }}
-                >
-                  <div className="pointer-events-none absolute inset-x-2 top-1/2 h-1 -translate-y-1/2 rounded-full bg-border/70" />
-                  <div
-                    data-board-scroll-thumb
-                    className={cn(
-                      "absolute top-1/2 h-5 -translate-y-1/2 rounded-full border border-border bg-background/95 shadow-sm",
-                      headerScrollDragging && "cursor-grabbing",
-                    )}
-                    style={{
-                      left: `${headerScrollThumbOffset}px`,
-                      width: `${headerScrollThumbWidth}px`,
-                    }}
-                  />
-                </div>
-                <BoardColorMenu board={data} compact swatchOnly />
-                <BoardLayoutToggle board={data} iconsOnly />
-                <BoardTaskCardSizeToggle board={data} />
-                <BoardStatsVisibilityToggle board={data} />
+                />
               </div>
-            ) : (
-              <div />
-            )}
+              <BoardColorMenu board={data} compact swatchOnly />
+              <BoardLayoutToggle board={data} iconsOnly />
+              <BoardTaskCardSizeToggle board={data} />
+              <BoardStatsVisibilityToggle board={data} />
+              <BoardCelebrationSoundToggle board={data} />
+            </div>
             <button
               type="button"
               className="inline-flex size-8 items-center justify-center justify-self-end rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
@@ -1287,13 +1285,21 @@ export function BoardView({ boardId }: BoardViewProps) {
               {/* 2×2 grid: row1 = priority + status, row2 = groups + reserved cell. */}
               <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3">
                 <div className="min-w-0">
-                  <BoardPriorityToggles board={data} />
+                  <BoardPriorityToggles
+                    board={data}
+                    headerHovered={headerHovered}
+                    onOpenPriorityEditor={() => setPrioritiesEditorOpen(true)}
+                  />
                 </div>
                 <div className="min-w-0">
                   <BoardStatusToggles board={data} />
                 </div>
                 <div className="min-w-0">
-                  <TaskGroupSwitcher board={data} />
+                  <TaskGroupSwitcher
+                    board={data}
+                    headerHovered={headerHovered}
+                    onOpenGroupsEditor={() => setGroupsEditorOpen(true)}
+                  />
                 </div>
                 <div className="min-w-0">
                   <BoardTaskDateFilter board={data} />

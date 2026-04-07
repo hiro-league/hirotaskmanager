@@ -68,7 +68,7 @@ This document describes the **latest** tables only: structure, how they map to `
 
 **Maps to:** `GroupDefinition` (`id`, `label`) inside `Board.taskGroups`.
 
-**Features / API:** `PATCH /api/boards/:id/groups` replaces the set of groups for a board (`patchBoardTaskGroups`). Task create/patch require a valid `groupId` for that board.
+**Features / API:** `PATCH /api/boards/:id/groups` applies explicit creates, updates, and deletes (`patchBoardTaskGroupConfig`). Task create/patch require a valid `groupId` for that board.
 
 ---
 

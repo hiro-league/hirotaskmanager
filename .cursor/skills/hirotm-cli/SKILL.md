@@ -5,6 +5,8 @@ description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks,
 
 # hirotm CLI
 
+**Repository dev (`npm run dev`, API on 3002):** add **`--profile dev`** immediately after `hirotm` on each invocation, or set **`TASKMANAGER_PROFILE=dev`** in the environment. Omit for an installed app on port 3001.
+
 ## When To Use
 
 Use this skill when:
@@ -20,7 +22,7 @@ Use this skill when:
 - For agent-driven writes, include `--client-name "Cursor Agent"` so notifications identify the writer clearly.
 - Prefer CLI JSON output as the source of truth for current board/task data.
 - Do not write SQL or edit database files unless the user explicitly asks for database-level work.
-- If a query command fails with `Server not reachable`, run the exact `hirotm start ...` hint from the error output and retry.
+- If a query command fails with `Server not reachable`, run the exact `hirotm start ...` hint from the error output and retry (insert `--profile dev` after `hirotm` when using the dev server on 3002).
 
 ## Common Commands
 
@@ -48,8 +50,8 @@ hirotm start --background
 
 ## Usage Pattern
 
-1. Check server availability with `hirotm status` or a read command.
-2. If the server is not reachable, run the hinted `hirotm start ...` command.
+1. Check server availability with `hirotm status` or a read command (with `--profile dev` when on repo dev).
+2. If the server is not reachable, run the hinted `hirotm start ...` command (add `--profile dev` for dev API).
 3. Use read commands to inspect current state.
 4. Keep outputs in JSON when reporting or making follow-up decisions.
 5. When performing writes as an automated agent, add `--client-name "Cursor Agent"` unless the user asked for a different writer label.
@@ -67,5 +69,5 @@ hirotm boards list
 hirotm boards show my-project
 hirotm statuses list
 hirotm search "fts5" --board my-project
-hirotm start --background --port 3002
+hirotm --profile dev start --background
 ```

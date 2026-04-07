@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NotificationCreatedEvent } from "../../shared/notifications";
 import { getBrowserClientInstanceId } from "./clientHeaders";
+import { devDirectApiOrigin } from "./devDirectApiOrigin";
 import { invalidateNotificationQueries } from "./notifications";
 import { useNotificationUiStore } from "@/store/notificationUi";
 
@@ -9,10 +10,7 @@ function notificationEventsUrl(): string {
   const path = "/api/notifications/events";
   if (import.meta.env.PROD) return path;
   const raw = import.meta.env.VITE_API_ORIGIN as string | undefined;
-  const fallbackOrigin =
-    typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:3001`
-      : "http://localhost:3001";
+  const fallbackOrigin = devDirectApiOrigin();
   const origin =
     raw && raw.length > 0 ? raw.replace(/\/$/, "") : fallbackOrigin;
   return `${origin}${path}`;

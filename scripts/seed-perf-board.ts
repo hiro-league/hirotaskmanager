@@ -102,7 +102,9 @@ async function main(): Promise<void> {
   const listIds = listRows.map((r) => r.id);
 
   const groupRows = db
-    .query("SELECT id FROM task_group WHERE board_id = ? ORDER BY id ASC")
+    .query(
+      "SELECT id FROM task_group WHERE board_id = ? ORDER BY sort_order ASC, id ASC",
+    )
     .all(boardId) as { id: number }[];
   const groupIds = groupRows.map((r) => r.id);
 

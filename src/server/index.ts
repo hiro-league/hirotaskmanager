@@ -116,6 +116,10 @@ export async function startTaskManagerServer(options: {
 
   const app = createTaskManagerApp(options.kind);
   const server = Bun.serve({
+    // Bun's default IPv4-only bind skips ::1; on macOS, `localhost` often resolves to IPv6
+    // first, so Safari (and credentialed EventSource to the API port) would fail to connect.
+    hostname: "::",
+    ipv6Only: false,
     port: resolvePort({
       kind: options.kind,
       profile: options.profile,

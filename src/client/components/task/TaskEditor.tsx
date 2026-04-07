@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  effectiveDefaultTaskGroupId,
   formatGroupDisplayLabel,
   priorityDisplayLabel,
   sortPrioritiesByValue,
+  sortTaskGroupsForDisplay,
   type Board,
   type Task,
 } from "../../../shared/models";
@@ -96,7 +98,7 @@ export function TaskEditor({
       const defaultGroup =
         activeGroup !== ALL_TASK_GROUPS
           ? activeGroup
-          : String(board.taskGroups[0]?.id ?? "");
+          : String(effectiveDefaultTaskGroupId(board));
       setGroup(defaultGroup);
       setPriority("");
       baselineRef.current = {
@@ -107,7 +109,15 @@ export function TaskEditor({
         emoji: null,
       };
     }
-  }, [open, mode, task, createContext, board.taskGroups, activeGroup]);
+  }, [
+    open,
+    mode,
+    task,
+    createContext,
+    board.taskGroups,
+    board.defaultTaskGroupId,
+    activeGroup,
+  ]);
 
   useEffect(() => {
     if (open) setEmojiFieldError(null);
@@ -171,7 +181,8 @@ export function TaskEditor({
     const now = new Date().toISOString();
     const priorityId = priority ? Number(priority) : null;
     if (mode === "create" && createContext) {
-      const gid = Number(group) || board.taskGroups[0]?.id || 0;
+      const gid =
+        Number(group) || effectiveDefaultTaskGroupId(board);
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
@@ -346,7 +357,7 @@ export function TaskEditor({
                 disabled={busy}
                 onChange={(e) => setGroup(e.target.value)}
               >
-                {board.taskGroups.map((g) => (
+                {sortTaskGroupsForDisplay(board.taskGroups).map((g) => (
                   <option key={g.id} value={String(g.id)}>
                     {formatGroupDisplayLabel(g)}
                   </option>

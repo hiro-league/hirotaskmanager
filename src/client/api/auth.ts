@@ -1,8 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { AuthSessionResponse } from "../../shared/auth";
 import { withBrowserClientHeaders } from "./clientHeaders";
 
 export const authSessionKey = ["auth", "session"] as const;
+
+function removeQueriesExceptAuthSession(qc: QueryClient): void {
+  qc.removeQueries({
+    predicate: (q) => {
+      const k = q.queryKey;
+      return !(k[0] === "auth" && k[1] === "session");
+    },
+  });
+}
 
 async function parseErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -80,8 +94,11 @@ export function useLogout() {
         method: "POST",
       }),
     onSuccess: (session) => {
-      qc.clear();
+      // Set session first, then drop app cache. A full `clear()` evicts the auth query and
+      // triggers a session refetch that can finish after `setQueryData` and restore stale
+      // `authenticated: true`, so the UI stays on the shell until a full page reload.
       qc.setQueryData<AuthSessionResponse>(authSessionKey, session);
+      removeQueriesExceptAuthSession(qc);
     },
   });
 }
@@ -96,11 +113,11 @@ export function useRecoverPassphrase() {
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      qc.clear();
       qc.setQueryData<AuthSessionResponse>(authSessionKey, {
         initialized: true,
         authenticated: false,
       });
+      removeQueriesExceptAuthSession(qc);
     },
   });
 }

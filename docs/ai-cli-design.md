@@ -223,12 +223,12 @@ This behavior must be documented in command help and examples because AI callers
 
 #### Task groups
 
-- Existing rows are matched by `id`.
-- If an incoming `id` belongs to a group on the board, that row is **updated**.
-- If an incoming row has no matching stored id, it is **inserted**.
-- Stored groups omitted from the incoming set are **removed**.
-- Tasks assigned to removed groups are remapped to the **first kept group** in the submitted set.
-- The CLI help should explicitly say how to **extend** the current set safely: fetch existing groups first, keep the groups to preserve, then append new group rows before submitting.
+- `PATCH` uses an **explicit operation list**, not a replacement array: `creates`, `updates`, `deletes`, plus `defaultTaskGroupId` / `deletedGroupFallbackId` (or the `*ClientId` variants when a default points at a row created in the same request).
+- Each **update** targets an existing `id` with `label`, optional `emoji`, and `sortOrder` (display order).
+- Each **create** uses a client-generated `clientId`, `label`, `sortOrder`, and optional `emoji`.
+- Each **delete** targets an existing `id`; if the group still has tasks, the delete entry must include `moveTasksToGroupId` or `moveTasksToClientId` so reassignment is explicit.
+- Legacy payloads that send a `taskGroups` array are **rejected**; callers must use the explicit shape above.
+- Safe workflow for scripts: `hirotm boards show <id-or-slug>` → build `updates` (and optional `creates` / `deletes`) from current rows → include valid default and fallback ids after the operation.
 
 #### Task priorities
 

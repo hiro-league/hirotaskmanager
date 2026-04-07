@@ -9,16 +9,14 @@ import {
   fetchBoardTask,
   invalidateBoardStatsQueries,
 } from "./queries";
+import { devDirectApiOrigin } from "./devDirectApiOrigin";
 
 /** In dev, EventSource must hit the API process directly; Vite's HTTP proxy does not keep Bun SSE subscribers alive. */
 function boardEventsUrl(eventBoardId: number): string {
   const path = `/api/events?boardId=${eventBoardId}`;
   if (import.meta.env.PROD) return path;
   const raw = import.meta.env.VITE_API_ORIGIN as string | undefined;
-  const fallbackOrigin =
-    typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:3001`
-      : "http://localhost:3001";
+  const fallbackOrigin = devDirectApiOrigin();
   const origin =
     raw && raw.length > 0 ? raw.replace(/\/$/, "") : fallbackOrigin;
   return `${origin}${path}`;

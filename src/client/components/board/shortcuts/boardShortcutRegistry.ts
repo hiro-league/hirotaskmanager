@@ -1,4 +1,8 @@
-import { ALL_TASK_GROUPS, sortPrioritiesByValue } from "../../../../shared/models";
+import {
+  ALL_TASK_GROUPS,
+  sortPrioritiesByValue,
+  sortTaskGroupsForDisplay,
+} from "../../../../shared/models";
 import type { Board } from "../../../../shared/models";
 import {
   getNextTaskCardViewMode,
@@ -447,16 +451,17 @@ export function cycleTaskGroupForBoard(
   setActive: (boardId: string | number, group: string) => void,
 ): void {
   if (board.taskGroups.length === 0) return;
+  const groupsOrdered = sortTaskGroupsForDisplay(board.taskGroups);
   const order = [
     ALL_TASK_GROUPS,
-    ...board.taskGroups.map((g) => String(g.id)),
+    ...groupsOrdered.map((g) => String(g.id)),
   ];
   const raw =
     usePreferencesStore.getState().activeTaskGroupByBoardId[String(board.id)];
   const resolved =
     raw === ALL_TASK_GROUPS
       ? ALL_TASK_GROUPS
-      : raw && board.taskGroups.some((g) => String(g.id) === raw)
+      : raw && groupsOrdered.some((g) => String(g.id) === raw)
         ? raw
         : ALL_TASK_GROUPS;
   const idx = Math.max(0, order.indexOf(resolved));

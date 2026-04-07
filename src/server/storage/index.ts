@@ -13,7 +13,7 @@ export {
   patchBoard,
   patchBoardViewPrefs,
   patchBoardTaskPriorities,
-  patchBoardTaskGroups,
+  patchBoardTaskGroupConfig,
 } from "./board";
 export {
   createListOnBoard,

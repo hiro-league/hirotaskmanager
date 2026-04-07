@@ -1,7 +1,12 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { Smile } from "lucide-react";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { parseEmojiField } from "../../../shared/emojiField";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +61,11 @@ export function EmojiPickerMenuButton({
 }: EmojiPickerMenuButtonProps) {
   const dark = useDocumentDark();
   const [open, setOpen] = useState(false);
+
+  // Close menu when disabled (e.g. task group marked for delete) so picker cannot stay open.
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   const ariaLabel = emoji
     ? selectedAriaLabel(emoji)

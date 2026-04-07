@@ -18,7 +18,7 @@ interface BoardSearchDialogProps {
 }
 
 /**
- * Board-scoped task search (FTS). Opens from the board header or K / F3; choosing a row opens the task editor like a card click.
+ * Board-scoped task search (FTS). Opens from the app header (on a board), or K / F3; choosing a row opens the task editor like a card click.
  */
 export function BoardSearchDialog({
   board,

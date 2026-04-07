@@ -21,6 +21,8 @@ import {
   type TaskPriorityDefinition,
 } from "../../shared/models";
 import type { RestoreOutcome } from "../../shared/trashApi";
+import type { PatchBoardTaskGroupConfigInput } from "../../shared/taskGroupConfig";
+import { parseEmojiField } from "../../shared/emojiField";
 import { slugify, uniqueSlug } from "../../shared/slug";
 import { getDb, resolveDataDir, withTransaction } from "../db";
 import {
@@ -114,6 +116,8 @@ type BoardRowWithPolicyJoin = {
   description: string | null;
   created_at: string;
   updated_at: string;
+  default_task_group_id: number | null;
+  deleted_group_fallback_id: number | null;
   created_by_principal: string | null;
   created_by_label: string | null;
   read_board: number | null;
@@ -194,6 +198,7 @@ export function loadBoard(boardId: number): Board | null {
   const boardRow = db
     .query(
       `SELECT b.id, b.name, b.slug, b.emoji, b.description, b.created_at, b.updated_at,
+              b.default_task_group_id, b.deleted_group_fallback_id,
               b.created_by_principal, b.created_by_label,
               ${BOARD_INDEX_POLICY_COLS}
        FROM board b
@@ -226,18 +231,38 @@ export function loadBoard(boardId: number): Board | null {
 
   const groupRows = db
     .query(
-      "SELECT id, label, emoji FROM task_group WHERE board_id = ? ORDER BY id",
+      "SELECT id, label, emoji, sort_order FROM task_group WHERE board_id = ? ORDER BY sort_order ASC, id ASC",
     )
-    .all(boardId) as { id: number; label: string; emoji: string | null }[];
+    .all(boardId) as {
+    id: number;
+    label: string;
+    emoji: string | null;
+    sort_order: number;
+  }[];
 
   const taskGroups: GroupDefinition[] = groupRows.map((g) => ({
     id: g.id,
     label: g.label,
+    sortOrder: g.sort_order,
     emoji:
       g.emoji != null && String(g.emoji).trim() !== ""
         ? String(g.emoji).trim()
         : null,
   }));
+
+  const groupIdSet = new Set(taskGroups.map((g) => g.id));
+  const firstGroupId = taskGroups[0]?.id;
+  let defaultTaskGroupId =
+    boardRow.default_task_group_id ?? firstGroupId ?? 0;
+  let deletedGroupFallbackId =
+    boardRow.deleted_group_fallback_id ?? firstGroupId ?? 0;
+  // Coerce invalid pointers (e.g. after a group delete) so the board always exposes valid ids.
+  if (!groupIdSet.has(defaultTaskGroupId) && firstGroupId != null) {
+    defaultTaskGroupId = firstGroupId;
+  }
+  if (!groupIdSet.has(deletedGroupFallbackId) && firstGroupId != null) {
+    deletedGroupFallbackId = firstGroupId;
+  }
 
   const priorityRows = db
     .query(
@@ -366,6 +391,8 @@ export function loadBoard(boardId: number): Board | null {
     backgroundImage: prefs?.background_image ?? undefined,
     boardColor: parseBoardColor(prefs?.board_color ?? undefined),
     taskGroups,
+    defaultTaskGroupId,
+    deletedGroupFallbackId,
     taskPriorities,
     visibleStatuses,
     statusBandWeights,
@@ -489,10 +516,23 @@ export async function createBoardWithDefaults(
     );
     const id = Number(r.lastInsertRowid);
     const groups = createDefaultTaskGroups();
+    let ord = 0;
     for (const g of groups) {
       db.run(
-        "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
-        [id, g.label, null],
+        "INSERT INTO task_group (board_id, label, emoji, sort_order) VALUES (?, ?, ?, ?)",
+        [id, g.label, null, ord],
+      );
+      ord += 1;
+    }
+    const firstG = db
+      .query(
+        "SELECT id FROM task_group WHERE board_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1",
+      )
+      .get(id) as { id: number } | null;
+    if (firstG) {
+      db.run(
+        "UPDATE board SET default_task_group_id = ?, deleted_group_fallback_id = ? WHERE id = ?",
+        [firstG.id, firstG.id, id],
       );
     }
     // Seed built-in priorities here so every new board can assign them immediately.
@@ -628,83 +668,177 @@ function applyTaskPriorityChanges(
   }
 }
 
-/**
- * When `emoji` is omitted on PATCH (e.g. older clients), keep the stored value for that id.
- */
-function resolveTaskGroupEmoji(
+function resolveTaskGroupUpdateEmoji(
   db: Database,
   boardId: number,
-  g: GroupDefinition,
+  groupId: number,
+  emoji: string | null | undefined,
 ): string | null {
-  if (g.emoji !== undefined) {
-    return g.emoji;
-  }
-  if (g.id > 0) {
-    const row = db
-      .query("SELECT emoji FROM task_group WHERE id = ? AND board_id = ?")
-      .get(g.id, boardId) as { emoji: string | null } | null;
-    const raw = row?.emoji;
-    if (raw != null && String(raw).trim() !== "") {
-      return String(raw).trim();
-    }
+  if (emoji !== undefined) return emoji;
+  const row = db
+    .query("SELECT emoji FROM task_group WHERE id = ? AND board_id = ?")
+    .get(groupId, boardId) as { emoji: string | null } | null;
+  const raw = row?.emoji;
+  if (raw != null && String(raw).trim() !== "") {
+    return String(raw).trim();
   }
   return null;
 }
 
-/** Sync task groups (insert/update/delete); remaps tasks when groups are removed. */
-function applyTaskGroupChanges(
+/**
+ * Explicit task group create/update/delete (Phase 2). Replaces legacy replacement-array semantics.
+ */
+function applyTaskGroupConfig(
   db: Database,
   boardId: number,
-  taskGroups: GroupDefinition[],
+  input: PatchBoardTaskGroupConfigInput,
 ): void {
-  if (taskGroups.length === 0) {
-    throw new Error("Board must have at least one task group");
-  }
-
-  const keptGroupIds = new Set<number>();
-
-  for (const g of taskGroups) {
-    const emoji = resolveTaskGroupEmoji(db, boardId, g);
-    if (g.id > 0) {
-      const row = db
-        .query("SELECT id FROM task_group WHERE id = ? AND board_id = ?")
-        .get(g.id, boardId) as { id: number } | null;
-      if (row) {
-        db.run("UPDATE task_group SET label = ?, emoji = ? WHERE id = ?", [
-          g.label,
-          emoji,
-          g.id,
-        ]);
-        keptGroupIds.add(g.id);
-      } else {
-        const r = db.run(
-          "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
-          [boardId, g.label, emoji],
-        );
-        keptGroupIds.add(Number(r.lastInsertRowid));
-      }
-    } else {
-      const r = db.run(
-        "INSERT INTO task_group (board_id, label, emoji) VALUES (?, ?, ?)",
-        [boardId, g.label, emoji],
-      );
-      keptGroupIds.add(Number(r.lastInsertRowid));
-    }
-  }
-
-  const existingGroups = db
+  const existingRows = db
     .query("SELECT id FROM task_group WHERE board_id = ?")
     .all(boardId) as { id: number }[];
-  const fallbackGroupId = [...keptGroupIds][0]!;
-  for (const { id: gid } of existingGroups) {
-    if (!keptGroupIds.has(gid)) {
-      db.run("UPDATE task SET group_id = ? WHERE group_id = ?", [
-        fallbackGroupId,
-        gid,
-      ]);
-      db.run("DELETE FROM task_group WHERE id = ?", [gid]);
+  const existingIds = new Set(existingRows.map((r) => r.id));
+
+  const deleteIds = input.deletes.map((d) => d.id);
+  const deleteSet = new Set(deleteIds);
+  if (deleteSet.size !== deleteIds.length) {
+    throw new Error("Duplicate delete id");
+  }
+
+  const updateIds = input.updates.map((u) => u.id);
+  const updateSet = new Set(updateIds);
+  if (updateSet.size !== updateIds.length) {
+    throw new Error("Duplicate update id");
+  }
+
+  for (const id of updateSet) {
+    if (deleteSet.has(id)) {
+      throw new Error("Cannot update and delete the same task group");
     }
   }
+
+  const createClientIds = input.creates.map((c) => c.clientId);
+  const clientIdSet = new Set(createClientIds);
+  if (clientIdSet.size !== createClientIds.length) {
+    throw new Error("Duplicate create clientId");
+  }
+
+  for (const u of input.updates) {
+    if (!existingIds.has(u.id)) {
+      throw new Error(`Update references unknown task group id ${u.id}`);
+    }
+    if (deleteSet.has(u.id)) {
+      throw new Error(`Cannot update deleted task group id ${u.id}`);
+    }
+  }
+
+  for (const d of input.deletes) {
+    if (!existingIds.has(d.id)) {
+      throw new Error(`Delete references unknown task group id ${d.id}`);
+    }
+  }
+
+  const clientIdToNewId = new Map<string, number>();
+  const newIds: number[] = [];
+
+  for (const c of input.creates) {
+    let emoji: string | null = null;
+    if (c.emoji !== undefined && c.emoji !== null) {
+      const p = parseEmojiField(c.emoji);
+      if (!p.ok) throw new Error(p.error);
+      emoji = p.value;
+    }
+    const r = db.run(
+      "INSERT INTO task_group (board_id, label, emoji, sort_order) VALUES (?, ?, ?, ?)",
+      [boardId, c.label, emoji, c.sortOrder],
+    );
+    const newId = Number(r.lastInsertRowid);
+    clientIdToNewId.set(c.clientId, newId);
+    newIds.push(newId);
+  }
+
+  const surviving = new Set<number>();
+  for (const id of existingIds) {
+    if (!deleteSet.has(id)) surviving.add(id);
+  }
+  for (const id of newIds) surviving.add(id);
+
+  let resolvedDefault = input.defaultTaskGroupId;
+  if (input.defaultTaskGroupClientId) {
+    const mapped = clientIdToNewId.get(input.defaultTaskGroupClientId);
+    if (mapped === undefined) {
+      throw new Error("defaultTaskGroupClientId does not match any create");
+    }
+    resolvedDefault = mapped;
+  }
+  let resolvedFallback = input.deletedGroupFallbackId;
+  if (input.deletedGroupFallbackClientId) {
+    const mapped = clientIdToNewId.get(input.deletedGroupFallbackClientId);
+    if (mapped === undefined) {
+      throw new Error("deletedGroupFallbackClientId does not match any create");
+    }
+    resolvedFallback = mapped;
+  }
+  if (resolvedDefault === undefined || resolvedFallback === undefined) {
+    throw new Error("Missing default task group or fallback resolution");
+  }
+  if (!surviving.has(resolvedDefault)) {
+    throw new Error("defaultTaskGroupId must reference a surviving task group");
+  }
+  if (!surviving.has(resolvedFallback)) {
+    throw new Error("deletedGroupFallbackId must reference a surviving task group");
+  }
+  if (surviving.size < 1) {
+    throw new Error("At least one task group must remain");
+  }
+
+  for (const u of input.updates) {
+    const emoji = resolveTaskGroupUpdateEmoji(db, boardId, u.id, u.emoji);
+    db.run(
+      "UPDATE task_group SET label = ?, emoji = ?, sort_order = ? WHERE id = ? AND board_id = ?",
+      [u.label, emoji, u.sortOrder, u.id, boardId],
+    );
+  }
+
+  for (const d of input.deletes) {
+    let target: number;
+    if (d.moveTasksToClientId) {
+      const mapped = clientIdToNewId.get(d.moveTasksToClientId);
+      if (mapped === undefined) {
+        throw new Error("moveTasksToClientId does not match any create");
+      }
+      target = mapped;
+    } else {
+      target = d.moveTasksToGroupId ?? resolvedFallback;
+    }
+    if (!surviving.has(target)) {
+      throw new Error("Task move target must be a surviving task group");
+    }
+    if (deleteSet.has(target)) {
+      throw new Error("Cannot move tasks to a deleted task group");
+    }
+    if (target === d.id) {
+      throw new Error("Cannot move tasks to the group being deleted");
+    }
+    db.run("UPDATE task SET group_id = ? WHERE group_id = ? AND board_id = ?", [
+      target,
+      d.id,
+      boardId,
+    ]);
+    db.run("DELETE FROM task_group WHERE id = ? AND board_id = ?", [
+      d.id,
+      boardId,
+    ]);
+  }
+
+  db.run(
+    "UPDATE board SET default_task_group_id = ?, deleted_group_fallback_id = ?, updated_at = ? WHERE id = ?",
+    [
+      resolvedDefault,
+      resolvedFallback,
+      new Date().toISOString(),
+      boardId,
+    ],
+  );
 }
 
 /**
@@ -877,16 +1011,14 @@ export function patchBoardViewPrefs(
   return loadBoard(boardId);
 }
 
-export function patchBoardTaskGroups(
+export function patchBoardTaskGroupConfig(
   boardId: number,
-  taskGroups: GroupDefinition[],
+  input: PatchBoardTaskGroupConfigInput,
 ): Board | null {
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
-  const now = new Date().toISOString();
   withTransaction(db, () => {
-    applyTaskGroupChanges(db, boardId, taskGroups);
-    db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
+    applyTaskGroupConfig(db, boardId, input);
   });
   return loadBoard(boardId);
 }

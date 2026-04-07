@@ -115,6 +115,10 @@ bun install
 npm run dev
 ```
 
+**CLI:** `node_modules/.bin` is not on `PATH`, so run **`npm link` once** from the repo root (after install) for a global `hirotm`, or use **`npx hirotm`** / **`npm run cli --`**. Re-run **`npm link`** only if the global command breaks (e.g. after `npm unlink` or changing clones).
+
+**`hirotm` and dev:** the dev API is on **3002**; the CLI defaults to **3001**. Use **`hirotm --profile dev …`** or **`TASKMANAGER_PROFILE=dev`**.
+
 **SQLite data in the repo:** the dev runtime now defaults to `data/taskmanager.db` under the repository root, so the normal `npm run dev` flow uses the tracked SQLite file without needing env vars.
 
 Current behavior:

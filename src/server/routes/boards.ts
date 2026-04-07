@@ -18,11 +18,8 @@ import {
   type TaskDeleteMutationResult,
   type TaskMutationResult,
 } from "../../shared/mutationResults";
-import type {
-  Board,
-  GroupDefinition,
-  TaskPriorityDefinition,
-} from "../../shared/models";
+import type { Board, TaskPriorityDefinition } from "../../shared/models";
+import { parsePatchBoardTaskGroupConfigBody } from "../../shared/taskGroupConfig";
 import { ALL_TASK_GROUPS } from "../../shared/models";
 import {
   closedStatusIdsFromStatuses,
@@ -43,7 +40,7 @@ import {
   loadBoard,
   patchBoard,
   patchBoardTaskPriorities,
-  patchBoardTaskGroups,
+  patchBoardTaskGroupConfig,
   patchBoardViewPrefs,
   patchListOnBoard,
   moveTaskOnBoard,
@@ -274,47 +271,18 @@ boardsRoute.patch("/:id/groups", async (c) => {
   if (blockedRead) return blockedRead;
   const blocked = cliManageStructureError(c, entry.id);
   if (blocked) return blocked;
-  let body: { taskGroups?: unknown };
+  let body: unknown;
   try {
-    body = (await c.req.json()) as { taskGroups?: unknown };
+    body = await c.req.json();
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  if (!Array.isArray(body.taskGroups)) {
-    return c.json({ error: "taskGroups array required" }, 400);
-  }
-  const taskGroups: GroupDefinition[] = [];
-  for (const item of body.taskGroups) {
-    if (!item || typeof item !== "object") continue;
-    const rec = item as Record<string, unknown>;
-    const label = typeof rec.label === "string" ? rec.label.trim() : "";
-    if (!label) continue;
-    const id =
-      typeof rec.id === "number" && Number.isFinite(rec.id) ? rec.id : 0;
-
-    let emoji: string | null | undefined = undefined;
-    if ("emoji" in rec) {
-      const raw = rec.emoji;
-      if (raw === null || raw === "") {
-        emoji = null;
-      } else if (typeof raw === "string") {
-        const parsed = parseEmojiField(raw);
-        if (!parsed.ok) {
-          return c.json({ error: parsed.error }, 400);
-        }
-        emoji = parsed.value;
-      } else {
-        return c.json({ error: "Invalid emoji" }, 400);
-      }
-    }
-
-    taskGroups.push({ id, label, emoji });
-  }
-  if (taskGroups.length === 0) {
-    return c.json({ error: "At least one task group required" }, 400);
+  const parsed = parsePatchBoardTaskGroupConfigBody(body);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
   }
   try {
-    const saved = patchBoardTaskGroups(entry.id, taskGroups);
+    const saved = patchBoardTaskGroupConfig(entry.id, parsed.value);
     if (!saved) return c.json({ error: "Board not found" }, 404);
     publishBoardChanged(entry.id, saved.updatedAt);
     recordBoardTaskGroups(c, entry, saved);

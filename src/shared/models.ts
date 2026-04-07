@@ -19,6 +19,8 @@ export type TaskStatus = string;
 export interface GroupDefinition {
   id: number;
   label: string;
+  /** Display order within the board; persisted on the server. */
+  sortOrder: number;
   /** Optional emoji before the label; not used for search or sorting. */
   emoji?: string | null;
 }
@@ -44,10 +46,41 @@ export function statusIdsInWorkflowOrder(statuses: Status[]): string[] {
 /** Default groups for new boards — placeholder ids remapped by the server on save. */
 export function createDefaultTaskGroups(): GroupDefinition[] {
   return [
-    { id: 0, label: "feature" },
-    { id: 1, label: "bug" },
-    { id: 2, label: "enhancement" },
+    { id: 0, label: "feature", sortOrder: 0 },
+    { id: 1, label: "bug", sortOrder: 1 },
+    { id: 2, label: "enhancement", sortOrder: 2 },
   ];
+}
+
+/**
+ * Task groups in persisted display order (`sort_order`, then `id`).
+ * Phase 4: UI and shortcuts use this so behavior matches explicit `sort_order`, not accidental cache array order.
+ */
+export function sortTaskGroupsForDisplay(
+  groups: readonly GroupDefinition[],
+): GroupDefinition[] {
+  return [...groups].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
+  );
+}
+
+const groupIds = (groups: readonly GroupDefinition[]): Set<number> =>
+  new Set(groups.map((g) => g.id));
+
+/**
+ * Default `groupId` for new tasks when no stricter context (e.g. active filter) applies.
+ * Phase 4: prefers persisted `defaultTaskGroupId` when valid; else first group in display order (not raw array index).
+ */
+export function effectiveDefaultTaskGroupId(board: {
+  taskGroups: GroupDefinition[];
+  defaultTaskGroupId: number;
+}): number {
+  const ids = groupIds(board.taskGroups);
+  if (ids.has(board.defaultTaskGroupId)) {
+    return board.defaultTaskGroupId;
+  }
+  const ordered = sortTaskGroupsForDisplay(board.taskGroups);
+  return ordered[0]?.id ?? 0;
 }
 
 /**
@@ -224,6 +257,10 @@ export interface Board {
   boardColor?: BoardColorPreset;
   /** User-defined groups (id + label) for this board. */
   taskGroups: GroupDefinition[];
+  /** Default `task_group.id` for new tasks when no stricter context applies. */
+  defaultTaskGroupId: number;
+  /** Default destination group when tasks must move off a removed group. */
+  deletedGroupFallbackId: number;
   /** Board-local task priorities, sorted by numeric value. */
   taskPriorities: TaskPriorityDefinition[];
   visibleStatuses: string[];

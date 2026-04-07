@@ -25,3 +25,14 @@ export function boardHeaderActionButtonClass() {
     "border-border bg-muted/40 text-foreground hover:bg-muted",
   );
 }
+
+/** Reserves space for the section edit icon so filter labels and buttons do not shift on header hover. */
+export const BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS =
+  "inline-flex h-5 w-5 shrink-0 items-center justify-center";
+
+export function boardHeaderSectionEditIconButtonClass(headerHovered: boolean) {
+  return cn(
+    "inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-opacity duration-150 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.06]",
+    headerHovered ? "opacity-100" : "opacity-0 pointer-events-none",
+  );
+}

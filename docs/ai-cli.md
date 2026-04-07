@@ -178,7 +178,7 @@ Rules:
 
 ### `hirotm boards groups`
 
-Replace the board task groups definition set from JSON.
+Apply explicit task group operations (creates, updates, deletes, and board default pointers) from JSON.
 
 ```bash
 hirotm boards groups <id-or-slug> (--json <text> | --file <path> | --stdin)
@@ -187,10 +187,16 @@ hirotm boards groups <id-or-slug> (--json <text> | --file <path> | --stdin)
 Rules:
 
 - exactly one JSON source is required
-- input may be either:
-  - a raw JSON array of groups, or
-  - an object with `taskGroups`
-- the CLI forwards the definition set to the existing replace-style API
+- input must be a JSON object with `creates`, `updates`, `deletes`, and default group fields (see `parsePatchBoardTaskGroupConfigBody` / `PatchBoardTaskGroupConfigInput` in `src/shared/taskGroupConfig.ts`)
+- legacy `taskGroups` replacement-array payloads are rejected
+- `defaultTaskGroupId` and `deletedGroupFallbackId` must reference groups that still exist after creates/deletes are applied; deleting a group with tasks requires `moveTasksToGroupId` or `moveTasksToClientId` on that delete entry
+- the server rejects saves that would leave zero groups or delete the last group without a replacement in the same request
+
+Example (rename one group, keep order and defaults unchanged):
+
+```bash
+hirotm boards groups my-board --json '{"creates":[],"updates":[{"id":12,"label":"Bugs","emoji":null,"sortOrder":1}],"deletes":[],"defaultTaskGroupId":11,"deletedGroupFallbackId":11}'
+```
 
 ### `hirotm boards priorities`
 

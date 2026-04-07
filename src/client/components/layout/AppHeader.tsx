@@ -1,6 +1,6 @@
-import { ChevronsLeft, ChevronsRight, Command, LogOut, Moon, Sun } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Command, Moon, Search, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import { useLogout } from "@/api/auth";
+import { useBoardSearchOptional } from "@/context/BoardSearchContext";
 import { cn } from "@/lib/utils";
 import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
 import { usePreferencesStore } from "@/store/preferences";
@@ -9,8 +9,9 @@ import { resolveDark, useSystemDark } from "./ThemeRoot";
 
 export function AppHeader() {
   const { pathname } = useLocation();
-  const logout = useLogout();
   const shortcutHelpAvailable = pathname.startsWith("/board/");
+  const boardSearch = useBoardSearchOptional();
+  const showBoardSearchButton = shortcutHelpAvailable && boardSearch;
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
   const toggleSidebar = usePreferencesStore((s) => s.toggleSidebarCollapsed);
   const themePreference = usePreferencesStore((s) => s.themePreference);
@@ -23,8 +24,8 @@ export function AppHeader() {
   };
 
   return (
-    <header className="flex h-12 w-full shrink-0 items-center justify-between border-b border-header-border bg-header px-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="flex h-12 w-full shrink-0 items-center gap-2 border-b border-header-border bg-header px-3 sm:gap-3 sm:px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={toggleSidebar}
@@ -56,7 +57,29 @@ export function AppHeader() {
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Cosmetic search field + icon; single button so the whole row is clickable (avoids overlay dead zones). */}
+      {showBoardSearchButton ? (
+        <div className="flex w-full max-w-md min-w-0 shrink-[2] items-center justify-center sm:min-w-[12rem] sm:shrink">
+          <button
+            type="button"
+            title="Search tasks (K or F3)"
+            aria-label="Search tasks on this board"
+            onClick={() => boardSearch.openSearch()}
+            className={cn(
+              "inline-flex h-9 w-full min-h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-muted/70 px-3 py-0 text-left text-sm text-muted-foreground shadow-sm",
+              "transition-[color,background-color,box-shadow] hover:bg-muted hover:text-foreground hover:shadow",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
+              "active:translate-y-px active:shadow-sm",
+            )}
+          >
+            {/* Icon uses currentColor so it tracks the button’s muted → foreground hover. */}
+            <Search className="size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 truncate select-none">Search tasks…</span>
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         <NotificationBell />
         <button
           type="button"
@@ -81,22 +104,6 @@ export function AppHeader() {
           )}
         >
           <Command className="size-5 shrink-0" aria-hidden />
-        </button>
-        <button
-          type="button"
-          title="Log out"
-          aria-label="Log out"
-          disabled={logout.isPending}
-          onClick={() => logout.mutate()}
-          className={cn(
-            "inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/70 text-foreground shadow-sm",
-            "transition-[color,background-color,box-shadow] hover:bg-muted hover:shadow",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
-            "active:translate-y-px active:shadow-sm",
-            logout.isPending && "cursor-wait opacity-60",
-          )}
-        >
-          <LogOut className="size-5 shrink-0" aria-hidden />
         </button>
         <button
           type="button"

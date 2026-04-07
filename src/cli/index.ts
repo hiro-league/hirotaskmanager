@@ -400,9 +400,12 @@ addPortOption(
 addPortOption(
   boardsCommand
     .command("groups")
-    .description("Replace board task groups from JSON")
+    .description("Set board task groups (explicit creates, updates, deletes, defaults)")
     .argument("<id-or-slug>", "Board id or slug")
-    .option("--json <text>", "JSON array or object with taskGroups")
+    .option(
+      "--json <text>",
+      "JSON: creates, updates, deletes, defaultTaskGroupId, deletedGroupFallbackId (optional *ClientId for defaults); see docs/ai-cli.md",
+    )
     .option("--file <path>", "Read JSON from a UTF-8 file")
     .option("--stdin", "Read JSON from stdin until EOF"),
 ).action(

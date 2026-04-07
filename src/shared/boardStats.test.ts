@@ -35,7 +35,9 @@ function minimalBoard(overrides: Partial<Board> = {}): Board {
     name: "B",
     description: "",
     cliPolicy: EMPTY_BOARD_CLI_POLICY,
-    taskGroups: [{ id: 0, label: "g" }],
+    taskGroups: [{ id: 0, label: "g", sortOrder: 0 }],
+    defaultTaskGroupId: 0,
+    deletedGroupFallbackId: 0,
     taskPriorities: [
       { id: 10, value: 10, label: "low", color: "#94a3b8", isSystem: true },
     ],

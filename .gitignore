@@ -8,3 +8,6 @@ dist
 .env
 .env.local
 .VSCodeCounter
+
+docs/chrome-profiling/*.json
+docs/profiling/*.json

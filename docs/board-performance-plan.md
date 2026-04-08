@@ -66,9 +66,42 @@ Record baseline numbers before and after each optimization.
 
 ---
 
-## Phase 2: Optimizations (ranked by expected impact)
+## Phase 2: Optimizations (ranked by profiled impact)
 
-### 1. Pre-index tasks by (listId, status) — quick win
+Rankings updated after Phase 1 profiling. See `docs/profiling-analysis.md` for full data. Profiling measured a 1000-task board in stacked layout across five scenarios: load, hover, scroll, drag-and-drop, and filter toggle.
+
+### 1. Ref-ify BoardKeyboardNavProvider state — critical quick win
+
+**Profiled impact:** Eliminates the single biggest source of unnecessary re-renders. `BoardKeyboardNavProvider` is the sole updater in 100% of hover commits (20/20), 100% of scroll commits (7/7 meaningful), and the top 8 drag commits. Each state change triggers a full re-render of all 1000 tasks (18,000 `SortableTaskRow` samples in a 20-commit hover session). Effect re-runs from these unnecessary renders cost more than the renders themselves (27,839 ms effects vs 10,720 ms commits during hover).
+
+**Problem:** `SortableTaskRow.onPointerEnter` → `setHoveredTaskId` (useState) in `BoardKeyboardNavContext` → re-render of context provider + all consumers. Moving the mouse across cards fires this on every card boundary. Scrolling also triggers this — 7 of 10 scroll commits come from `BoardKeyboardNavProvider`, likely via intersection observers or scroll-position-based hover events.
+
+**Fix:** Store `hoveredTaskId` in a `ref` instead of state. Only promote to state when the keyboard system actually consumes it (Tab / arrow key pressed). Audit all `BoardKeyboardNavContext` state to check whether scroll-triggered updates (e.g. `focusedTaskId`, element registrations) also use state where a ref would suffice.
+
+**Files:** `BoardKeyboardNavContext.tsx`, `SortableTaskRow.tsx`.
+
+**Effort:** Low.
+
+### 2. Stop passing full `board` as prop / enable memoization — critical
+
+**Profiled impact:** Zero components in the tree successfully bail out of rendering today. Every commit re-renders the full cascade: `BoardColumnsStacked` → `BoardListStackedColumn ×50` → `ListStackedBody ×50` → `StackedSortableList ×50` → `SortableTaskRow ×1000` → `TaskCard ×1000`. Without this fix, any remaining re-render source (Radix UI cascades during filter toggle — 26 commits at 617 ms each, BoardView updates on data refetch) still re-renders all 1000 tasks.
+
+**Problem:** `board` is a new object reference on every React Query cache update. Every component receiving `board` as a prop re-renders even if its own list's tasks haven't changed. `React.memo` on `ListStatusBand` / `BoardListColumn` / `SortableBandContent` cannot help because the top-level prop always changes.
+
+**Fix:** At the `BoardColumns` / `BoardColumnsStacked` level, derive stable per-band slices:
+- `taskGroups`, `taskPriorities` (stable references unless edited)
+- Pre-indexed task array for this specific `(listId, status)` (from optimization #3)
+- Pass these slices instead of `board`
+
+Alternatively, put the board data in a context or Zustand slice with selector-based access so child components subscribe only to the fields they need.
+
+**Files:** `BoardColumns.tsx`, `BoardColumnsStacked.tsx`, `BoardListColumn.tsx`, `BoardListStackedColumn.tsx`, `ListStatusBand.tsx`.
+
+**Effort:** Medium. Depends on #3 for stable slices.
+
+### 3. Pre-index tasks by (listId, status) — enabler for #2
+
+**Profiled impact:** Not directly measurable in isolation (filter/sort cost is dwarfed by the render cascade), but this is a prerequisite for #2 — it produces the stable per-band task arrays that make `React.memo` on column/band components possible.
 
 **Problem:** `listStatusTasksSorted` scans the full `board.tasks` array for every `(listId, status)` band. With N tasks and B bands this is O(N × B) per render.
 
@@ -78,55 +111,9 @@ Record baseline numbers before and after each optimization.
 
 **Effort:** Low.
 
-### 2. Debounce / ref-ify hover state — quick win
+### 4. Virtualize task lists — highest impact on load, highest complexity
 
-**Problem:** `SortableTaskRow.onPointerEnter` → `setHoveredTaskId` (useState) in `BoardKeyboardNavContext` → re-render of context provider + all consumers. Moving the mouse across cards fires this on every card boundary.
-
-**Fix:** Store `hoveredTaskId` in a `ref` instead of state. Only promote to state when the keyboard system actually consumes it (Tab / arrow key pressed). Alternatively, gate updates behind `requestAnimationFrame` so at most one state update fires per frame.
-
-**Files:** `BoardKeyboardNavContext.tsx`, `SortableTaskRow.tsx`.
-
-**Effort:** Low.
-
-### 3. Trim task body from board payload — quick server win
-
-**Problem:** `GET /api/boards/:id` sends full `task.body` for every task. The board view only uses a 100-char preview (`previewBody` in `TaskCard.tsx`). With 1000 tasks this can be megabytes of unused text.
-
-**Fix:** Add a query parameter (e.g. `?slim=1` or `?bodyPreview=120`) to the board endpoint. When set, the server truncates each task's body to the preview length before serializing. Full body is fetched on-demand when the task editor opens (already has `GET /api/boards/:id/tasks/:taskId`).
-
-**Files:** `boards.ts` (server route), `board.ts` (storage — `loadBoard`), `queries.ts` (client fetch).
-
-**Effort:** Low-medium.
-
-### 4. Stop passing full `board` as prop to band/column components — medium win
-
-**Problem:** `board` is a new object reference on every React Query cache update. Every component receiving `board` as a prop re-renders even if its own list's tasks haven't changed. `React.memo` on `ListStatusBand` / `BoardListColumn` / `SortableBandContent` cannot help because the top-level prop always changes.
-
-**Fix:** At the `BoardColumns` / `BoardColumnsStacked` level, derive stable per-band slices:
-- `taskGroups`, `taskPriorities` (stable references unless edited)
-- Pre-indexed task array for this specific `(listId, status)` (from optimization #1)
-- Pass these slices instead of `board`
-
-Alternatively, put the board data in a context or Zustand slice with selector-based access so child components subscribe only to the fields they need.
-
-**Files:** `BoardColumns.tsx`, `BoardColumnsStacked.tsx`, `BoardListColumn.tsx`, `BoardListStackedColumn.tsx`, `ListStatusBand.tsx`.
-
-**Effort:** Medium.
-
-### 5. Reduce DnD collision detection scope — medium win
-
-**Problem:** dnd-kit evaluates collision detection against all registered sortable/droppable nodes. With 1000 sortable tasks, every `onDragOver` event runs collision checks against all of them. This is the primary cause of drag-over sluggishness.
-
-**Fix:**
-- Use a custom collision detection strategy that only checks containers geometrically near the pointer (spatial partitioning).
-- Ties into virtualization (#6): unmounted tasks have no sortable registration, so the active set shrinks automatically.
-- As an intermediate step, consider disabling sortable registration for tasks outside the currently-dragged-over list.
-
-**Files:** `BoardColumns.tsx`, `BoardColumnsStacked.tsx`, dnd hook files, potentially a new `collisionStrategy.ts`.
-
-**Effort:** Medium.
-
-### 6. Virtualize task lists — highest impact, highest complexity
+**Profiled impact:** The fundamental fix for load time. A single 14,703 ms RunTask blocks the main thread during initial render. 9,344 ms of GC (5,176 slices, including a MajorGC reclaiming 145 MB → 25 MB) and 17,878 dirty layout objects confirm massive object churn from mounting 1000 components. Virtualization also slashes DnD collision scope by reducing registered sortables from 1000 to ~50 visible, and eliminates most of the 89.6 ms IntersectionObserver overhead during drag.
 
 **Problem:** Every task is a mounted React component with a `useSortable` hook, a `registerTaskElement` call, and full DOM subtree. This is the root cause of slow initial render, high memory usage, and sluggish scroll/hover/drag.
 
@@ -141,9 +128,51 @@ Key design decisions:
 
 **Files:** `ListStatusBand.tsx`, `BoardListStackedColumn.tsx`, `SortableTaskRow.tsx`, `BoardKeyboardNavContext.tsx`, new `useVirtualizedBand.ts` hook.
 
-**Effort:** High.
+**Effort:** High. Benefits from #1, #2, #3 being done first (clean prop flow, fewer spurious re-renders to interact with virtualizer).
 
-### 7. Cheaper container map signature — minor win
+### 5. Reduce DnD collision detection scope — high DnD-specific impact
+
+**Profiled impact:** DnD layout thrashing is severe and unique to this scenario: 2,404.6 ms in layout/paint (40× more than scroll, 16× more than filter toggle). `UpdateLayoutTree` slices of 380.9 ms and 347.1 ms touch 15,253 elements — forced style recalculation from dnd-kit reading sortable positions. The initial pointerdown event blocks for 4,223 ms (snapshot all sortable positions + re-render + overlay layout). Each subsequent pointermove blocks for 1,297 ms. `IntersectionObserverController::computeIntersections` adds 89.6 ms across 37 calls during drag.
+
+**Problem:** dnd-kit evaluates collision detection against all registered sortable/droppable nodes. With 1000 sortable tasks, every `onDragOver` event runs collision checks against all of them.
+
+**Fix:**
+- Use a custom collision detection strategy that only checks containers geometrically near the pointer (spatial partitioning).
+- Virtualization (#4) helps by reducing registered sortables, but a custom strategy is needed even with virtualization to avoid reading positions of all ~50 visible sortables on every move event.
+- Consider pausing intersection observers during active drag — 89.6 ms in `IntersectionObserverController::computeIntersections` is non-trivial.
+- As an intermediate step, consider disabling sortable registration for tasks outside the currently-dragged-over list.
+
+**Files:** `BoardColumns.tsx`, `BoardColumnsStacked.tsx`, dnd hook files, potentially a new `collisionStrategy.ts`.
+
+**Effort:** Medium.
+
+### 6. Lazy-mount Popper/Presence on list headers — load quick win (new)
+
+**Profiled impact:** The second-heaviest load commit (854 ms, fiber sum 16,759 ms) is triggered by `ListStackedBody×50, Popper×50, Presence×50`. Each of the 50 list sections eagerly mounts a dropdown menu (Popper) and animation wrapper (Presence), triggering a full re-render cascade. Eliminating these saves ~854 ms on load and avoids 100 unnecessary component mounts.
+
+**Problem:** List header dropdown menus are mounted on initial render even though the user hasn't interacted with any of them. Each Popper + Presence pair triggers effects and state changes that cascade into re-renders.
+
+**Fix:** Render list header dropdown menus lazily — only mount the Popper/Presence wrapper on first open. Use a simple `wasOpened` state gate or render `null` for the popover content until the trigger is first clicked.
+
+**Files:** `ListHeader.tsx` (or wherever the list header dropdown is defined).
+
+**Effort:** Low.
+
+### 7. Trim task body from board payload — server-side win
+
+**Profiled impact:** Indirectly confirmed by load-time GC data (MajorGC reclaims 145 MB → 25 MB), but payload size was not directly measured. Reducing payload size will shorten network transfer, JSON parse time, and initial GC pressure. Hard to quantify without measuring actual payload size — worth checking the network tab before implementing.
+
+**Problem:** `GET /api/boards/:id` sends full `task.body` for every task. The board view only uses a 100-char preview (`previewBody` in `TaskCard.tsx`). With 1000 tasks this can be megabytes of unused text.
+
+**Fix:** Add a query parameter (e.g. `?slim=1` or `?bodyPreview=120`) to the board endpoint. When set, the server truncates each task's body to the preview length before serializing. Full body is fetched on-demand when the task editor opens (already has `GET /api/boards/:id/tasks/:taskId`).
+
+**Files:** `boards.ts` (server route), `board.ts` (storage — `loadBoard`), `queries.ts` (client fetch).
+
+**Effort:** Low-medium.
+
+### 8. Cheaper container map signature — minor win
+
+**Profiled impact:** Not directly measurable from current data. Lower priority than all other items.
 
 **Problem:** `tasksLayoutSig` in `useLanesBoardDnd.ts` builds a string by mapping all tasks and joining. `serializeTaskContainerMap` does similar work. With 1000 tasks these string operations are non-trivial.
 
@@ -159,21 +188,32 @@ Key design decisions:
 
 | Step | Item | Effort | Prerequisite |
 |------|------|--------|-------------|
-| 1 | Phase 1 profiling (steps 1–4) | ~1 day | 1000-task board via generator |
-| 2 | Pre-index tasks by (listId, status) | Low | None |
-| 3 | Debounce hover state | Low | None |
-| 4 | Trim body from payload | Low-med | None |
-| 5 | Cheaper container map signature | Low | None |
-| 6 | Stop passing full `board` as prop | Medium | #2 (uses pre-indexed slices) |
-| 7 | Reduce DnD collision scope | Medium | Profiling data from #1 |
-| 8 | Virtualize task lists | High | #2, #3, #6 (clean prop flow first) |
+| 1 | ~~Phase 1 profiling (steps 1–4)~~ | ✅ Done | — |
+| 2 | Ref-ify BoardKeyboardNavProvider state (#1) | Low | None |
+| 3 | Pre-index tasks by (listId, status) (#3) | Low | None |
+| 4 | Lazy-mount Popper/Presence on list headers (#6) | Low | None |
+| 5 | Stop passing full `board` as prop (#2) | Medium | #3 (uses pre-indexed slices) |
+| 6 | Trim body from payload (#7) | Low-med | None |
+| 7 | Cheaper container map signature (#8) | Low | None |
+| 8 | Virtualize task lists (#4) | High | #2, #3, #5 (clean prop flow first) |
+| 9 | Reduce DnD collision scope (#5) | Medium | Profiling data; pairs well with #8 |
 
-Steps 2–5 are independent quick wins that can be done in parallel. Step 6 builds on #2. Steps 7–8 benefit from profiling data and the cleaner prop architecture from earlier steps.
+Steps 2–4 and 6–7 are independent quick wins that can be done in parallel. Step 5 depends on #3 for stable slices. Steps 8–9 are the heavy hitters that benefit from the cleaner architecture established by earlier steps.
 
-## Success criteria
+Re-profile after each step to measure actual improvement and validate the estimated savings.
 
-- 1000-task board loads in < 2 seconds (currently 10+)
-- Hover across 10 cards produces no visible lag or frame drops
-- Drag-over between lists stays at 60 fps (or at least no perceptible stutter)
-- Filter toggle re-renders in < 200 ms
-- DOM node count on a 1000-task board drops by 70%+ (after virtualization)
+## Success criteria (with measured baselines)
+
+| Metric | Baseline (profiled) | Target |
+|--------|-------------------|--------|
+| Board load (longest RunTask) | 14,703 ms | < 2,000 ms |
+| Load GC wall time | 9,344 ms | < 500 ms |
+| Load layout dirty objects | 17,878 | < 2,000 |
+| Hover per-commit duration | 536–637 ms | < 16 ms (one frame) |
+| Hover commits per 10 cards | 20 | 0 (or 1–2 if keyboard active) |
+| Scroll longest RunTask | 4,285 ms | < 16 ms |
+| Drag pointerdown block | 4,223 ms | < 200 ms |
+| Drag pointermove block | 1,297 ms | < 50 ms |
+| DnD UpdateLayoutTree max | 380.9 ms | < 16 ms |
+| Filter toggle total commit time | 13,895 ms | < 200 ms |
+| DOM node count (1000-task board) | ~17,000+ (estimated from layout data) | 70%+ reduction after virtualization |

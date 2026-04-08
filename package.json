@@ -38,6 +38,8 @@
     "start": "npx --yes bun src/server/bootstrapInstalled.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "profile:summarize": "node --max-old-space-size=8192 docs/profiling/summarize-profiler-export.mjs",
+    "profile:chrome": "node docs/chrome-profiling/summarize-chrome-trace.mjs",
     "seed:perf": "bun run scripts/seed-perf-board.ts"
   },
   "dependencies": {

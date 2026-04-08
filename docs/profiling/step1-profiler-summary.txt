@@ -1,0 +1,301 @@
+=== drag-task.json ===
+commits: 27
+commit duration (ms): total=6667.7 mean=247.0 max=750.4
+effects (ms): layout/effect=6419.2 passive=100.4
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+     19961.5 ms  samples=  2674  max=   750.1  Context.Provider
+      6157.3 ms  samples=   476  max=   100.5  BoardListStackedColumn
+      5917.2 ms  samples=    15  max=   749.9  BoardColumnsStacked
+      5835.7 ms  samples=    15  max=   745.5  DragDropProvider
+      5741.9 ms  samples=   509  max=   100.2  ListStackedBody
+      5581.6 ms  samples=    10  max=   750.4  BoardKeyboardNavProvider
+      4850.0 ms  samples=   509  max=    94.4  StackedSortableList
+      4397.7 ms  samples= 10194  max=    31.4  StackedSortableTaskRowById
+      4086.1 ms  samples= 10174  max=    11.7  SortableTaskRow
+      3343.2 ms  samples= 10174  max=    11.5  TaskCard
+      1925.3 ms  samples=     3  max=   680.6  BoardView
+      1876.0 ms  samples=     3  max=   670.1  ShortcutScopeProvider
+      1875.6 ms  samples=     3  max=   670.0  BoardStatsDisplayProvider
+      1875.4 ms  samples=     3  max=   669.9  BoardTaskKeyboardBridgeProvider
+      1872.6 ms  samples=     3  max=   667.8  BoardTaskCompletionCelebrationProvider
+      1503.9 ms  samples= 10174  max=     9.1  TaskCardContent
+       643.7 ms  samples=   509  max=     8.8  ListHeader
+       558.6 ms  samples=  6921  max=     3.1  TaskStatusIndicator
+       477.3 ms  samples=   535  max=     7.6  EmojiPickerMenuButton
+       476.0 ms  samples=  1036  max=     7.5  MenuProvider
+       421.3 ms  samples=   509  max=     7.7  ListEmojiPicker
+       414.8 ms  samples=   541  max=     7.6  DropdownMenu
+       314.6 ms  samples=   518  max=     7.5  DropdownMenuProvider
+       299.4 ms  samples=   518  max=     7.5  Menu
+       288.3 ms  samples=   527  max=     7.5  Popper
+       285.9 ms  samples=    26  max=    11.3  BoardPriorityToggles
+       278.1 ms  samples=    27  max=    10.3  Sidebar
+       277.3 ms  samples=   527  max=     7.5  PopperProvider
+       275.6 ms  samples=  4474  max=     1.4  Anonymous
+       244.9 ms  samples=  3363  max=     2.9  Check
+
+-- 12 slowest commits (commit duration ms) --
+     750.4 ms  fiberΣ=  8294.9  fx=1505.1/12.3  updaters: BoardKeyboardNavProvider
+     699.7 ms  fiberΣ=  7969.1  fx=0.0/0.0  updaters: BoardColumnsStacked, BoardKeyboardNavProvider
+     680.6 ms  fiberΣ= 13267.0  fx=1681.3/11.6  updaters: BoardKeyboardNavProvider, BoardView
+     637.8 ms  fiberΣ=  7190.5  fx=1638.0/10.9  updaters: BoardKeyboardNavProvider
+     630.6 ms  fiberΣ= 11858.6  fx=2.0/16.9  updaters: BoardView
+     626.4 ms  fiberΣ=  6936.8  fx=6.8/10.9  updaters: BoardColumnsStacked, BoardKeyboardNavProvider
+     617.9 ms  fiberΣ=  6889.4  fx=5.8/14.4  updaters: BoardColumnsStacked, BoardKeyboardNavProvider, DragOverlay, SortableTaskRow
+     614.1 ms  fiberΣ= 11211.7  fx=2.5/10.3  updaters: BoardColumnsStacked, BoardKeyboardNavProvider, BoardView
+     198.4 ms  fiberΣ=  2275.2  fx=0.0/0.0  updaters: BoardKeyboardNavProvider, BoardView
+     175.9 ms  fiberΣ=  2052.0  fx=1504.6/10.6  updaters: BoardKeyboardNavProvider, BoardView
+     107.1 ms  fiberΣ=   990.5  fx=17.3/0.6  updaters: Anonymous, BoardColumnsStacked
+     107.0 ms  fiberΣ=   988.3  fx=19.2/0.5  updaters: Anonymous, BoardColumnsStacked
+
+=== hovering-over-10plus-cards.json ===
+commits: 20
+commit duration (ms): total=10719.6 mean=536.0 max=636.8
+effects (ms): layout/effect=27839.1 passive=197.1
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+     22991.0 ms  samples=  4554  max=   636.5  Context.Provider
+     10699.0 ms  samples=    18  max=   636.8  BoardKeyboardNavProvider
+     10689.9 ms  samples=    18  max=   636.2  BoardColumnsStacked
+     10595.1 ms  samples=    18  max=   631.4  DragDropProvider
+     10586.9 ms  samples=   900  max=    65.2  BoardListStackedColumn
+     10462.7 ms  samples=   900  max=    64.7  ListStackedBody
+      8816.5 ms  samples=   900  max=    56.7  StackedSortableList
+      7966.6 ms  samples= 18000  max=    11.2  StackedSortableTaskRowById
+      7505.7 ms  samples= 18000  max=    11.2  SortableTaskRow
+      6183.6 ms  samples= 18000  max=    10.8  TaskCard
+      2757.6 ms  samples= 18000  max=     9.8  TaskCardContent
+      1200.5 ms  samples=   900  max=    11.5  ListHeader
+      1045.2 ms  samples= 12258  max=     9.6  TaskStatusIndicator
+       802.3 ms  samples=  1800  max=     8.6  MenuProvider
+       775.2 ms  samples=   918  max=     9.7  EmojiPickerMenuButton
+       763.8 ms  samples=   900  max=     9.9  ListEmojiPicker
+       644.7 ms  samples=   918  max=     9.2  DropdownMenu
+       528.7 ms  samples=   900  max=     9.0  DropdownMenuProvider
+       516.7 ms  samples=  7812  max=    10.4  Anonymous
+       505.4 ms  samples=   900  max=     9.0  Menu
+       459.8 ms  samples=  5958  max=     9.6  Check
+       450.3 ms  samples=   900  max=     8.7  Popper
+       431.4 ms  samples=   900  max=     8.6  PopperProvider
+       379.2 ms  samples= 15156  max=     3.6  PriorityPill
+       249.4 ms  samples=   900  max=     6.6  DropdownMenuTrigger
+       237.4 ms  samples=  5742  max=     3.2  OpenStatusCircle
+       206.0 ms  samples=    20  max=    10.3  Sidebar
+       203.4 ms  samples=    18  max=    11.3  BoardPriorityToggles
+       190.7 ms  samples=   900  max=     6.6  MenuAnchor
+       161.5 ms  samples=   900  max=     1.1  PopperAnchor
+
+-- 12 slowest commits (commit duration ms) --
+     636.8 ms  fiberΣ=  7177.8  fx=1572.4/9.9  updaters: BoardKeyboardNavProvider
+     631.8 ms  fiberΣ=  7037.4  fx=1522.1/10.5  updaters: BoardKeyboardNavProvider
+     628.6 ms  fiberΣ=  7087.9  fx=1623.4/10.1  updaters: BoardKeyboardNavProvider
+     604.3 ms  fiberΣ=  6821.0  fx=1498.7/11.1  updaters: BoardKeyboardNavProvider
+     604.1 ms  fiberΣ=  6766.8  fx=1534.1/10.0  updaters: BoardKeyboardNavProvider
+     601.8 ms  fiberΣ=  6848.0  fx=1480.0/9.8  updaters: BoardKeyboardNavProvider
+     600.0 ms  fiberΣ=  6804.6  fx=1497.5/9.7  updaters: BoardKeyboardNavProvider
+     593.4 ms  fiberΣ=  6693.7  fx=1501.9/13.4  updaters: BoardKeyboardNavProvider
+     589.2 ms  fiberΣ=  6650.1  fx=1523.5/9.5  updaters: BoardKeyboardNavProvider
+     588.5 ms  fiberΣ=  6618.7  fx=1594.0/12.4  updaters: BoardKeyboardNavProvider
+     588.3 ms  fiberΣ=  6622.0  fx=1496.3/10.6  updaters: BoardKeyboardNavProvider
+     588.1 ms  fiberΣ=  6637.2  fx=1518.3/9.7  updaters: BoardKeyboardNavProvider
+
+=== load-bigboard1k-nostats.json ===
+commits: 10
+commit duration (ms): total=4122.7 mean=412.3 max=966.8
+effects (ms): layout/effect=6898.0 passive=95.4
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+     18814.9 ms  samples=   257  max=   956.3  Context.Provider
+      4005.2 ms  samples=     8  max=   956.2  BoardKeyboardNavProvider
+      3711.0 ms  samples=     8  max=   909.1  BoardColumnsStacked
+      3674.9 ms  samples=     8  max=   903.7  DragDropProvider
+      2784.1 ms  samples=     6  max=   966.8  BoardView
+      2711.4 ms  samples=     6  max=   956.4  ShortcutScopeProvider
+      2710.7 ms  samples=     6  max=   956.3  BoardStatsDisplayProvider
+      2710.1 ms  samples=     6  max=   956.2  BoardTaskKeyboardBridgeProvider
+      2704.0 ms  samples=     6  max=   954.1  BoardTaskCompletionCelebrationProvider
+       279.5 ms  samples=     5  max=    77.7  (anonymous#18473)
+       271.6 ms  samples=     5  max=    66.8  (anonymous#17352)
+       258.9 ms  samples=     5  max=    64.3  (anonymous#18103)
+       256.5 ms  samples=     5  max=    69.3  (anonymous#17733)
+       252.6 ms  samples=     5  max=    65.9  (anonymous#18288)
+       250.0 ms  samples=     5  max=    70.0  (anonymous#17539)
+       247.7 ms  samples=     5  max=    69.0  (anonymous#18505)
+       243.8 ms  samples=     5  max=    60.0  (anonymous#17179)
+       243.4 ms  samples=     5  max=    65.3  (anonymous#17916)
+       238.6 ms  samples=     5  max=    60.2  (anonymous#18654)
+       231.7 ms  samples=     5  max=    56.2  (anonymous#17384)
+       227.5 ms  samples=     5  max=    57.4  (anonymous#18135)
+       221.3 ms  samples=     5  max=    60.9  (anonymous#17765)
+       219.7 ms  samples=     4  max=    78.1  (anonymous#18472)
+       219.6 ms  samples=     4  max=    65.0  (anonymous#18102)
+       218.5 ms  samples=     5  max=    61.4  (anonymous#17571)
+       218.1 ms  samples=     4  max=    69.8  (anonymous#17732)
+       216.0 ms  samples=     4  max=    67.3  (anonymous#17351)
+       214.2 ms  samples=     4  max=    67.1  (anonymous#18287)
+       213.4 ms  samples=     5  max=    56.9  (anonymous#18320)
+       211.4 ms  samples=     5  max=    56.3  (anonymous#17948)
+
+-- 12 slowest commits (commit duration ms) --
+     966.8 ms  fiberΣ= 18986.8  fx=1150.3/46.2  updaters: BoardColumnsStacked, BoardKeyboardNavProvider, BoardView
+     854.4 ms  fiberΣ= 16759.4  fx=2725.6/10.5  updaters: ListStackedBody×50, Popper×50, Presence×50, BoardKeyboardNavProvider, BoardView
+     696.0 ms  fiberΣ=  7866.0  fx=1513.7/10.6  updaters: BoardKeyboardNavProvider
+     645.1 ms  fiberΣ= 11969.0  fx=2.4/12.2  updaters: ListStackedBody×50, BoardKeyboardNavProvider, BoardView
+     599.8 ms  fiberΣ=  6798.5  fx=1501.8/13.1  updaters: BoardKeyboardNavProvider
+     137.8 ms  fiberΣ=  2405.7  fx=0.1/0.5  updaters: BoardView
+     121.1 ms  fiberΣ=  2083.6  fx=0.0/0.8  updaters: BoardView
+      80.7 ms  fiberΣ=  1402.7  fx=4.1/1.5  updaters: BrowserRouter
+      11.2 ms  fiberΣ=    11.2  fx=0.0/0.0  updaters: BoardView
+       9.8 ms  fiberΣ=     9.8  fx=0.0/0.0  updaters: BoardView
+
+=== load-bigboard1k-with-stats.json ===
+commits: 12
+commit duration (ms): total=4752.8 mean=396.1 max=895.2
+effects (ms): layout/effect=11030.3 passive=126.6
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+     19382.0 ms  samples=   263  max=   882.7  Context.Provider
+      4635.2 ms  samples=    10  max=   882.5  BoardKeyboardNavProvider
+      4352.6 ms  samples=    10  max=   835.9  BoardColumnsStacked
+      4318.2 ms  samples=    10  max=   830.0  DragDropProvider
+      2619.8 ms  samples=     6  max=   895.2  BoardView
+      2543.5 ms  samples=     6  max=   882.8  ShortcutScopeProvider
+      2542.7 ms  samples=     6  max=   882.7  BoardStatsDisplayProvider
+      2542.3 ms  samples=     6  max=   882.6  BoardTaskKeyboardBridgeProvider
+      2536.9 ms  samples=     6  max=   880.5  BoardTaskCompletionCelebrationProvider
+       324.1 ms  samples=     7  max=    66.1  (anonymous#27762)
+       319.3 ms  samples=     7  max=    84.8  (anonymous#28356)
+       308.3 ms  samples=     7  max=    73.9  (anonymous#28551)
+       304.0 ms  samples=     7  max=    66.5  (anonymous#28159)
+       289.8 ms  samples=     7  max=    62.9  (anonymous#27565)
+       285.0 ms  samples=     7  max=    63.6  (anonymous#27382)
+       284.0 ms  samples=     7  max=    61.9  (anonymous#27966)
+       282.2 ms  samples=     6  max=    85.4  (anonymous#28355)
+       270.6 ms  samples=     6  max=    66.6  (anonymous#27761)
+       270.3 ms  samples=     7  max=    76.5  (anonymous#28398)
+       270.0 ms  samples=     7  max=    54.9  (anonymous#27804)
+       262.5 ms  samples=     7  max=    62.9  (anonymous#28746)
+       255.4 ms  samples=     6  max=    74.4  (anonymous#28550)
+       254.2 ms  samples=     7  max=    55.4  (anonymous#28201)
+       253.8 ms  samples=     6  max=    66.9  (anonymous#28158)
+       250.7 ms  samples=     7  max=    62.3  (anonymous#28593)
+       250.3 ms  samples=     6  max=    63.4  (anonymous#27564)
+       247.1 ms  samples=     6  max=    62.3  (anonymous#27965)
+       240.7 ms  samples=     6  max=    64.1  (anonymous#27381)
+       234.0 ms  samples=     7  max=    52.1  (anonymous#27607)
+       232.5 ms  samples=     7  max=    52.3  (anonymous#27424)
+
+-- 12 slowest commits (commit duration ms) --
+     895.2 ms  fiberΣ= 17511.5  fx=1513.4/48.6  updaters: BoardColumnsStacked, BoardKeyboardNavProvider, BoardView
+     809.6 ms  fiberΣ= 15731.5  fx=2777.7/15.2  updaters: ListStackedBody×50, Popper×50, Presence×50, StatChip×4, BoardKeyboardNavProvider, BoardView
+     719.6 ms  fiberΣ=  8020.7  fx=1746.5/11.2  updaters: BoardKeyboardNavProvider
+     621.4 ms  fiberΣ= 11495.8  fx=2.7/12.8  updaters: ListStackedBody×50, BoardKeyboardNavProvider, BoardView
+     601.7 ms  fiberΣ=  6702.3  fx=1639.9/10.4  updaters: BoardKeyboardNavProvider
+     589.3 ms  fiberΣ=  6603.3  fx=1576.7/10.8  updaters: BoardKeyboardNavProvider
+     182.8 ms  fiberΣ=  2116.5  fx=1763.8/13.8  updaters: StatChip×4, BoardKeyboardNavProvider, BoardView
+     118.3 ms  fiberΣ=  2026.2  fx=0.1/0.8  updaters: BoardView
+     113.1 ms  fiberΣ=  1933.4  fx=0.1/0.7  updaters: BoardView
+      79.0 ms  fiberΣ=  1396.0  fx=9.4/2.3  updaters: BrowserRouter
+      11.4 ms  fiberΣ=    11.4  fx=0.0/0.0  updaters: BoardView
+      11.4 ms  fiberΣ=    11.4  fx=0.0/0.0  updaters: BoardView
+
+=== scrolling-up-down-few-times-one-list.json ===
+commits: 10
+commit duration (ms): total=4145.7 mean=414.6 max=642.4
+effects (ms): layout/effect=10867.2 passive=81.4
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+      8825.6 ms  samples=  1771  max=   642.2  Context.Provider
+      4114.8 ms  samples=     7  max=   642.4  BoardKeyboardNavProvider
+      4111.7 ms  samples=     7  max=   641.9  BoardColumnsStacked
+      4078.1 ms  samples=     7  max=   637.1  DragDropProvider
+      4075.0 ms  samples=   350  max=    58.0  BoardListStackedColumn
+      4019.6 ms  samples=   350  max=    57.7  ListStackedBody
+      3384.9 ms  samples=   350  max=    52.0  StackedSortableList
+      3058.8 ms  samples=  7000  max=    10.1  StackedSortableTaskRowById
+      2869.8 ms  samples=  7000  max=    10.0  SortableTaskRow
+      2373.6 ms  samples=  7000  max=     9.8  TaskCard
+      1052.5 ms  samples=  7000  max=     6.5  TaskCardContent
+       474.6 ms  samples=   350  max=    12.3  ListHeader
+       421.7 ms  samples=  4767  max=     8.5  TaskStatusIndicator
+       300.2 ms  samples=   700  max=     2.7  MenuProvider
+       299.9 ms  samples=   357  max=    10.6  EmojiPickerMenuButton
+       295.0 ms  samples=   350  max=    10.8  ListEmojiPicker
+       243.3 ms  samples=   357  max=     4.1  DropdownMenu
+       200.1 ms  samples=  3038  max=     8.0  Anonymous
+       199.4 ms  samples=   350  max=     3.7  DropdownMenuProvider
+       189.5 ms  samples=   350  max=     3.5  Menu
+       187.1 ms  samples=  2317  max=     6.4  Check
+       167.5 ms  samples=   350  max=     3.1  Popper
+       160.4 ms  samples=   350  max=     2.9  PopperProvider
+       140.6 ms  samples=  5894  max=     0.5  PriorityPill
+       103.0 ms  samples=    10  max=    10.3  Sidebar
+        95.3 ms  samples=   350  max=     1.9  DropdownMenuTrigger
+        92.0 ms  samples=  2233  max=     2.6  OpenStatusCircle
+        79.1 ms  samples=     7  max=    11.3  BoardPriorityToggles
+        72.8 ms  samples=   350  max=     1.7  MenuAnchor
+        65.2 ms  samples=   350  max=     1.7  PopperAnchor
+
+-- 12 slowest commits (commit duration ms) --
+     642.4 ms  fiberΣ=  7258.4  fx=1583.6/11.4  updaters: BoardKeyboardNavProvider
+     593.8 ms  fiberΣ=  6703.9  fx=1522.4/13.9  updaters: BoardKeyboardNavProvider
+     593.6 ms  fiberΣ=  6711.3  fx=1504.2/10.0  updaters: BoardKeyboardNavProvider
+     580.7 ms  fiberΣ=  6515.2  fx=1618.6/11.6  updaters: BoardKeyboardNavProvider
+     574.0 ms  fiberΣ=  6503.0  fx=1580.6/12.1  updaters: BoardKeyboardNavProvider
+     566.3 ms  fiberΣ=  6348.1  fx=1504.3/11.7  updaters: BoardKeyboardNavProvider
+     564.0 ms  fiberΣ=  6302.4  fx=1553.5/10.7  updaters: BoardKeyboardNavProvider
+      10.3 ms  fiberΣ=    10.3  fx=0.0/0.0  updaters: BoardKeyboardNavProvider
+      10.3 ms  fiberΣ=    10.3  fx=0.0/0.0  updaters: BoardKeyboardNavProvider
+      10.3 ms  fiberΣ=    10.3  fx=0.0/0.0  updaters: BoardKeyboardNavProvider
+
+=== toggling group - feature.json ===
+commits: 33
+commit duration (ms): total=13895.3 mean=421.1 max=674.6
+effects (ms): layout/effect=958.0 passive=42.1
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+     17828.4 ms  samples=  1704  max=   664.7  Context.Provider
+     13562.6 ms  samples=    32  max=   617.2  BoardColumnsStacked
+      2882.6 ms  samples=     6  max=   674.6  BoardView
+      2830.7 ms  samples=     6  max=   664.9  ShortcutScopeProvider
+      2829.9 ms  samples=     6  max=   664.7  BoardStatsDisplayProvider
+      2829.4 ms  samples=     6  max=   664.6  BoardTaskKeyboardBridgeProvider
+      2829.3 ms  samples=     6  max=   664.6  BoardKeyboardNavProvider
+      2826.1 ms  samples=     6  max=   664.3  BoardTaskCompletionCelebrationProvider
+      2534.8 ms  samples=     6  max=   612.7  DragDropProvider
+      2521.6 ms  samples=   300  max=    53.8  ListStackedBody
+      1728.7 ms  samples=   300  max=    44.9  StackedSortableList
+      1553.9 ms  samples=  2520  max=    10.8  StackedSortableTaskRowById
+      1467.4 ms  samples=  2520  max=    10.7  SortableTaskRow
+      1215.9 ms  samples=  2520  max=    10.5  TaskCard
+       598.0 ms  samples=   300  max=    11.3  ListHeader
+       540.6 ms  samples=  2520  max=     5.4  TaskCardContent
+       483.1 ms  samples=   332  max=     9.7  EmojiPickerMenuButton
+       458.0 ms  samples=   636  max=     9.6  MenuProvider
+       452.7 ms  samples=    50  max=    26.6  BoardListStackedColumn
+       416.8 ms  samples=   344  max=     9.6  DropdownMenu
+       389.6 ms  samples=   300  max=     9.8  ListEmojiPicker
+       339.9 ms  samples=    33  max=    10.3  Sidebar
+       339.8 ms  samples=   342  max=    14.6  Popper
+       326.8 ms  samples=   342  max=    14.5  PopperProvider
+       307.5 ms  samples=   318  max=     9.6  DropdownMenuProvider
+       294.6 ms  samples=   318  max=     9.6  Menu
+       222.6 ms  samples=    32  max=     9.3  BoardPriorityToggles
+       210.9 ms  samples=  1771  max=     3.3  TaskStatusIndicator
+       182.2 ms  samples=  1566  max=     3.0  Anonymous
+       166.5 ms  samples=    48  max=    14.9  Popover
+
+-- 12 slowest commits (commit duration ms) --
+     674.6 ms  fiberΣ= 12729.9  fx=3.9/9.7  updaters: BoardView
+     617.2 ms  fiberΣ=   674.3  fx=0.5/0.4  updaters: BoardView, MultiSelect
+     617.2 ms  fiberΣ=   674.0  fx=0.2/0.0  updaters: MultiSelect, Presence
+     617.2 ms  fiberΣ=   800.7  fx=1.2/1.5  updaters: Portal
+     617.2 ms  fiberΣ=   683.0  fx=3.2/0.9  updaters: Anonymous×6, Presence×2, DismissableLayer, FocusScope, PopperContent
+     617.2 ms  fiberΣ=   666.6  fx=0.3/0.0  updaters: Presence×2, DismissableLayer, FocusScope, PopperContent
+     617.2 ms  fiberΣ=   665.2  fx=0.0/0.0  updaters: Presence×2, DismissableLayer, FocusScope, PopperContent
+     617.2 ms  fiberΣ=   665.6  fx=0.3/0.0  updaters: PopperContent
+     617.2 ms  fiberΣ=   665.2  fx=0.0/0.0  updaters: Presence×2, DismissableLayer, FocusScope, PopperContent
+     617.2 ms  fiberΣ=   722.2  fx=0.3/0.0  updaters: MultiSelect
+     617.2 ms  fiberΣ=   665.2  fx=0.0/0.0  updaters: Presence×2, DismissableLayer, FocusScope, PopperContent
+     617.2 ms  fiberΣ=   665.2  fx=0.0/0.0  updaters: Presence×2

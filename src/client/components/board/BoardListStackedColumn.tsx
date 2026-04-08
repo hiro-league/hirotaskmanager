@@ -43,21 +43,24 @@ import {
   stackedListColumnMinHeightClass,
 } from "./boardDragOverlayShell";
 import { parseTaskSortableId } from "./dndIds";
+import type { BoardColumnSpreadProps } from "./boardColumnData";
 import {
   type BoardTaskFilterState,
-  listTasksMergedSorted,
-  visibleStatusesForBoard,
+  listTasksMergedSortedFromIndex,
+  visibleStatusesFromStored,
 } from "./boardStatusUtils";
 import { SortableTaskRow } from "./SortableTaskRow";
 import { useBoardColumnSortableReact } from "./useBoardColumnSortableReact";
 import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
+import { useColumnInViewport } from "./useColumnInViewport";
+import { useVirtualizedBand } from "./useVirtualizedBand";
 
-interface ListStackedBodyProps {
-  board: Board;
+interface ListStackedBodyProps extends BoardColumnSpreadProps {
   list: List;
   listId: number;
   visibleStatuses: string[];
   workflowOrder: readonly string[];
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
   dragHandleRef?: RefCallback<HTMLElement>;
   sortableIds?: string[];
   /** Container id for this list's task droppable. */
@@ -153,6 +156,8 @@ const StackedSortableList = memo(function StackedSortableList({
   titleEditBusy,
   quickAddInsertIndex,
   quickAddComposer,
+  getScrollElement,
+  enableVirtualization,
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
@@ -172,12 +177,42 @@ const StackedSortableList = memo(function StackedSortableList({
   titleEditBusy: boolean;
   quickAddInsertIndex: number | null;
   quickAddComposer?: ReactNode;
+  getScrollElement: () => HTMLElement | null;
+  enableVirtualization: boolean;
 }) {
   const { ref, isDropTarget } = useBoardTaskContainerDroppableReact({
     containerId,
     layout: "stacked",
     listId,
   });
+  const boardNav = useBoardKeyboardNavOptional();
+  const sortableTaskIds = useMemo(
+    () =>
+      sortableIds
+        .map((sid) => parseTaskSortableId(sid))
+        .filter((taskId): taskId is number => taskId != null),
+    [sortableIds],
+  );
+  const {
+    shouldVirtualize,
+    virtualItems,
+    totalSize,
+    measureElement,
+    revealTask,
+  } = useVirtualizedBand({
+    count: sortableIds.length,
+    itemIds: sortableTaskIds,
+    getScrollElement,
+    viewMode,
+    enabled: enableVirtualization && quickAddComposer == null,
+  });
+
+  useEffect(() => {
+    if (!boardNav || !shouldVirtualize || sortableTaskIds.length === 0) return;
+    // Stacked lists expose one reveal callback per list so keyboard movement can
+    // scroll a not-yet-mounted task into the virtual window first.
+    return boardNav.registerTaskRevealer(revealTask);
+  }, [boardNav, revealTask, shouldVirtualize, sortableTaskIds.length]);
 
   return (
     <div
@@ -187,61 +222,115 @@ const StackedSortableList = memo(function StackedSortableList({
         isDropTarget && "bg-primary/[0.07] ring-1 ring-primary/15",
       )}
     >
-      {quickAddInsertIndex === 0 ? quickAddComposer : null}
-      {sortableIds.map((sid, index) => {
-        const tid = parseTaskSortableId(sid);
-        const task = tid != null ? taskMap.get(tid) : undefined;
-        if (!task) return null;
-        return (
-          <div key={sid} className="contents">
-            <StackedSortableTaskRowById
-              sid={sid}
-              containerId={containerId}
-              index={index}
-              task={task}
-              taskGroups={taskGroups}
-              taskPriorities={taskPriorities}
-              releases={releases}
-              viewMode={viewMode}
-              onComplete={onComplete}
-              onEdit={onEdit}
-              editingTitle={editingTitleTaskId === task.id}
-              titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
-              onTitleDraftChange={onTitleDraftChange}
-              onTitleCommit={onTitleCommit}
-              onTitleCancel={onTitleCancel}
-              titleEditBusy={titleEditBusy}
-            />
-            {quickAddInsertIndex === index + 1 ? quickAddComposer : null}
-          </div>
-        );
-      })}
+      {shouldVirtualize ? (
+        <div
+          className="relative w-full"
+          style={{ height: `${Math.max(totalSize, 32)}px` }}
+        >
+          {virtualItems.map((virtualRow) => {
+            const sid = sortableIds[virtualRow.index];
+            if (!sid) return null;
+            const tid = parseTaskSortableId(sid);
+            const task = tid != null ? taskMap.get(tid) : undefined;
+            if (!task) return null;
+            return (
+              <div
+                key={sid}
+                data-index={virtualRow.index}
+                ref={measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <StackedSortableTaskRowById
+                  sid={sid}
+                  containerId={containerId}
+                  index={virtualRow.index}
+                  task={task}
+                  taskGroups={taskGroups}
+                  taskPriorities={taskPriorities}
+                  releases={releases}
+                  viewMode={viewMode}
+                  onComplete={onComplete}
+                  onEdit={onEdit}
+                  editingTitle={editingTitleTaskId === task.id}
+                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  onTitleDraftChange={onTitleDraftChange}
+                  onTitleCommit={onTitleCommit}
+                  onTitleCancel={onTitleCancel}
+                  titleEditBusy={titleEditBusy}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          {quickAddInsertIndex === 0 ? quickAddComposer : null}
+          {sortableIds.map((sid, index) => {
+            const tid = parseTaskSortableId(sid);
+            const task = tid != null ? taskMap.get(tid) : undefined;
+            if (!task) return null;
+            return (
+              <div key={sid} className="contents">
+                <StackedSortableTaskRowById
+                  sid={sid}
+                  containerId={containerId}
+                  index={index}
+                  task={task}
+                  taskGroups={taskGroups}
+                  taskPriorities={taskPriorities}
+                  releases={releases}
+                  viewMode={viewMode}
+                  onComplete={onComplete}
+                  onEdit={onEdit}
+                  editingTitle={editingTitleTaskId === task.id}
+                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  onTitleDraftChange={onTitleDraftChange}
+                  onTitleCommit={onTitleCommit}
+                  onTitleCancel={onTitleCancel}
+                  titleEditBusy={titleEditBusy}
+                />
+                {quickAddInsertIndex === index + 1 ? quickAddComposer : null}
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 });
 
 function ListStackedBody({
-  board,
+  boardId,
+  showStats,
+  taskGroups,
+  taskPriorities,
+  releases,
+  defaultTaskGroupId,
+  boardTasks,
+  boardVisibleStatuses: _boardVisibleStatuses,
   list,
   listId,
   visibleStatuses,
   workflowOrder,
+  tasksByListStatus,
   dragHandleRef,
   sortableIds = EMPTY_SORTABLE_IDS,
   taskContainerId,
   forDragOverlay = false,
 }: ListStackedBodyProps) {
+  void _boardVisibleStatuses; // resolved into `visibleStatuses` by parent (stacked column / overlay)
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(boardId, taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
-    board.taskPriorities,
+    boardId,
+    taskPriorities,
   );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
-  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
+  const activeReleaseIds = useResolvedActiveReleaseIds(boardId, releases);
+  const dateFilterResolved = useResolvedTaskDateFilter(boardId);
+  const taskCardViewMode = useResolvedTaskCardViewMode(boardId);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
   const boardStatsDisplay = useBoardStatsDisplayOptional();
   const stackedBoardNav = useBoardKeyboardNavOptional();
@@ -250,9 +339,9 @@ function ListStackedBody({
   // O(1) task lookup map
   const taskMap = useMemo(() => {
     const m = new Map<number, Task>();
-    for (const t of board.tasks) m.set(t.id, t);
+    for (const t of boardTasks) m.set(t.id, t);
     return m;
-  }, [board.tasks]);
+  }, [boardTasks]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -260,6 +349,7 @@ function ListStackedBody({
   const addCardRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const getScrollElement = useCallback(() => scrollRef.current, []);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -275,21 +365,21 @@ function ListStackedBody({
   const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
 
   // Stable callback refs for use inside memoized children
-  const boardRef = useRef(board);
-  boardRef.current = board;
+  const surfaceRef = useRef({ boardId, boardTasks });
+  surfaceRef.current = { boardId, boardTasks };
   const statusesRef = useRef(statuses);
   statusesRef.current = statuses;
 
   const handleComplete = useCallback(
     (taskId: number, anchorEl?: HTMLElement) => {
-      const t = boardRef.current.tasks.find((x) => x.id === taskId);
+      const t = surfaceRef.current.boardTasks.find((x) => x.id === taskId);
       if (!t) return;
       const closedId =
         statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
       const now = new Date().toISOString();
       completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
-        boardId: boardRef.current.id,
+        boardId: surfaceRef.current.boardId,
         task: {
           ...t,
           status: closedId,
@@ -315,7 +405,9 @@ function ListStackedBody({
 
   const startInlineTitleEdit = useCallback(
     (taskId: number) => {
-      const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+      const taskToEdit = surfaceRef.current.boardTasks.find(
+        (entry) => entry.id === taskId,
+      );
       if (!taskToEdit || taskToEdit.listId !== list.id) return false;
       // F2 keeps the task card in place and only swaps its title into edit mode.
       setEditingTask(null);
@@ -330,13 +422,15 @@ function ListStackedBody({
   const commitInlineTitleEdit = useCallback(async () => {
     const taskId = editingTitleTaskId;
     if (taskId == null) return;
-    const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+    const taskToEdit = surfaceRef.current.boardTasks.find(
+      (entry) => entry.id === taskId,
+    );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
     const nextTitle = editingTitleDraft.trim() || "Untitled";
     if (nextTitle === taskToEdit.title) return;
     await updateTask.mutateAsync({
-      boardId: boardRef.current.id,
+      boardId: surfaceRef.current.boardId,
       task: {
         ...taskToEdit,
         title: nextTitle,
@@ -348,14 +442,14 @@ function ListStackedBody({
   const { registerOpenTaskEditor, registerEditTaskTitle } = useBoardTaskKeyboardBridge();
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
-      const t = board.tasks.find((x) => x.id === taskId);
+      const t = boardTasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
       cancelInlineTitleEdit();
       stackedBoardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor, stackedBoardNav]);
+  }, [boardTasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor, stackedBoardNav]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -413,12 +507,17 @@ function ListStackedBody({
   const submitTask = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
+    const existingTaskIds = new Set(
+      surfaceRef.current.boardTasks.map((task) => task.id),
+    );
     // New tasks always start in the board default group, even when filters are narrowed.
-    const defaultGroupId = effectiveDefaultTaskGroupId(board);
+    const defaultGroupId = effectiveDefaultTaskGroupId({
+      taskGroups,
+      defaultTaskGroupId,
+    });
     createTask.mutate(
       {
-        boardId: board.id,
+        boardId,
         listId: list.id,
         status: quickAddStatus,
         title: trimmed,
@@ -497,13 +596,8 @@ function ListStackedBody({
     () =>
       taskContainerId != null
         ? null
-        : listTasksMergedSorted(board, listId, taskFilter),
-    [
-      taskContainerId,
-      board,
-      listId,
-      taskFilter,
-    ],
+        : listTasksMergedSortedFromIndex(tasksByListStatus, listId, taskFilter),
+    [taskContainerId, tasksByListStatus, listId, taskFilter],
   );
 
   // Stacked lists now mirror lanes: use only the hover FAB so short columns
@@ -577,11 +671,15 @@ function ListStackedBody({
 
   const hasListStatsRow =
     !forDragOverlay &&
-    board.showStats &&
+    showStats &&
     boardStatsDisplay != null &&
     !boardStatsDisplay.statsError;
 
-  useEffect(() => {
+  // useLayoutEffect so the max-height is computed *before* the browser paints.
+  // Without this, a column that just entered the viewport via horizontal gating
+  // would flash at full content height for one frame before the effect caps it,
+  // causing a vertical scrollbar and disrupting horizontal wheel scrolling.
+  useLayoutEffect(() => {
     if (forDragOverlay) {
       setBodyMaxHeight(null);
       return;
@@ -598,10 +696,8 @@ function ListStackedBody({
     };
 
     updateBodyMaxHeight();
-    const rafId = window.requestAnimationFrame(updateBodyMaxHeight);
     window.addEventListener("resize", updateBodyMaxHeight);
     return () => {
-      window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", updateBodyMaxHeight);
     };
   }, [
@@ -633,7 +729,7 @@ function ListStackedBody({
   const main = (
     <>
       <ListHeader
-        boardId={board.id}
+        boardId={boardId}
         list={list}
         dragHandleRef={dragHandleRef}
       />
@@ -643,7 +739,7 @@ function ListStackedBody({
         <div
           ref={scrollRef}
           className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 pb-4 pt-2"
-          data-board-id={board.id}
+          data-board-id={boardId}
           data-list-id={listId}
           aria-label={`${listDisplayName(list)} — tasks`}
         >
@@ -651,9 +747,9 @@ function ListStackedBody({
             {taskContainerId != null ? (
               <StackedSortableList
                 taskMap={taskMap}
-                taskGroups={board.taskGroups}
-                taskPriorities={board.taskPriorities}
-                releases={board.releases}
+                taskGroups={taskGroups}
+                taskPriorities={taskPriorities}
+                releases={releases}
                 viewMode={taskCardViewMode}
                 listId={listId}
                 containerId={taskContainerId}
@@ -668,6 +764,8 @@ function ListStackedBody({
                 titleEditBusy={updateTask.isPending}
                 quickAddInsertIndex={sortableQuickAddInsertIndex}
                 quickAddComposer={quickAddComposer}
+                getScrollElement={getScrollElement}
+                enableVirtualization={!forDragOverlay && !adding}
               />
             ) : (
               <>
@@ -676,10 +774,10 @@ function ListStackedBody({
                   <div key={task.id} className="contents">
                     <TaskCard
                       task={task}
-                      taskPriorities={board.taskPriorities}
+                      taskPriorities={taskPriorities}
                       viewMode={taskCardViewMode}
-                      groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
-                      releasePill={taskReleasePill(board, task)}
+                      groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+                      releasePill={taskReleasePill({ releases }, task)}
                       onOpen={() => setEditingTask(task)}
                       editingTitle={editingTitleTaskId === task.id}
                       titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -735,7 +833,13 @@ function ListStackedBody({
     <>
       {main}
       <TaskEditor
-        board={board}
+        board={{
+          id: boardId,
+          taskGroups,
+          taskPriorities,
+          releases,
+          defaultTaskGroupId,
+        }}
         open={editingTask !== null || editingTaskId !== null}
         onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
         mode="edit"
@@ -745,53 +849,67 @@ function ListStackedBody({
   );
 }
 
-export interface BoardListStackedColumnOverlayProps {
-  board: Board;
+export interface BoardListStackedColumnOverlayProps
+  extends BoardColumnSpreadProps {
+  list: List;
   listId: number;
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
+  visibleStatuses: string[];
 }
 
 export function BoardListStackedColumnOverlay({
-  board,
+  list,
   listId,
+  tasksByListStatus,
+  visibleStatuses,
+  ...columnSpread
 }: BoardListStackedColumnOverlayProps) {
   const workflowOrder = useStatusWorkflowOrder();
-  const list = board.lists.find((l) => l.id === listId);
-  if (!list) return null;
-  const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
   return (
     <div className={boardListColumnOverlayShellClass}>
       <ListStackedBody
-        board={board}
+        {...columnSpread}
         list={list}
         listId={listId}
         visibleStatuses={visibleStatuses}
         workflowOrder={workflowOrder}
+        tasksByListStatus={tasksByListStatus}
         forDragOverlay
       />
     </div>
   );
 }
 
-interface BoardListStackedColumnProps {
-  board: Board;
+interface BoardListStackedColumnProps extends BoardColumnSpreadProps {
+  list: List;
   listId: number;
   listIndex: number;
   taskContainerId?: string;
   sortableIds?: string[];
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
 }
 
 // Memoized: only re-renders when this column's props actually change
 export const BoardListStackedColumn = memo(function BoardListStackedColumn({
-  board,
+  list,
   listId,
   listIndex,
   taskContainerId,
   sortableIds,
+  tasksByListStatus,
+  boardId,
+  showStats,
+  taskGroups,
+  taskPriorities,
+  releases,
+  defaultTaskGroupId,
+  boardTasks,
+  boardVisibleStatuses,
 }: BoardListStackedColumnProps) {
   const workflowOrder = useStatusWorkflowOrder();
   const visibleStatuses = useMemo(
-    () => visibleStatusesForBoard(board, workflowOrder),
-    [board, workflowOrder],
+    () => visibleStatusesFromStored(boardVisibleStatuses, workflowOrder),
+    [boardVisibleStatuses, workflowOrder],
   );
 
   const { ref, handleRef, isDragging } = useBoardColumnSortableReact(
@@ -799,26 +917,32 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     listIndex,
   );
 
+  // Skip rendering the heavy task body for columns scrolled off-screen
+  // horizontally so only visible columns pay the sortable/virtualizer cost
+  // (board perf plan #4 — horizontal column gating).
+  const { columnRef: viewportRef, inViewport } = useColumnInViewport(!isDragging);
+
   const boardNav = useBoardKeyboardNavOptional();
   const listColumnShellRef = useRef<HTMLDivElement | null>(null);
-  const list = board.lists.find((l) => l.id === listId);
-  const listKeyboardHighlight =
-    list != null &&
-    !isDragging &&
-    boardNav?.highlightedListId === list.id;
 
   useLayoutEffect(() => {
-    if (!boardNav || list == null) return;
+    if (!boardNav) return;
     const el = listColumnShellRef.current;
     boardNav.registerListElement(list.id, el);
     return () => boardNav.registerListElement(list.id, null);
   }, [boardNav, list]);
 
-  if (!list) return null;
+  const mergedOuterRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      ref(node);
+      (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [ref, viewportRef],
+  );
 
   return (
     <div
-      ref={ref}
+      ref={mergedOuterRef}
       className={cn(
         "relative flex w-72 shrink-0 flex-col self-start",
         isDragging && stackedListColumnMinHeightClass,
@@ -827,8 +951,6 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
       data-board-no-pan
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
-        // Remember the hovered list so Tab can select the list when the
-        // pointer is over empty column space instead of a specific task card.
         boardNav.setHoveredListId(list.id);
       }}
       onPointerLeave={(e) => {
@@ -839,14 +961,10 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
       <div
         ref={listColumnShellRef}
         className={cn(
-          // Mirror lane columns so hover-only controls stay scoped to the active list.
           "group/list-col flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "min-h-0 flex-1 border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
-          // Full-column shell so the ring wraps the list title and body together.
-          listKeyboardHighlight &&
-            "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
         onPointerDown={(e) => {
           if (!boardNav || isDragging) return;
@@ -855,20 +973,34 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
           if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
             return;
           }
-          // Blank list chrome should still count as interacting with this list.
           boardNav.selectList(list.id);
         }}
       >
-        {!isDragging && (
+        {!isDragging && inViewport && (
           <ListStackedBody
-            board={board}
+              boardId={boardId}
+              showStats={showStats}
+              taskGroups={taskGroups}
+              taskPriorities={taskPriorities}
+              releases={releases}
+              defaultTaskGroupId={defaultTaskGroupId}
+              boardTasks={boardTasks}
+              boardVisibleStatuses={boardVisibleStatuses}
+              list={list}
+              listId={listId}
+              visibleStatuses={visibleStatuses}
+              workflowOrder={workflowOrder}
+              tasksByListStatus={tasksByListStatus}
+              dragHandleRef={handleRef}
+              taskContainerId={taskContainerId}
+              sortableIds={sortableIds}
+          />
+        )}
+        {!isDragging && !inViewport && (
+          <ListHeader
+            boardId={boardId}
             list={list}
-            listId={listId}
-            visibleStatuses={visibleStatuses}
-            workflowOrder={workflowOrder}
             dragHandleRef={handleRef}
-            taskContainerId={taskContainerId}
-            sortableIds={sortableIds}
           />
         )}
       </div>

@@ -37,7 +37,8 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 }
 
 export async function fetchBoard(id: string | number): Promise<Board> {
-  return fetchJson<Board>(`/api/boards/${id}`);
+  // `slim=1` truncates each task body in SQLite (see board perf plan Phase 2 #7).
+  return fetchJson<Board>(`/api/boards/${id}?slim=1`);
 }
 
 export async function fetchBoardTask(
@@ -62,6 +63,11 @@ export const boardKeys = {
   all: ["boards"] as const,
   detail: (id: number) => ["boards", id] as const,
 };
+
+/** React Query key for `GET /api/boards/:boardId/tasks/:taskId` (full task, used by TaskEditor). */
+export function boardTaskDetailKey(boardId: number, taskId: number) {
+  return [...boardKeys.all, boardId, "task", taskId] as const;
+}
 
 /** TanStack Query keys for Trash tab fetches (`GET /api/trash/...`). */
 export const trashKeys = {

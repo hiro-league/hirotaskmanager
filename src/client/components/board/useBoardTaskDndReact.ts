@@ -11,6 +11,7 @@ import {
 import { isBoardTaskDragData } from "./dndReactModel";
 import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
+import { taskContainerMapsEqual } from "./boardTaskDndDeps";
 
 export interface TaskDndReactConfig {
   buildContainerMap: () => Record<string, string[]>;
@@ -22,13 +23,6 @@ export interface TaskDndReactConfig {
     moveTask: ReturnType<typeof useMoveTask>,
   ) => Promise<void>;
   containerMapDeps: string;
-}
-
-export function serializeTaskContainerMap(map: Record<string, string[]>): string {
-  return Object.keys(map)
-    .sort()
-    .map((key) => `${key}=${map[key].join(",")}`)
-    .join("|");
 }
 
 /**
@@ -104,7 +98,7 @@ export function useBoardTaskDndReact(
     if (taskContainers != null) return;
 
     const fromServer = configRef.current.buildContainerMap();
-    if (serializeTaskContainerMap(fromServer) === serializeTaskContainerMap(pendingTaskMap)) {
+    if (taskContainerMapsEqual(fromServer, pendingTaskMap)) {
       setPendingTaskMap(null);
     }
   }, [pendingTaskMap, taskContainers, config.containerMapDeps]);
@@ -164,7 +158,7 @@ export function useBoardTaskDndReact(
         return;
       }
 
-      if (serializeTaskContainerMap(startMap) === serializeTaskContainerMap(endMap)) {
+      if (taskContainerMapsEqual(startMap, endMap)) {
         return;
       }
 

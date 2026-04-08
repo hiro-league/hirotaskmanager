@@ -10,6 +10,7 @@ import { noneTaskPriorityId, sortPrioritiesByValue } from "../../../shared/model
 import { invalidateNotificationQueries } from "../notifications";
 import {
   boardKeys,
+  boardTaskDetailKey,
   fetchJson,
   invalidateBoardStatsQueries,
   trashKeys,
@@ -193,6 +194,7 @@ export function useUpdateTask() {
           updatedAt: data.boardUpdatedAt,
         };
       });
+      qc.setQueryData(boardTaskDetailKey(data.boardId, data.entity.id), data.entity);
       invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
@@ -325,6 +327,9 @@ export function useDeleteTask() {
           tasks: current.tasks.filter((task) => task.id !== data.deletedTaskId),
           updatedAt: data.boardUpdatedAt,
         };
+      });
+      qc.removeQueries({
+        queryKey: boardTaskDetailKey(data.boardId, data.deletedTaskId),
       });
       invalidateBoardStatsQueries(qc, data.boardId);
       void qc.invalidateQueries({ queryKey: trashKeys.all });

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import type { Board } from "../../../shared/models";
+import type { Board, Task } from "../../../shared/models";
 import { useMoveTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
@@ -16,13 +16,13 @@ import {
   sortableTaskId,
 } from "./dndIds";
 import {
-  listStatusTasksSorted,
+  buildTasksByListStatusIndex,
+  listStatusTasksSortedFromIndex,
   visibleStatusesForBoard,
   type BoardTaskFilterState,
 } from "./boardStatusUtils";
-import {
-  useBoardTaskDndReact,
-} from "./useBoardTaskDndReact";
+import { hashTasksForDndLayoutDeps } from "./boardTaskDndDeps";
+import { useBoardTaskDndReact } from "./useBoardTaskDndReact";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 /**
@@ -30,9 +30,9 @@ import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
  * sortable task IDs for that band, filtered by the shared board task predicate.
  */
 function buildLanesTaskContainerMap(
-  board: Board,
   listIds: number[],
   filter: BoardTaskFilterState,
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
@@ -40,7 +40,12 @@ function buildLanesTaskContainerMap(
       const key = laneBandContainerId(listId, status);
       // Route lanes through the shared board predicate so date/group/priority
       // filters stay consistent with the visible cards and keyboard navigation.
-      const tasks = listStatusTasksSorted(board, listId, status, filter);
+      const tasks = listStatusTasksSortedFromIndex(
+        tasksByListStatus,
+        listId,
+        status,
+        filter,
+      );
       out[key] = tasks.map((t) => sortableTaskId(t.id));
     }
   }
@@ -118,14 +123,8 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
 
   const listIds = listIdsOverride ?? list.localListIds;
 
-  const tasksLayoutSig = useMemo(
-    () =>
-      board.tasks
-        .map(
-          (t) =>
-            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}:${t.releaseId ?? ""}`,
-        )
-        .join("|"),
+  const tasksLayoutHash = useMemo(
+    () => hashTasksForDndLayoutDeps(board.tasks),
     [board.tasks],
   );
 
@@ -139,7 +138,12 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
   const releaseSig =
     activeReleaseIds === null ? "__all__" : activeReleaseIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+
+  const tasksByListStatus = useMemo(
+    () => buildTasksByListStatusIndex(board.tasks),
+    [board.tasks],
+  );
 
   const taskFilter = useMemo<BoardTaskFilterState>(
     () => ({
@@ -161,13 +165,8 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
   );
 
   const serverTaskMap = useMemo(
-    () => buildLanesTaskContainerMap(board, listIds, taskFilter),
-    [
-      containerMapDeps,
-      board,
-      listIds,
-      taskFilter,
-    ],
+    () => buildLanesTaskContainerMap(listIds, taskFilter, tasksByListStatus),
+    [containerMapDeps, listIds, taskFilter, tasksByListStatus],
   );
 
   const persistChanges = useCallback(
@@ -200,5 +199,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     activeGroupIds,
     activePriorityIds,
     activeReleaseIds,
+    /** Shared O(N) task index for list×status bands; same reference while `board.tasks` is unchanged. */
+    tasksByListStatus,
   };
 }

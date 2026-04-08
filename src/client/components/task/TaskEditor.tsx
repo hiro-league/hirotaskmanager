@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   effectiveDefaultTaskGroupId,
   formatGroupDisplayLabel,
@@ -6,9 +7,9 @@ import {
   priorityDisplayLabel,
   sortPrioritiesByValue,
   sortTaskGroupsForDisplay,
-  type Board,
   type Task,
 } from "../../../shared/models";
+import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
 
 // Release select values mirror API omit vs null vs id (see task create contract in server routes).
 /** Create: omit `releaseId` in API body so server can auto-assign from board rules. */
@@ -17,7 +18,12 @@ const RELEASE_SELECT_AUTO = "__auto__";
 const RELEASE_SELECT_NONE = "__none__";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
-import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
+import {
+  boardTaskDetailKey,
+  fetchBoardTask,
+  useStatuses,
+  useStatusWorkflowOrder,
+} from "@/api/queries";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
@@ -26,7 +32,7 @@ import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTra
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 
 interface TaskEditorProps {
-  board: Board;
+  board: TaskEditorBoardData;
   open: boolean;
   onClose: () => void;
   mode: "create" | "edit";
@@ -60,6 +66,13 @@ export function TaskEditor({
   const workflowOrder = useStatusWorkflowOrder();
   const completion = useBoardTaskCompletionCelebrationOptional();
 
+  // Board list uses `GET /api/boards/:id?slim=1` (truncated bodies). Load full task when editing.
+  const taskDetailQuery = useQuery({
+    queryKey: boardTaskDetailKey(board.id, task?.id ?? 0),
+    queryFn: () => fetchBoardTask(board.id, task!.id),
+    enabled: open && mode === "edit" && task != null,
+  });
+
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   /** Task icon; null clears. */
@@ -87,21 +100,42 @@ export function TaskEditor({
   useEffect(() => {
     if (!open) return;
     if (mode === "edit" && task) {
-      setTitle(task.title);
-      setBody(task.body);
-      setEmoji(task.emoji ?? null);
-      setGroup(String(task.groupId));
-      setPriority(String(task.priorityId));
+      if (taskDetailQuery.isPending) {
+        setTitle(task.title);
+        // Avoid letting the user edit a possibly slim `body` from the board payload.
+        setBody("");
+        setEmoji(task.emoji ?? null);
+        setGroup(String(task.groupId));
+        setPriority(String(task.priorityId));
+        const rel =
+          task.releaseId != null ? String(task.releaseId) : RELEASE_SELECT_NONE;
+        setRelease(rel);
+        baselineRef.current = {
+          title: task.title,
+          body: "",
+          group: String(task.groupId),
+          priority: String(task.priorityId),
+          release: rel,
+          emoji: task.emoji ?? null,
+        };
+        return;
+      }
+      const t = taskDetailQuery.data ?? task;
+      setTitle(t.title);
+      setBody(t.body);
+      setEmoji(t.emoji ?? null);
+      setGroup(String(t.groupId));
+      setPriority(String(t.priorityId));
       const rel =
-        task.releaseId != null ? String(task.releaseId) : RELEASE_SELECT_NONE;
+        t.releaseId != null ? String(t.releaseId) : RELEASE_SELECT_NONE;
       setRelease(rel);
       baselineRef.current = {
-        title: task.title,
-        body: task.body,
-        group: String(task.groupId),
-        priority: String(task.priorityId),
+        title: t.title,
+        body: t.body,
+        group: String(t.groupId),
+        priority: String(t.priorityId),
         release: rel,
-        emoji: task.emoji ?? null,
+        emoji: t.emoji ?? null,
       };
     } else if (mode === "create" && createContext) {
       setTitle("");
@@ -133,6 +167,8 @@ export function TaskEditor({
     board.taskGroups,
     board.taskPriorities,
     board.defaultTaskGroupId,
+    taskDetailQuery.isPending,
+    taskDetailQuery.data,
   ]);
 
   useEffect(() => {
@@ -167,7 +203,10 @@ export function TaskEditor({
   }, [open, mode, task, createContext, title, body, group, priority, release, emoji]);
 
   const busy =
-    createTask.isPending || updateTask.isPending || deleteTask.isPending;
+    createTask.isPending ||
+    updateTask.isPending ||
+    deleteTask.isPending ||
+    (mode === "edit" && taskDetailQuery.isPending);
 
   const requestClose = useDialogCloseRequest({
     busy,
@@ -244,7 +283,10 @@ export function TaskEditor({
     mode,
     createContext,
     task,
-    board,
+    board.id,
+    board.taskPriorities,
+    board.taskGroups,
+    board.defaultTaskGroupId,
     title,
     body,
     emoji,

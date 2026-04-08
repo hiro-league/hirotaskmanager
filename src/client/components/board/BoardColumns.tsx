@@ -10,6 +10,7 @@ import {
 import { useCreateList, useMoveList, usePatchBoardViewPrefs } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
+import { boardColumnSpreadProps } from "./boardColumnData";
 import {
   bandWeightsForBoard,
   visibleStatusesForBoard,
@@ -201,6 +202,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     onDragOver,
     onDragEnd,
     reorderPending,
+    tasksByListStatus,
   } = useLanesBoardDnd(board);
   const visibleStatuses = visibleStatusesForBoard(board, workflowOrder);
 
@@ -303,14 +305,18 @@ export function BoardColumns({ board }: BoardColumnsProps) {
             />
             <div className="flex min-h-0 flex-row gap-4">
               {localListIds.flatMap((id, index) => {
+                const list = board.lists.find((l) => l.id === id);
+                if (!list) return [];
                 const items = [
                   <BoardListColumn
                     key={id}
-                    board={board}
+                    {...boardColumnSpreadProps(board)}
+                    list={list}
                     listId={id}
                     listIndex={index}
                     visibleStatuses={visibleStatuses}
                     weights={weights}
+                    tasksByListStatus={tasksByListStatus}
                     taskMap={Object.fromEntries(
                       visibleStatuses.map((status) => [
                         laneBandContainerId(id, status),
@@ -356,6 +362,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               layout="lanes"
               visibleStatuses={visibleStatuses}
               weights={weights}
+              tasksByListStatus={tasksByListStatus}
             />
           ) : null}
         </ReactDragOverlay>

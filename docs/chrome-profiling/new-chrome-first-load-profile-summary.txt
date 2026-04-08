@@ -1,0 +1,138 @@
+=== new-chrome-first-load-profile.json ===
+trace startTime (metadata): 2026-04-08T19:38:53.822Z
+main thread: 15080:16452 — CrRendererMain (largest wall-time among labeled threads)
+note: sums by name/category use inclusive wall time (dur, μs); nested Chrome events overlap, so totals are not exclusive.
+note: tdur (thread duration) sums only where DevTools emitted tdur on complete events — useful as a CPU-ish hint, not identical to Bottom-Up self time.
+note: long-task / RunTask lists skip v8.inspector events (DevTools debugger noise while recording).
+
+complete events (ph=X) on main thread: 609529
+sum of dur (wall, ms): 65830.7
+sum of tdur where present (ms): 58542.8 (608195 events had tdur)
+GC-related events (name heuristic): 3695 slices, 3828.1 ms wall (inclusive)
+layout/paint-ish events (name heuristic): 479 slices, 649.2 ms wall (inclusive)
+
+-- Long tasks (dur >= 50 ms), top 40 by duration --
+    7444.8 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+    7444.7 ms  v8.callFunction  [v8]  {}
+    7438.7 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     961.2 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     961.2 ms  v8.callFunction  [v8]  {}
+     960.7 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     567.8 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     567.7 ms  v8.callFunction  [v8]  {}
+     566.8 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     321.9 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     321.8 ms  v8.callFunction  [v8]  {}
+     321.6 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     309.0 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     308.9 ms  v8.callFunction  [v8]  {}
+     308.8 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     283.8 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     283.7 ms  v8.callFunction  [v8]  {}
+     283.3 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     238.8 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     238.8 ms  v8.callFunction  [v8]  {}
+     238.6 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     196.0 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     195.9 ms  EvaluateScript  [disabled-by-default-devtools.timeline]  {}
+     193.3 ms  V8.StackGuard  [v8.execute]  {}
+     193.3 ms  V8.HandleInterrupts  [v8.execute]  {}
+     193.2 ms  V8.InvokeApiInterruptCallbacks  [v8.execute]  {}
+     192.2 ms  CpuProfiler::StartProfiling  [v8]  {}
+     161.5 ms  UpdateLayoutTree  [blink,devtools.timeline]  {"beginData":{"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","sampleTraceId":5519696571248306,"stackTrace":[{"columnNumber":40,"functionName":"c…
+     148.7 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     148.6 ms  v8.callFunction  [v8]  {}
+     148.5 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     131.7 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     131.6 ms  v8.callFunction  [v8]  {}
+     131.6 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+     110.5 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+     110.5 ms  v8.callFunction  [v8]  {}
+     110.2 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+      80.8 ms  RunTask  [disabled-by-default-devtools.timeline]  {}
+      80.6 ms  v8.callFunction  [v8]  {}
+      80.6 ms  FunctionCall  [devtools.timeline]  {"data":{"columnNumber":36,"frame":"EF9A81A1E31E410DA9560FE4F3C8A040","functionName":"performWorkUntilDeadline","isolate":"12969664696406649…
+
+-- RunTask slices >= 16 ms (frame budget hints), top 40 --
+    7444.8 ms  [disabled-by-default-devtools.timeline]  {}
+     961.2 ms  [disabled-by-default-devtools.timeline]  {}
+     567.8 ms  [disabled-by-default-devtools.timeline]  {}
+     321.9 ms  [disabled-by-default-devtools.timeline]  {}
+     309.0 ms  [disabled-by-default-devtools.timeline]  {}
+     283.8 ms  [disabled-by-default-devtools.timeline]  {}
+     238.8 ms  [disabled-by-default-devtools.timeline]  {}
+     196.0 ms  [disabled-by-default-devtools.timeline]  {}
+     148.7 ms  [disabled-by-default-devtools.timeline]  {}
+     131.7 ms  [disabled-by-default-devtools.timeline]  {}
+     110.5 ms  [disabled-by-default-devtools.timeline]  {}
+      80.8 ms  [disabled-by-default-devtools.timeline]  {}
+      74.9 ms  [disabled-by-default-devtools.timeline]  {}
+      73.2 ms  [disabled-by-default-devtools.timeline]  {}
+      69.7 ms  [disabled-by-default-devtools.timeline]  {}
+      40.7 ms  [disabled-by-default-devtools.timeline]  {}
+      27.9 ms  [disabled-by-default-devtools.timeline]  {}
+      23.3 ms  [disabled-by-default-devtools.timeline]  {}
+      22.8 ms  [disabled-by-default-devtools.timeline]  {}
+      21.4 ms  [disabled-by-default-devtools.timeline]  {}
+      20.7 ms  [disabled-by-default-devtools.timeline]  {}
+      17.2 ms  [disabled-by-default-devtools.timeline]  {}
+
+-- Top 40 event names on main thread (min dur 500 μs, noise filters) --
+     11469.5 ms Σ  n=   129  max=  7444.8 ms  RunTask
+     10974.7 ms Σ  n=    45  max=  7444.7 ms  v8.callFunction
+     10964.0 ms Σ  n=    45  max=  7438.7 ms  FunctionCall
+       559.5 ms Σ  n=    57  max=    39.9 ms  MinorGC
+       556.7 ms Σ  n=    57  max=    39.9 ms  V8.GCScavenger
+       554.6 ms Σ  n=    57  max=    39.9 ms  V8.GC_SCAVENGER
+       448.4 ms Σ  n=    57  max=    16.2 ms  V8.GC_SCAVENGER_SCAVENGE
+       402.8 ms Σ  n=    56  max=    15.2 ms  V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE
+       354.5 ms Σ  n=    43  max=    14.9 ms  V8.GC_SCAVENGER_SCAVENGE_PARALLEL
+       260.0 ms Σ  n=     8  max=   193.3 ms  V8.StackGuard
+       259.9 ms Σ  n=     8  max=   193.3 ms  V8.HandleInterrupts
+       256.7 ms Σ  n=    19  max=   161.5 ms  UpdateLayoutTree
+       195.9 ms Σ  n=     1  max=   195.9 ms  EvaluateScript
+       193.2 ms Σ  n=     1  max=   193.2 ms  V8.InvokeApiInterruptCallbacks
+       192.2 ms Σ  n=     1  max=   192.2 ms  CpuProfiler::StartProfiling
+       155.7 ms Σ  n=    14  max=    55.8 ms  Layout
+       147.1 ms Σ  n=    11  max=    54.9 ms  LocalFrameView::performLayout
+       146.2 ms Σ  n=    27  max=    33.1 ms  V8.GC_HEAP_EXTERNAL_WEAK_GLOBAL_HANDLES
+       110.0 ms Σ  n=     5  max=    41.6 ms  MajorGC
+       109.8 ms Σ  n=     5  max=    41.6 ms  V8.GCFinalizeMC
+       109.6 ms Σ  n=     5  max=    41.6 ms  V8.GC_MARK_COMPACTOR
+        86.7 ms Σ  n=    57  max=    21.1 ms  WidgetBaseInputHandler::OnHandleInputEvent
+        84.6 ms Σ  n=    56  max=    21.1 ms  WebFrameWidgetImpl::HandleInputEvent
+        50.7 ms Σ  n=    16  max=    19.5 ms  Paint
+        37.7 ms Σ  n=    14  max=     7.1 ms  Layerize
+        34.2 ms Σ  n=     5  max=     8.0 ms  V8.GC_MC_EVACUATE
+        30.2 ms Σ  n=     5  max=    23.8 ms  V8.GCIncrementalMarkingStart
+        24.3 ms Σ  n=     4  max=    21.9 ms  CppGC.IncrementalSweep
+        24.2 ms Σ  n=     4  max=    22.0 ms  V8.GC_HEAP_ENSURE_SWEEPING_COMPLETED
+        23.2 ms Σ  n=     5  max=     5.9 ms  V8.GC_MC_EVACUATE_UPDATE_POINTERS
+        23.2 ms Σ  n=     8  max=    12.4 ms  V8.GC_SCAVENGER_SCAVENGE_ROOTS
+        22.7 ms Σ  n=     2  max=    21.9 ms  CppGC.SweepFinish
+        21.6 ms Σ  n=     5  max=    18.6 ms  PrePaint
+        18.5 ms Σ  n=    25  max=     1.5 ms  HitTest
+        18.0 ms Σ  n=     5  max=    12.0 ms  Commit
+        17.5 ms Σ  n=     5  max=     9.5 ms  V8.GC_MC_MARK
+        13.9 ms Σ  n=     5  max=     6.2 ms  HandlePostMessage
+        13.9 ms Σ  n=    21  max=     1.1 ms  UserTiming::Measure
+        13.3 ms Σ  n=     5  max=     3.4 ms  V8.GC_MC_EVACUATE_UPDATE_POINTERS_TO_NEW_ROOTS
+         9.7 ms Σ  n=     5  max=     3.5 ms  V8.GC_MC_EVACUATE_COPY
+
+-- Top 40 categories on main thread (inclusive wall; v8.inspector omitted — use --show-inspector-cats) --
+     11971.8 ms Σ  n=   1788  v8
+     11776.9 ms Σ  n=   2288  disabled-by-default-devtools.timeline
+     11406.3 ms Σ  n=  11403  devtools.timeline
+      2396.9 ms Σ  n=   3800  devtools.timeline,disabled-by-default-v8.gc
+       775.1 ms Σ  n=    916  v8.execute
+       669.5 ms Σ  n=     62  devtools.timeline,v8
+       298.1 ms Σ  n=    299  blink,devtools.timeline
+       148.4 ms Σ  n=     15  blink,benchmark,rail,disabled-by-default-blink.debug.layout
+       144.0 ms Σ  n=   4199  cppgc
+        90.0 ms Σ  n=     66  renderer,benchmark,rail,input.scrolling
+        88.3 ms Σ  n=     66  input,rail
+        11.3 ms Σ  n=     75  blink,rail
+         7.5 ms Σ  n=    218  disabled-by-default-devtools.v8-source-rundown-sources
+         0.8 ms Σ  n=    218  disabled-by-default-devtools.v8-source-rundown
+         0.1 ms Σ  n=      3  navigation,rail
+         0.0 ms Σ  n=      2  loading

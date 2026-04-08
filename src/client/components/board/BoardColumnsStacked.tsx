@@ -7,6 +7,7 @@ import type { Board } from "../../../shared/models";
 import { AddListSlot } from "./BoardColumns";
 import { BoardDragOverlayContent } from "./BoardDragOverlayContent";
 import { BoardListStackedColumn } from "./BoardListStackedColumn";
+import { boardColumnSpreadProps } from "./boardColumnData";
 import { stackedListContainerId } from "./dndIds";
 import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { useStackedBoardDnd } from "./useStackedBoardDnd";
@@ -23,6 +24,8 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
     onDragStart,
     onDragOver,
     onDragEnd,
+    tasksByListStatus,
+    visibleStatuses,
   } = useStackedBoardDnd(board);
 
   const boardKeyboardNav = useBoardKeyboardNavOptional();
@@ -65,14 +68,18 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
           <div className="flex w-max min-w-full flex-row items-start gap-5 bg-transparent pb-1">
             <div className="flex flex-row items-start gap-4">
               {localListIds.flatMap((id, index) => {
+                const list = board.lists.find((l) => l.id === id);
+                if (!list) return [];
                 const items = [
                   <BoardListStackedColumn
                     key={id}
-                    board={board}
+                    {...boardColumnSpreadProps(board)}
+                    list={list}
                     listId={id}
                     listIndex={index}
                     taskContainerId={stackedListContainerId(id)}
                     sortableIds={displayTaskMap[stackedListContainerId(id)] ?? []}
+                    tasksByListStatus={tasksByListStatus}
                   />,
                 ];
                 if (addListOpen && insertAfterListId === id) {
@@ -111,6 +118,8 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
               overlayTask={overlayTask}
               activeListId={activeListId}
               layout="stacked"
+              tasksByListStatus={tasksByListStatus}
+              visibleStatuses={visibleStatuses}
             />
           ) : null}
         </ReactDragOverlay>

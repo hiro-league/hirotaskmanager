@@ -86,6 +86,7 @@ import {
   verticalScrollChainCanConsumeWheelWithin,
 } from "./boardSurfaceWheel";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
+import { BoardScrollRootContext } from "./useColumnInViewport";
 import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
 import { useBoardSearch } from "@/context/BoardSearchContext";
@@ -1462,13 +1463,17 @@ export function BoardView({ boardId }: BoardViewProps) {
         )}
         {...boardCanvasPanHandlers}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-0">
-          {stackedLayout ? (
-            <BoardColumnsStacked board={data} />
-          ) : (
-            <BoardColumns board={data} />
-          )}
-        </div>
+        {/* Provide the board scroll container to useColumnInViewport so the
+            IntersectionObserver root matches the actual clip boundary. */}
+        <BoardScrollRootContext.Provider value={scrollRef}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-0">
+            {stackedLayout ? (
+              <BoardColumnsStacked board={data} />
+            ) : (
+              <BoardColumns board={data} />
+            )}
+          </div>
+        </BoardScrollRootContext.Provider>
       </div>
 
       <BoardSearchDialog

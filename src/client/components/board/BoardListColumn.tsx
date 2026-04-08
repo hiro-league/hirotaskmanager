@@ -1,5 +1,6 @@
-import { memo, useLayoutEffect, useRef, type RefCallback } from "react";
-import { listDisplayName, type Board, type List } from "../../../shared/models";
+import { memo, useCallback, useLayoutEffect, useRef, type RefCallback } from "react";
+import { listDisplayName, type List, type Task } from "../../../shared/models";
+import type { BoardColumnSpreadProps } from "./boardColumnData";
 import { ListStatsChipsRow } from "@/components/board/BoardStatsChips";
 import { useBoardStatsDisplayOptional } from "@/components/board/BoardStatsContext";
 import { ListHeader } from "@/components/list/ListHeader";
@@ -10,28 +11,38 @@ import { boardListColumnOverlayShellClass } from "./boardDragOverlayShell";
 import { laneBandContainerId } from "./dndIds";
 import { laneStatusDividerClass } from "./laneStatusTheme";
 import { useBoardColumnSortableReact } from "./useBoardColumnSortableReact";
+import { useColumnInViewport } from "./useColumnInViewport";
 
-interface ListColumnBodyProps {
-  board: Board;
+interface ListColumnBodyProps extends BoardColumnSpreadProps {
   list: List;
   listId: number;
   visibleStatuses: string[];
   weights: number[];
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
   dragHandleRef?: RefCallback<HTMLElement>;
   taskMap?: Record<string, string[]>;
   isTaskDragActive?: boolean;
 }
 
 function ListColumnBody({
-  board,
+  boardId,
+  showStats,
+  taskGroups,
+  taskPriorities,
+  releases,
+  defaultTaskGroupId,
+  boardTasks,
+  boardVisibleStatuses,
   list,
   listId,
   visibleStatuses,
   weights,
+  tasksByListStatus,
   dragHandleRef,
   taskMap,
   isTaskDragActive = false,
 }: ListColumnBodyProps) {
+  void boardVisibleStatuses; // lanes shell does not need prefs; prop kept for memo key parity with stacked spread
   const bandsRef = useRef<HTMLDivElement>(null);
   const bandHeightsRef = useRef<number[]>([]);
   const boardStatsDisplay = useBoardStatsDisplayOptional();
@@ -48,7 +59,7 @@ function ListColumnBody({
   });
 
   const listStatsRow =
-    board.showStats &&
+    showStats &&
     boardStatsDisplay != null &&
     !boardStatsDisplay.statsError ? (
       <ListStatsChipsRow
@@ -61,7 +72,7 @@ function ListColumnBody({
   return (
     <>
       <ListHeader
-        boardId={board.id}
+        boardId={boardId}
         list={list}
         dragHandleRef={dragHandleRef}
       />
@@ -95,20 +106,26 @@ function ListColumnBody({
                   ),
                 // Open band: relative + overflow-hidden so the FAB (absolute sibling
                 // of the inner scroll div) is clipped to this band's visible area.
-                // Non-open bands: scroll is handled here directly.
-                isOpenBand
-                  ? "relative overflow-hidden"
-                  : "overflow-x-hidden overflow-y-auto overscroll-y-contain p-2",
+                // Non-open bands also keep scrolling inside `ListStatusBand` so
+                // each band can own its virtualizer viewport.
+                "overflow-hidden",
+                isOpenBand && "relative",
               )}
-              data-board-id={board.id}
+              data-board-id={boardId}
               data-list-id={listId}
               data-status={status}
               aria-label={`${listDisplayName(list)} — ${status}`}
             >
               <ListStatusBand
-                board={board}
+                boardId={boardId}
+                taskGroups={taskGroups}
+                taskPriorities={taskPriorities}
+                releases={releases}
+                defaultTaskGroupId={defaultTaskGroupId}
+                boardTasks={boardTasks}
                 list={list}
                 status={status}
+                tasksByListStatus={tasksByListStatus}
                 containerId={sortableIds != null ? containerId : undefined}
                 sortableIds={sortableIds}
               />
@@ -120,86 +137,96 @@ function ListColumnBody({
   );
 }
 
-export interface BoardListColumnOverlayProps {
-  board: Board;
+export interface BoardListColumnOverlayProps
+  extends BoardColumnSpreadProps {
+  list: List;
   listId: number;
   visibleStatuses: string[];
   weights: number[];
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
 }
 
 export function BoardListColumnOverlay({
-  board,
+  list,
   listId,
   visibleStatuses,
   weights,
+  tasksByListStatus,
+  ...columnSpread
 }: BoardListColumnOverlayProps) {
-  const list = board.lists.find((l) => l.id === listId);
-  if (!list) return null;
   return (
     <div className={boardListColumnOverlayShellClass}>
       <ListColumnBody
-        board={board}
+        {...columnSpread}
         list={list}
         listId={listId}
         visibleStatuses={visibleStatuses}
         weights={weights}
+        tasksByListStatus={tasksByListStatus}
       />
     </div>
   );
 }
 
-interface BoardListColumnProps {
-  board: Board;
+interface BoardListColumnProps extends BoardColumnSpreadProps {
+  list: List;
   listId: number;
   listIndex: number;
   visibleStatuses: string[];
   weights: number[];
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
   taskMap?: Record<string, string[]>;
   isTaskDragActive?: boolean;
 }
 
 // Memoized: only re-renders when this column's props actually change
 export const BoardListColumn = memo(function BoardListColumn({
-  board,
+  list,
   listId,
   listIndex,
   visibleStatuses,
   weights,
+  tasksByListStatus,
   taskMap,
   isTaskDragActive,
+  ...columnSpread
 }: BoardListColumnProps) {
   const { ref, handleRef, isDragging } = useBoardColumnSortableReact(
     listId,
     listIndex,
   );
 
+  // Skip rendering the heavy task body for columns scrolled off-screen
+  // horizontally so only visible columns pay the sortable/virtualizer cost
+  // (board perf plan #4 — horizontal column gating).
+  const { columnRef: viewportRef, inViewport } = useColumnInViewport(!isDragging);
+
   const boardNav = useBoardKeyboardNavOptional();
   const listColumnShellRef = useRef<HTMLDivElement | null>(null);
-  const list = board.lists.find((l) => l.id === listId);
-  const listKeyboardHighlight =
-    list != null &&
-    !isDragging &&
-    boardNav?.highlightedListId === list.id;
 
   useLayoutEffect(() => {
-    if (!boardNav || list == null) return;
+    if (!boardNav) return;
     const el = listColumnShellRef.current;
     boardNav.registerListElement(list.id, el);
     return () => boardNav.registerListElement(list.id, null);
   }, [boardNav, list]);
 
-  if (!list) return null;
+  const mergedOuterRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      ref(node);
+      (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [ref, viewportRef],
+  );
 
   return (
     <div
-      ref={ref}
+      ref={mergedOuterRef}
       className="relative flex h-full min-h-0 w-72 shrink-0 flex-col"
       data-list-column={list.id}
       data-board-no-pan
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
-        // Remember the hovered list so Tab can select the list when the
-        // pointer is over empty column space instead of a specific task card.
         boardNav.setHoveredListId(list.id);
       }}
       onPointerLeave={(e) => {
@@ -207,8 +234,6 @@ export const BoardListColumn = memo(function BoardListColumn({
         boardNav.setHoveredListId(null);
       }}
     >
-      {/* group/list-col: FAB in the open band uses group-hover/list-col to
-          appear only when the pointer is anywhere over this list column. */}
       <div
         ref={listColumnShellRef}
         className={cn(
@@ -216,9 +241,6 @@ export const BoardListColumn = memo(function BoardListColumn({
           isDragging
             ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
-          // Full-column shell (title + tasks): keyboard list selection matches the visible card border.
-          listKeyboardHighlight &&
-            "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
         )}
         onPointerDown={(e) => {
           if (!boardNav || isDragging) return;
@@ -227,20 +249,27 @@ export const BoardListColumn = memo(function BoardListColumn({
           if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
             return;
           }
-          // Blank list chrome should still count as interacting with this list.
           boardNav.selectList(list.id);
         }}
       >
-        {!isDragging && (
+        {!isDragging && inViewport && (
           <ListColumnBody
-            board={board}
+            {...columnSpread}
             list={list}
             listId={listId}
             visibleStatuses={visibleStatuses}
             weights={weights}
+            tasksByListStatus={tasksByListStatus}
             dragHandleRef={handleRef}
             taskMap={taskMap}
             isTaskDragActive={isTaskDragActive}
+          />
+        )}
+        {!isDragging && !inViewport && (
+          <ListHeader
+            boardId={columnSpread.boardId}
+            list={list}
+            dragHandleRef={handleRef}
           />
         )}
       </div>

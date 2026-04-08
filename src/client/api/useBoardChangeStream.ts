@@ -6,6 +6,7 @@ import type { Board } from "../../shared/models";
 import {
   boardDetailQueryKey,
   boardKeys,
+  boardTaskDetailKey,
   fetchBoardList,
   fetchBoardTask,
   invalidateBoardStatsQueries,
@@ -122,6 +123,7 @@ export function useBoardChangeStream(
       }
       try {
         const task = await fetchBoardTask(event.boardId, event.taskId);
+        qc.setQueryData(boardTaskDetailKey(event.boardId, event.taskId), task);
         setBoardCaches((current) => {
           const exists = current.tasks.some((item) => item.id === task.id);
           return {

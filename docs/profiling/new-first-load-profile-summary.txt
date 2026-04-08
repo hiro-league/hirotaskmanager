@@ -1,0 +1,50 @@
+=== new-first-load-profile.json ===
+commits: 13
+commit duration (ms): total=1595.9 mean=122.8 max=582.3
+effects (ms): layout/effect=1249.5 passive=69.9
+
+-- Top 30 components by summed fiber actual time (ms) across all commits --
+      9831.1 ms  samples=   165  max=   570.7  Context.Provider
+      1492.1 ms  samples=     5  max=   582.3  BoardView
+      1444.2 ms  samples=     5  max=   570.8  ShortcutScopeProvider
+      1443.4 ms  samples=     5  max=   570.7  BoardStatsDisplayProvider
+      1443.0 ms  samples=     5  max=   570.6  BoardTaskKeyboardBridgeProvider
+      1442.6 ms  samples=     5  max=   570.5  BoardKeyboardNavProvider
+      1433.9 ms  samples=     5  max=   570.3  BoardTaskCompletionCelebrationProvider
+      1258.0 ms  samples=     5  max=   531.3  BoardColumnsStacked
+      1239.4 ms  samples=     5  max=   526.6  DragDropProvider
+       118.3 ms  samples=    13  max=     9.1  Sidebar
+        95.2 ms  samples=    15  max=    12.1  BoardHeaderMultiSelect
+        82.1 ms  samples=    12  max=    12.3  BoardPriorityToggles
+        81.2 ms  samples=    15  max=    10.6  MultiSelect
+        73.7 ms  samples=     1  max=    73.7  BrowserRouter
+        73.4 ms  samples=     1  max=    73.4  Router
+        73.1 ms  samples=     1  max=    73.1  Navigation.Provider
+        73.0 ms  samples=     1  max=    73.0  Location.Provider
+        70.7 ms  samples=     6  max=    49.5  (anonymous#21647)
+        69.8 ms  samples=     4  max=    54.8  (anonymous#21620)
+        68.4 ms  samples=    12  max=    10.5  TaskGroupSwitcher
+        59.3 ms  samples=     1  max=    59.3  Routes
+        58.3 ms  samples=     1  max=    58.3  RenderedRoute
+        58.0 ms  samples=     1  max=    58.0  BoardPage
+        58.0 ms  samples=     1  max=    58.0  Route.Provider
+        57.1 ms  samples=    30  max=     3.4  Popover
+        57.1 ms  samples=    12  max=     8.4  ReleaseSwitcher
+        55.7 ms  samples=     6  max=    31.5  (anonymous#21935)
+        53.2 ms  samples=     6  max=    32.8  (anonymous#21967)
+        52.2 ms  samples=     4  max=    37.3  (anonymous#21748)
+        51.1 ms  samples=    31  max=     3.0  Popper
+
+-- 12 slowest commits (commit duration ms) --
+     582.3 ms  fiberΣ= 11326.6  fx=2.0/8.2  updaters: BoardView
+     454.8 ms  fiberΣ=  9226.7  fx=27.5/42.7  updaters: BoardColumnsStacked, BoardKeyboardNavProvider, BoardView
+     246.9 ms  fiberΣ=  4949.8  fx=602.3/5.9  updaters: StackedSortableList×50, BoardKeyboardNavProvider, BoardView
+     150.4 ms  fiberΣ=  2570.3  fx=4.8/3.5  updaters: ListStackedBody×50, Popper×50, BoardKeyboardNavProvider, BoardView
+      73.7 ms  fiberΣ=  1344.4  fx=29.1/3.4  updaters: BrowserRouter
+      24.1 ms  fiberΣ=  1490.6  fx=164.8/0.5  updaters: StackedSortableList×50, BoardView
+       9.1 ms  fiberΣ=   205.1  fx=0.0/0.2  updaters: StackedSortableList×49
+       9.1 ms  fiberΣ=     9.1  fx=0.0/0.0  updaters: BoardView
+       9.1 ms  fiberΣ=    85.1  fx=71.5/0.8  updaters: BoardListStackedColumn×5
+       9.1 ms  fiberΣ=   138.5  fx=195.8/1.9  updaters: BoardListStackedColumn×18, Popper×5
+       9.1 ms  fiberΣ=   524.9  fx=116.0/1.9  updaters: Popper×18, BoardListStackedColumn×15
+       9.1 ms  fiberΣ=   260.4  fx=35.6/0.9  updaters: Popper×15, BoardListStackedColumn×4

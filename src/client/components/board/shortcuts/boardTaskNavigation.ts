@@ -1,8 +1,8 @@
 import {
-  listColumnTasksSorted,
+  listColumnTasksSortedFromIndex,
   type BoardTaskFilterState,
 } from "../boardStatusUtils";
-import type { Board } from "../../../../shared/models";
+import type { Task } from "../../../../shared/models";
 
 export type BoardLayoutNav = "lanes" | "stacked";
 
@@ -11,14 +11,19 @@ export type BoardLayoutNav = "lanes" | "stacked";
  * then order; stacked: merged workflow order within the list).
  */
 export function buildListColumnTaskIds(
-  board: Board,
   layout: BoardLayoutNav,
   listIdsInOrder: number[],
   filter: BoardTaskFilterState,
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>,
 ): Map<number, number[]> {
   const map = new Map<number, number[]>();
   for (const listId of listIdsInOrder) {
-    const tasks = listColumnTasksSorted(board, layout, listId, filter);
+    const tasks = listColumnTasksSortedFromIndex(
+      tasksByListStatus,
+      layout,
+      listId,
+      filter,
+    );
     map.set(
       listId,
       tasks.map((t) => t.id),

@@ -40,10 +40,12 @@ function ListEmojiPicker({
         "[&_button[data-state=open]]:opacity-100",
       )}
     >
+      {/* lazyMountDropdown: board perf plan #6 — skip Radix Portal/Presence per list until emoji is used */}
       <EmojiPickerMenuButton
         emoji={emoji}
         disabled={busy}
         compact
+        lazyMountDropdown
         alwaysShowPlaceholder
         placeholderIcon={
           <span className="text-[0.875rem] leading-none" aria-hidden>

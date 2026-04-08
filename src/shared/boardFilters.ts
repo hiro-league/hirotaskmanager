@@ -147,15 +147,23 @@ export function taskMatchesBoardFilter(
   return true;
 }
 
+/** Resolves stored board status visibility prefs against the workflow order. */
+export function visibleStatusesFromStored(
+  boardVisibleStatuses: readonly string[],
+  workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
+): string[] {
+  const valid = new Set(workflowOrder);
+  const vis = boardVisibleStatuses.filter((s) => valid.has(s));
+  if (vis.length > 0) {
+    return workflowOrder.filter((s) => vis.includes(s));
+  }
+  return [...workflowOrder];
+}
+
 /** Statuses shown on the board, in workflow order (`GET /api/statuses`). */
 export function visibleStatusesForBoard(
   board: Board,
   workflowOrder: readonly string[] = [...DEFAULT_STATUS_IDS],
 ): string[] {
-  const valid = new Set(workflowOrder);
-  const vis = board.visibleStatuses.filter((s) => valid.has(s));
-  if (vis.length > 0) {
-    return workflowOrder.filter((s) => vis.includes(s));
-  }
-  return [...workflowOrder];
+  return visibleStatusesFromStored(board.visibleStatuses, workflowOrder);
 }

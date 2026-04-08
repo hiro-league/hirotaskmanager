@@ -435,7 +435,6 @@ export const TaskCard = memo(function TaskCard({
 }: TaskCardProps) {
   const nav = useBoardKeyboardNavOptional();
   const rootRef = useRef<HTMLDivElement>(null);
-  const highlighted = nav?.highlightedTaskId === task.id;
   const viewSpec = getTaskCardViewSpec(viewMode);
 
   useLayoutEffect(() => {
@@ -479,9 +478,6 @@ export const TaskCard = memo(function TaskCard({
         "hover:bg-accent/45",
         task.color && "border-l-4",
         isDragging && "opacity-40",
-        highlighted &&
-          // Use board-specific selection color so the keyboard ring stands out from the app theme.
-          "ring-2 ring-offset-2 ring-offset-background shadow-md [--tw-ring-color:var(--board-selection-ring)]",
       )}
       style={task.color ? { borderLeftColor: task.color } : undefined}
     >

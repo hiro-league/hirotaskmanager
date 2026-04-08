@@ -3,6 +3,7 @@ import {
   type Board,
   type Task,
 } from "../../../shared/models";
+import { boardColumnSpreadProps } from "./boardColumnData";
 import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
 import { useResolvedTaskCardViewMode } from "@/store/preferences";
 import { boardTaskDragOverlayClass } from "./boardDragOverlayShell";
@@ -37,6 +38,8 @@ export type BoardDragOverlayContentProps =
       overlayTask: Task | undefined;
       activeListId: number | null;
       layout: "stacked";
+      tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
+      visibleStatuses: string[];
     }
   | {
       board: Board;
@@ -45,6 +48,7 @@ export type BoardDragOverlayContentProps =
       layout: "lanes";
       visibleStatuses: string[];
       weights: number[];
+      tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
     };
 
 /** Renders the appropriate DragOverlay child for board DnD (task vs list column). */
@@ -54,19 +58,30 @@ export function BoardDragOverlayContent(props: BoardDragOverlayContentProps) {
   }
   if (props.activeListId == null) return null;
   if (props.layout === "lanes") {
+    const list = props.board.lists.find(
+      (l) => l.id === props.activeListId,
+    );
+    if (!list) return null;
     return (
       <BoardListColumnOverlay
-        board={props.board}
+        {...boardColumnSpreadProps(props.board)}
+        list={list}
         listId={props.activeListId}
         visibleStatuses={props.visibleStatuses}
         weights={props.weights}
+        tasksByListStatus={props.tasksByListStatus}
       />
     );
   }
+  const list = props.board.lists.find((l) => l.id === props.activeListId);
+  if (!list) return null;
   return (
     <BoardListStackedColumnOverlay
-      board={props.board}
+      {...boardColumnSpreadProps(props.board)}
+      list={list}
       listId={props.activeListId}
+      tasksByListStatus={props.tasksByListStatus}
+      visibleStatuses={props.visibleStatuses}
     />
   );
 }

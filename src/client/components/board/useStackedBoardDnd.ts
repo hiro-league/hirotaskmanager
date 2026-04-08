@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Board } from "../../../shared/models";
+import type { Board, Task } from "../../../shared/models";
 import { useMoveTask } from "@/api/mutations";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import {
@@ -16,21 +16,27 @@ import {
 } from "./dndIds";
 import {
   type BoardTaskFilterState,
-  listTasksMergedSorted,
+  buildTasksByListStatusIndex,
+  listTasksMergedSortedFromIndex,
   visibleStatusesForBoard,
 } from "./boardStatusUtils";
+import { hashTasksForDndLayoutDeps } from "./boardTaskDndDeps";
 import { useBoardTaskDndReact } from "./useBoardTaskDndReact";
 import { useHorizontalListReorderReact } from "./useHorizontalListReorderReact";
 
 function buildStackedTaskContainerMap(
-  board: Board,
   listIds: number[],
   filter: BoardTaskFilterState,
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const listId of listIds) {
     const key = stackedListContainerId(listId);
-    const tasks = listTasksMergedSorted(board, listId, filter);
+    const tasks = listTasksMergedSortedFromIndex(
+      tasksByListStatus,
+      listId,
+      filter,
+    );
     out[key] = tasks.map((t) => sortableTaskId(t.id));
   }
   return out;
@@ -89,14 +95,8 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
 
   const listIds = listIdsOverride ?? list.localListIds;
 
-  const tasksLayoutSig = useMemo(
-    () =>
-      board.tasks
-        .map(
-          (t) =>
-            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}:${t.releaseId ?? ""}`,
-        )
-        .join("|"),
+  const tasksLayoutHash = useMemo(
+    () => hashTasksForDndLayoutDeps(board.tasks),
     [board.tasks],
   );
 
@@ -110,7 +110,12 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
   const releaseSig =
     activeReleaseIds === null ? "__all__" : activeReleaseIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+
+  const tasksByListStatus = useMemo(
+    () => buildTasksByListStatusIndex(board.tasks),
+    [board.tasks],
+  );
 
   const taskFilter = useMemo<BoardTaskFilterState>(
     () => ({
@@ -133,13 +138,8 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
   );
 
   const serverTaskMap = useMemo(
-    () => buildStackedTaskContainerMap(board, listIds, taskFilter),
-    [
-      containerMapDeps,
-      board,
-      listIds,
-      taskFilter,
-    ],
+    () => buildStackedTaskContainerMap(listIds, taskFilter, tasksByListStatus),
+    [containerMapDeps, listIds, taskFilter, tasksByListStatus],
   );
 
   const core = useBoardTaskDndReact(board, list, {
@@ -154,5 +154,6 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     activeGroupIds,
     activePriorityIds,
     activeReleaseIds,
+    tasksByListStatus,
   };
 }

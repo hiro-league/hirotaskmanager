@@ -27,6 +27,10 @@ import {
   computeBoardStats,
   parseBoardStatsFilter,
 } from "../../shared/boardStats";
+import {
+  BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
+  BOARD_FETCH_SLIM_TASK_BODY_CHARS,
+} from "../../shared/boardPayload";
 import { repeatedSearchParamValues } from "../../shared/repeatedSearchParams";
 import {
   createBoardWithDefaults,
@@ -104,6 +108,21 @@ function wantsGranularMutationResponse(c: Context<AppBindings>): boolean {
     c.req.header(TASK_MANAGER_MUTATION_RESPONSE_HEADER)?.toLowerCase() ===
     TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1
   );
+}
+
+/** `GET /api/boards/:id` — optional slim task bodies (board perf plan Phase 2 #7). */
+function parseBoardFetchBodyPreview(c: Context<AppBindings>): number | undefined {
+  const rawPreview = c.req.query("bodyPreview");
+  if (rawPreview != null && rawPreview !== "") {
+    const n = Number(rawPreview);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return Math.min(BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS, Math.floor(n));
+  }
+  const slim = c.req.query("slim");
+  if (slim === "1" || slim === "true") {
+    return BOARD_FETCH_SLIM_TASK_BODY_CHARS;
+  }
+  return undefined;
 }
 
 function taskMutationResponse(
@@ -1399,7 +1418,11 @@ boardsRoute.get("/:id", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blocked = cliBoardReadError(c, entry);
   if (blocked) return blocked;
-  const board = loadBoard(entry.id);
+  const bodyPreview = parseBoardFetchBodyPreview(c);
+  const board = loadBoard(
+    entry.id,
+    bodyPreview !== undefined ? { taskBodyMaxChars: bodyPreview } : undefined,
+  );
   if (!board) return c.json({ error: "Board not found" }, 404);
   return c.json(board);
 });

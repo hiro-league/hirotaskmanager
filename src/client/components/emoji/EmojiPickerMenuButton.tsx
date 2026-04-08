@@ -2,11 +2,13 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { Smile } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 import { parseEmojiField } from "../../../shared/emojiField";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +47,11 @@ export interface EmojiPickerMenuButtonProps {
   compact?: boolean;
   /** Extra classes for the trigger button. */
   triggerClassName?: string;
+  /**
+   * When true, Radix `Portal` + `Content` (Popper/Presence stack) mount only after the user
+   * interacts with the trigger — cuts eager work on boards with many list headers (plan #6).
+   */
+  lazyMountDropdown?: boolean;
 }
 
 export function EmojiPickerMenuButton({
@@ -58,9 +65,17 @@ export function EmojiPickerMenuButton({
   placeholderIcon,
   compact = false,
   triggerClassName,
+  lazyMountDropdown = false,
 }: EmojiPickerMenuButtonProps) {
   const dark = useDocumentDark();
   const [open, setOpen] = useState(false);
+  const [dropdownMounted, setDropdownMounted] = useState(!lazyMountDropdown);
+
+  const mountDropdownIfNeeded = useCallback(() => {
+    if (!lazyMountDropdown || dropdownMounted || disabled) return;
+    // Ensure Content exists before Radix opens the menu on the same click (pointerdown → click).
+    flushSync(() => setDropdownMounted(true));
+  }, [lazyMountDropdown, dropdownMounted, disabled]);
 
   // Close menu when disabled (e.g. task group marked for delete) so picker cannot stay open.
   useEffect(() => {
@@ -93,6 +108,10 @@ export function EmojiPickerMenuButton({
             triggerClassName,
           )}
           aria-label={ariaLabel}
+          onPointerDown={mountDropdownIfNeeded}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") mountDropdownIfNeeded();
+          }}
         >
           {showEmojiInTrigger ? (
             <span aria-hidden>{emoji}</span>
@@ -101,48 +120,50 @@ export function EmojiPickerMenuButton({
           )}
         </button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          className="z-[60] max-h-[min(480px,70vh)] overflow-auto rounded-md border border-border bg-popover p-0 text-popover-foreground shadow-md"
-          sideOffset={6}
-          align="start"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          <EmojiPicker
-            open={open}
-            theme={dark ? Theme.DARK : Theme.LIGHT}
-            width={320}
-            height={400}
-            lazyLoadEmojis
-            searchPlaceholder="Search emoji"
-            searchClearButtonLabel="Clear search"
-            previewConfig={{ showPreview: false }}
-            onEmojiClick={(data) => {
-              const parsed = parseEmojiField(data.emoji);
-              if (!parsed.ok) {
-                onValidationError(parsed.error);
-                return;
-              }
-              onPick(parsed.value);
-              setOpen(false);
-            }}
-          />
-          {emoji ? (
-            <div className="border-t border-border px-2 py-2">
-              <button
-                type="button"
-                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                onClick={() => {
-                  onPick(null);
-                  setOpen(false);
-                }}
-              >
-                Clear emoji
-              </button>
-            </div>
-          ) : null}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
+      {dropdownMounted ? (
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            className="z-[60] max-h-[min(480px,70vh)] overflow-auto rounded-md border border-border bg-popover p-0 text-popover-foreground shadow-md"
+            sideOffset={6}
+            align="start"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            <EmojiPicker
+              open={open}
+              theme={dark ? Theme.DARK : Theme.LIGHT}
+              width={320}
+              height={400}
+              lazyLoadEmojis
+              searchPlaceholder="Search emoji"
+              searchClearButtonLabel="Clear search"
+              previewConfig={{ showPreview: false }}
+              onEmojiClick={(data) => {
+                const parsed = parseEmojiField(data.emoji);
+                if (!parsed.ok) {
+                  onValidationError(parsed.error);
+                  return;
+                }
+                onPick(parsed.value);
+                setOpen(false);
+              }}
+            />
+            {emoji ? (
+              <div className="border-t border-border px-2 py-2">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={() => {
+                    onPick(null);
+                    setOpen(false);
+                  }}
+                >
+                  Clear emoji
+                </button>
+              </div>
+            ) : null}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      ) : null}
     </DropdownMenu.Root>
   );
 }

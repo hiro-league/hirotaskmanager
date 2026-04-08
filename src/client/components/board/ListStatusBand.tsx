@@ -7,6 +7,7 @@ import {
   type List,
   type Task,
 } from "../../../shared/models";
+import type { BoardBandSpreadProps } from "./boardColumnData";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses } from "@/api/queries";
 import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
@@ -24,51 +25,61 @@ import {
 import { cn } from "@/lib/utils";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
-  listStatusTasksSorted,
+  listStatusTasksSortedFromIndex,
   type BoardTaskFilterState,
 } from "./boardStatusUtils";
 import { parseTaskSortableId } from "./dndIds";
 import { SortableTaskRow } from "./SortableTaskRow";
 import { useBoardTaskContainerDroppableReact } from "./useBoardTaskContainerDroppableReact";
+import { useVirtualizedBand } from "./useVirtualizedBand";
 import { scrollElementToBottomThen } from "./useVerticalScrollOverflow";
 
-interface ListStatusBandProps {
-  board: Board;
+interface ListStatusBandProps extends BoardBandSpreadProps {
   list: List;
   status: string;
+  /** Pre-indexed tasks by `listId:status`; built once per `board.tasks` ref (board perf plan #3). */
+  tasksByListStatus: ReadonlyMap<string, readonly Task[]>;
   /** When set, this band is a droppable sortable container. */
   containerId?: string;
   /** Ordered sortable task IDs from the DnD state. */
   sortableIds?: string[];
 }
 
-export function ListStatusBand({
-  board,
+// Memo: avoids re-rendering all bands when an unrelated `board` wrapper churns but
+// task slices and filters are unchanged (board perf plan #2).
+export const ListStatusBand = memo(function ListStatusBand({
+  boardId,
+  taskGroups,
+  taskPriorities,
+  releases,
+  defaultTaskGroupId,
+  boardTasks,
   list,
   status,
+  tasksByListStatus,
   containerId,
   sortableIds,
 }: ListStatusBandProps) {
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(boardId, taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
-    board.taskPriorities,
+    boardId,
+    taskPriorities,
   );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
-  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
+  const activeReleaseIds = useResolvedActiveReleaseIds(boardId, releases);
+  const dateFilterResolved = useResolvedTaskDateFilter(boardId);
+  const taskCardViewMode = useResolvedTaskCardViewMode(boardId);
   const boardNav = useBoardKeyboardNavOptional();
   const completion = useBoardTaskCompletionCelebrationOptional();
 
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
   const taskMap = useMemo(() => {
     const m = new Map<number, Task>();
-    for (const t of board.tasks) m.set(t.id, t);
+    for (const t of boardTasks) m.set(t.id, t);
     return m;
-  }, [board.tasks]);
+  }, [boardTasks]);
 
   const taskFilter = useMemo<
     Pick<
@@ -89,14 +100,20 @@ export function ListStatusBand({
   );
 
   const tasks = useMemo(() => {
-    return listStatusTasksSorted(board, list.id, status, taskFilter);
-  }, [board, list.id, status, taskFilter]);
+    return listStatusTasksSortedFromIndex(
+      tasksByListStatus,
+      list.id,
+      status,
+      taskFilter,
+    );
+  }, [tasksByListStatus, list.id, status, taskFilter]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const addCardRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const getScrollElement = useCallback(() => scrollRef.current, []);
   const createPendingRef = useRef(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingTitleTaskId, setEditingTitleTaskId] = useState<number | null>(null);
@@ -109,21 +126,21 @@ export function ListStatusBand({
       : null;
 
   // Stable callback: takes task id, resolves from ref to avoid stale closures
-  const boardRef = useRef(board);
-  boardRef.current = board;
+  const surfaceRef = useRef({ boardId, boardTasks });
+  surfaceRef.current = { boardId, boardTasks };
   const statusesRef = useRef(statuses);
   statusesRef.current = statuses;
 
   const handleComplete = useCallback(
     (taskId: number, anchorEl?: HTMLElement) => {
-      const t = boardRef.current.tasks.find((x) => x.id === taskId);
+      const t = surfaceRef.current.boardTasks.find((x) => x.id === taskId);
       if (!t) return;
       const closedId =
         statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
       const now = new Date().toISOString();
       completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
-        boardId: boardRef.current.id,
+        boardId: surfaceRef.current.boardId,
         task: {
           ...t,
           status: closedId,
@@ -150,7 +167,9 @@ export function ListStatusBand({
 
   const startInlineTitleEdit = useCallback(
     (taskId: number) => {
-      const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+      const taskToEdit = surfaceRef.current.boardTasks.find(
+        (entry) => entry.id === taskId,
+      );
       if (!taskToEdit || taskToEdit.listId !== list.id) return false;
       // F2 should only swap the title text into edit mode and keep the rest of the task card in place.
       setEditingTask(null);
@@ -165,13 +184,15 @@ export function ListStatusBand({
   const commitInlineTitleEdit = useCallback(async () => {
     const taskId = editingTitleTaskId;
     if (taskId == null) return;
-    const taskToEdit = boardRef.current.tasks.find((entry) => entry.id === taskId);
+    const taskToEdit = surfaceRef.current.boardTasks.find(
+      (entry) => entry.id === taskId,
+    );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
     const nextTitle = editingTitleDraft.trim() || "Untitled";
     if (nextTitle === taskToEdit.title) return;
     await updateTask.mutateAsync({
-      boardId: boardRef.current.id,
+      boardId: surfaceRef.current.boardId,
       task: {
         ...taskToEdit,
         title: nextTitle,
@@ -184,14 +205,14 @@ export function ListStatusBand({
   // Enter on highlighted task: open editor in this list column if the task belongs here.
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
-      const t = board.tasks.find((x) => x.id === taskId);
+      const t = boardTasks.find((x) => x.id === taskId);
       if (!t || t.listId !== list.id) return false;
       cancelInlineTitleEdit();
       boardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [board.tasks, boardNav, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
+  }, [boardTasks, boardNav, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -254,12 +275,17 @@ export function ListStatusBand({
   const submitCard = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
+    const existingTaskIds = new Set(
+      surfaceRef.current.boardTasks.map((task) => task.id),
+    );
     // New tasks always start in the board default group, even when the filter narrows visible groups.
-    const defaultGroupId = effectiveDefaultTaskGroupId(board);
+    const defaultGroupId = effectiveDefaultTaskGroupId({
+      taskGroups,
+      defaultTaskGroupId,
+    });
     createTask.mutate(
       {
-        boardId: board.id,
+        boardId,
         listId: list.id,
         status,
         title: trimmed,
@@ -312,19 +338,24 @@ export function ListStatusBand({
         <div
           ref={scrollRef}
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2"
+          data-board-id={boardId}
+          data-list-id={list.id}
+          data-status={status}
+          aria-label={`${list.name} — ${status}`}
         >
           <div className="flex flex-col gap-2">
             {containerId != null && sortableIds != null ? (
               <SortableBandContent
                 taskMap={taskMap}
-                taskGroups={board.taskGroups}
-                taskPriorities={board.taskPriorities}
-                releases={board.releases}
+                taskGroups={taskGroups}
+                taskPriorities={taskPriorities}
+                releases={releases}
                 viewMode={taskCardViewMode}
                 listId={list.id}
                 status={status}
                 containerId={containerId}
                 sortableIds={sortableIds}
+                getScrollElement={getScrollElement}
                 onComplete={handleComplete}
                 onEdit={handleEdit}
                 editingTitleTaskId={editingTitleTaskId}
@@ -340,10 +371,10 @@ export function ListStatusBand({
                   <TaskCard
                     key={task.id}
                     task={task}
-                    taskPriorities={board.taskPriorities}
+                    taskPriorities={taskPriorities}
                     viewMode={taskCardViewMode}
-                    groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
-                    releasePill={taskReleasePill(board, task)}
+                    groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+                    releasePill={taskReleasePill({ releases }, task)}
                     onOpen={() => setEditingTask(task)}
                     editingTitle={editingTitleTaskId === task.id}
                     titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -433,7 +464,13 @@ export function ListStatusBand({
         )}
 
         <TaskEditor
-          board={board}
+          board={{
+            id: boardId,
+            taskGroups,
+            taskPriorities,
+            releases,
+            defaultTaskGroupId,
+          }}
           open={editingTask !== null || editingTaskId !== null}
           onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
           mode="edit"
@@ -443,55 +480,71 @@ export function ListStatusBand({
     );
   }
 
-  // Non-open bands: simple list, no add-task UI, scroll handled by parent.
+  // Non-open bands: same task rows without the open-band composer/FAB chrome.
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
-        {containerId != null && sortableIds != null ? (
-          <SortableBandContent
-            taskMap={taskMap}
-            taskGroups={board.taskGroups}
-            taskPriorities={board.taskPriorities}
-            releases={board.releases}
-            viewMode={taskCardViewMode}
-            listId={list.id}
-            status={status}
-            containerId={containerId}
-            sortableIds={sortableIds}
-            onComplete={handleComplete}
-            onEdit={handleEdit}
-            editingTitleTaskId={editingTitleTaskId}
-            editingTitleDraft={editingTitleDraft}
-            onTitleDraftChange={setEditingTitleDraft}
-            onTitleCommit={() => void commitInlineTitleEdit()}
-            onTitleCancel={cancelInlineTitleEdit}
-            titleEditBusy={updateTask.isPending}
-          />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                taskPriorities={board.taskPriorities}
-                viewMode={taskCardViewMode}
-                groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
-                releasePill={taskReleasePill(board, task)}
-                onOpen={() => setEditingTask(task)}
-                editingTitle={editingTitleTaskId === task.id}
-                titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
-                onTitleDraftChange={setEditingTitleDraft}
-                onTitleCommit={() => void commitInlineTitleEdit()}
-                onTitleCancel={cancelInlineTitleEdit}
-                titleEditBusy={updateTask.isPending}
-              />
-            ))}
-          </div>
-        )}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2"
+        data-board-id={boardId}
+        data-list-id={list.id}
+        data-status={status}
+        aria-label={`${list.name} — ${status}`}
+      >
+        <div className="flex flex-col gap-2">
+          {containerId != null && sortableIds != null ? (
+            <SortableBandContent
+              taskMap={taskMap}
+              taskGroups={taskGroups}
+              taskPriorities={taskPriorities}
+              releases={releases}
+              viewMode={taskCardViewMode}
+              listId={list.id}
+              status={status}
+              containerId={containerId}
+              sortableIds={sortableIds}
+              getScrollElement={getScrollElement}
+              onComplete={handleComplete}
+              onEdit={handleEdit}
+              editingTitleTaskId={editingTitleTaskId}
+              editingTitleDraft={editingTitleDraft}
+              onTitleDraftChange={setEditingTitleDraft}
+              onTitleCommit={() => void commitInlineTitleEdit()}
+              onTitleCancel={cancelInlineTitleEdit}
+              titleEditBusy={updateTask.isPending}
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  taskPriorities={taskPriorities}
+                  viewMode={taskCardViewMode}
+                  groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+                  releasePill={taskReleasePill({ releases }, task)}
+                  onOpen={() => setEditingTask(task)}
+                  editingTitle={editingTitleTaskId === task.id}
+                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  onTitleDraftChange={setEditingTitleDraft}
+                  onTitleCommit={() => void commitInlineTitleEdit()}
+                  onTitleCancel={cancelInlineTitleEdit}
+                  titleEditBusy={updateTask.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <TaskEditor
-        board={board}
+        board={{
+          id: boardId,
+          taskGroups,
+          taskPriorities,
+          releases,
+          defaultTaskGroupId,
+        }}
         open={editingTask !== null || editingTaskId !== null}
         onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
         mode="edit"
@@ -499,7 +552,7 @@ export function ListStatusBand({
       />
     </>
   );
-}
+});
 
 /** Per-row component that derives stable callbacks from task id, avoiding inline closures */
 const SortableTaskRowById = memo(function SortableTaskRowById({
@@ -577,6 +630,7 @@ const SortableBandContent = memo(function SortableBandContent({
   status,
   containerId,
   sortableIds,
+  getScrollElement,
   onComplete,
   onEdit,
   editingTitleTaskId,
@@ -595,6 +649,7 @@ const SortableBandContent = memo(function SortableBandContent({
   status: string;
   containerId: string;
   sortableIds: string[];
+  getScrollElement: () => HTMLElement | null;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
   editingTitleTaskId: number | null;
@@ -610,6 +665,33 @@ const SortableBandContent = memo(function SortableBandContent({
     listId,
     status,
   });
+  const boardNav = useBoardKeyboardNavOptional();
+  const sortableTaskIds = useMemo(
+    () =>
+      sortableIds
+        .map((sid) => parseTaskSortableId(sid))
+        .filter((taskId): taskId is number => taskId != null),
+    [sortableIds],
+  );
+  const {
+    shouldVirtualize,
+    virtualItems,
+    totalSize,
+    measureElement,
+    revealTask,
+  } = useVirtualizedBand({
+    count: sortableIds.length,
+    itemIds: sortableTaskIds,
+    getScrollElement,
+    viewMode,
+  });
+
+  useEffect(() => {
+    if (!boardNav || !shouldVirtualize || sortableTaskIds.length === 0) return;
+    // Keyboard navigation keeps task ids in logical order, so each band
+    // registers a task-id -> virtual-index revealer for offscreen highlights.
+    return boardNav.registerTaskRevealer(revealTask);
+  }, [boardNav, revealTask, shouldVirtualize, sortableTaskIds.length]);
 
   return (
     <div
@@ -619,32 +701,75 @@ const SortableBandContent = memo(function SortableBandContent({
         isDropTarget && "bg-primary/[0.07] ring-1 ring-primary/15",
       )}
     >
-      {sortableIds.map((sid, index) => {
-        const tid = parseTaskSortableId(sid);
-        const task = tid != null ? taskMap.get(tid) : undefined;
-        if (!task) return null;
-        return (
-          <SortableTaskRowById
-            key={sid}
-            sid={sid}
-            containerId={containerId}
-            index={index}
-            task={task}
-            taskGroups={taskGroups}
-            taskPriorities={taskPriorities}
-            releases={releases}
-            viewMode={viewMode}
-            onComplete={onComplete}
-            onEdit={onEdit}
-            editingTitle={editingTitleTaskId === task.id}
-            titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
-            onTitleDraftChange={onTitleDraftChange}
-            onTitleCommit={onTitleCommit}
-            onTitleCancel={onTitleCancel}
-            titleEditBusy={titleEditBusy}
-          />
-        );
-      })}
+      {shouldVirtualize ? (
+        <div
+          className="relative w-full"
+          style={{ height: `${Math.max(totalSize, 24)}px` }}
+        >
+          {virtualItems.map((virtualRow) => {
+            const sid = sortableIds[virtualRow.index];
+            if (!sid) return null;
+            const tid = parseTaskSortableId(sid);
+            const task = tid != null ? taskMap.get(tid) : undefined;
+            if (!task) return null;
+            return (
+              <div
+                key={sid}
+                data-index={virtualRow.index}
+                ref={measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <SortableTaskRowById
+                  sid={sid}
+                  containerId={containerId}
+                  index={virtualRow.index}
+                  task={task}
+                  taskGroups={taskGroups}
+                  taskPriorities={taskPriorities}
+                  releases={releases}
+                  viewMode={viewMode}
+                  onComplete={onComplete}
+                  onEdit={onEdit}
+                  editingTitle={editingTitleTaskId === task.id}
+                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  onTitleDraftChange={onTitleDraftChange}
+                  onTitleCommit={onTitleCommit}
+                  onTitleCancel={onTitleCancel}
+                  titleEditBusy={titleEditBusy}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        sortableIds.map((sid, index) => {
+          const tid = parseTaskSortableId(sid);
+          const task = tid != null ? taskMap.get(tid) : undefined;
+          if (!task) return null;
+          return (
+            <SortableTaskRowById
+              key={sid}
+              sid={sid}
+              containerId={containerId}
+              index={index}
+              task={task}
+              taskGroups={taskGroups}
+              taskPriorities={taskPriorities}
+              releases={releases}
+              viewMode={viewMode}
+              onComplete={onComplete}
+              onEdit={onEdit}
+              editingTitle={editingTitleTaskId === task.id}
+              titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+              onTitleDraftChange={onTitleDraftChange}
+              onTitleCommit={onTitleCommit}
+              onTitleCancel={onTitleCancel}
+              titleEditBusy={titleEditBusy}
+            />
+          );
+        })
+      )}
     </div>
   );
 });

@@ -24,6 +24,7 @@ import {
 } from "../../shared/models";
 import type { RestoreOutcome } from "../../shared/trashApi";
 import type { PatchBoardTaskGroupConfigInput } from "../../shared/taskGroupConfig";
+import { BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS } from "../../shared/boardPayload";
 import { parseEmojiField } from "../../shared/emojiField";
 import { slugify, uniqueSlug } from "../../shared/slug";
 import { getDb, resolveDataDir, withTransaction } from "../db";
@@ -199,7 +200,25 @@ export async function boardIndexEntryById(
   return row ? mapIndexRow(row) : null;
 }
 
-export function loadBoard(boardId: number): Board | null {
+export type LoadBoardOptions = {
+  /**
+   * When set, each task row uses `SUBSTR(t.body, 1, n)` so SQLite does not pull
+   * multi-megabyte bodies into the process (board list / card preview path).
+   */
+  taskBodyMaxChars?: number;
+};
+
+export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | null {
+  const maxBody = options?.taskBodyMaxChars;
+  const useSlimBody =
+    maxBody != null && Number.isFinite(maxBody) && maxBody >= 0;
+  const slimBodyLen = useSlimBody
+    ? Math.min(
+        BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
+        Math.floor(maxBody as number),
+      )
+    : 0;
+  const bodySql = useSlimBody ? "SUBSTR(t.body, 1, ?) AS body" : "t.body";
   const db = getDb();
   const boardRow = db
     .query(
@@ -333,14 +352,14 @@ export function loadBoard(boardId: number): Board | null {
 
   const taskRows = db
     .query(
-      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji,
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, ${bodySql}, t.sort_order, t.color, t.emoji,
               t.release_id, t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
        FROM task t
        INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
        WHERE t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
        ORDER BY t.list_id, t.status_id, t.sort_order, t.id`,
     )
-    .all(boardId) as {
+    .all(...(useSlimBody ? [slimBodyLen, boardId] : [boardId])) as {
     id: number;
     list_id: number;
     group_id: number;

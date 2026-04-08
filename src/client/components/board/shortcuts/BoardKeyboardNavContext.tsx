@@ -17,6 +17,7 @@ import {
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import {
+  buildTasksByListStatusIndex,
   visibleStatusesForBoard,
   type BoardTaskFilterState,
 } from "../boardStatusUtils";
@@ -30,6 +31,12 @@ import {
 } from "./boardTaskNavigation";
 
 const KEYBOARD_SCROLL_MARGIN_PX = 10;
+const KEYBOARD_RING_CLASSES = [
+  "ring-2",
+  "ring-offset-2",
+  "ring-offset-background",
+  "shadow-md",
+] as const;
 
 function canScrollAxis(
   el: HTMLElement,
@@ -44,7 +51,7 @@ function canScrollAxis(
     : el.scrollWidth > el.clientWidth + 1;
 }
 
-function scrollTaskIntoViewWithMargin(
+function scrollElementIntoViewWithMargin(
   el: HTMLElement | null,
   margin = KEYBOARD_SCROLL_MARGIN_PX,
 ): void {
@@ -91,12 +98,16 @@ interface BoardKeyboardNavContextValue {
   setHighlightedListId: (id: number | null) => void;
   /** Semantic helper for user/list interactions that should make a list current. */
   selectList: (listId: number | null) => void;
-  hoveredTaskId: number | null;
+  /**
+   * Pointer hover for “focus under mouse” (F / Tab flows). Stored in refs only so moving
+   * the mouse does not invalidate context and re-render the whole board (see board perf plan #1).
+   */
   setHoveredTaskId: (id: number | null) => void;
-  /** Pointer hover fallback for Tab when the mouse is over list chrome, not a task. */
-  hoveredListId: number | null;
+  /** Pointer hover over list chrome when not over a task (Tab column resolution). Ref-backed. */
   setHoveredListId: (id: number | null) => void;
   registerTaskElement: (taskId: number, el: HTMLElement | null) => void;
+  /** Virtualized bands use this to reveal offscreen tasks before keyboard scroll/focus runs. */
+  registerTaskRevealer: (reveal: (taskId: number) => boolean) => () => void;
   registerListElement: (listId: number, el: HTMLElement | null) => void;
   /** Open-band task composer per list; last open band wins if remounted. */
   registerAddTaskComposer: (listId: number, open: () => void) => () => void;
@@ -199,15 +210,187 @@ export function BoardKeyboardNavProvider({
     );
   }, [board.id, board.lists]);
 
-  const [highlightedTaskId, setTaskIdState] = useState<number | null>(null);
-  const [highlightedListId, setListIdState] = useState<number | null>(null);
-  const [hoveredTaskId, setHoveredTaskId] = useState<number | null>(null);
-  const [hoveredListId, setHoveredListId] = useState<number | null>(null);
+  // Hover in useState rebuilt context on every pointerenter/leave and re-rendered the whole board.
+  // Refs keep hover transient for F/Tab without invalidating BoardKeyboardNavContext (board perf plan #1).
+  const highlightedTaskIdRef = useRef<number | null>(null);
+  const highlightedListIdRef = useRef<number | null>(null);
+  const hoveredTaskIdRef = useRef<number | null>(null);
+  const hoveredListIdRef = useRef<number | null>(null);
+  const taskElementsRef = useRef<Map<number, HTMLElement>>(new Map());
+  const taskRevealersRef = useRef<Map<number, (taskId: number) => boolean>>(new Map());
+  const nextTaskRevealerIdRef = useRef(1);
+  const pendingRevealTaskIdRef = useRef<number | null>(null);
+  const listElementsRef = useRef<Map<number, HTMLElement>>(new Map());
+  const addTaskComposersRef = useRef<Map<number, () => void>>(new Map());
+  const listRenameOpenersRef = useRef<Map<number, () => void>>(new Map());
+  const lastMousePointRef = useRef<{ x: number; y: number } | null>(null);
 
-  const setHighlightedTaskId = useCallback((id: number | null) => {
-    setTaskIdState(id);
-    if (id != null) setListIdState(null);
+  const setHoveredTaskId = useCallback((id: number | null) => {
+    hoveredTaskIdRef.current = id;
   }, []);
+
+  const setHoveredListId = useCallback((id: number | null) => {
+    hoveredListIdRef.current = id;
+  }, []);
+
+  const tasksByListStatus = useMemo(
+    () => buildTasksByListStatusIndex(board.tasks),
+    [board.tasks],
+  );
+
+  const columnMap = useMemo(
+    () =>
+      buildListColumnTaskIds(
+        layout,
+        listColumnOrder,
+        taskFilter,
+        tasksByListStatus,
+      ),
+    [layout, listColumnOrder, taskFilter, tasksByListStatus],
+  );
+
+  const initialHighlightAppliedForBoardId = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Clear both highlights without going through wrappers so null task does not leave a stale list id.
+    highlightedTaskIdRef.current = null;
+    highlightedListIdRef.current = null;
+    hoveredTaskIdRef.current = null;
+    hoveredListIdRef.current = null;
+    pendingRevealTaskIdRef.current = null;
+    initialHighlightAppliedForBoardId.current = null;
+  }, [board.id]);
+
+  const setKeyboardRing = useCallback((el: HTMLElement | null, active: boolean) => {
+    if (!el) return;
+    if (active) {
+      el.classList.add(...KEYBOARD_RING_CLASSES);
+      el.style.setProperty("--tw-ring-color", "var(--board-selection-ring)");
+      return;
+    }
+    el.classList.remove(...KEYBOARD_RING_CLASSES);
+    el.style.removeProperty("--tw-ring-color");
+  }, []);
+
+  const resolveTaskHighlightTarget = useCallback((el: HTMLElement | null) => {
+    if (!el) return null;
+    if (el.matches("[data-task-card-root]")) return el;
+    return el.querySelector<HTMLElement>("[data-task-card-root]");
+  }, []);
+
+  const syncTaskHighlightVisual = useCallback(
+    (taskId: number, active: boolean) => {
+      const el = taskElementsRef.current.get(taskId) ?? null;
+      setKeyboardRing(resolveTaskHighlightTarget(el) ?? null, active);
+    },
+    [resolveTaskHighlightTarget, setKeyboardRing],
+  );
+
+  const syncListHighlightVisual = useCallback(
+    (listId: number, active: boolean) => {
+      setKeyboardRing(listElementsRef.current.get(listId) ?? null, active);
+    },
+    [setKeyboardRing],
+  );
+
+  useEffect(() => {
+    // Remember the latest mouse coordinates so Tab can still resolve a list
+    // by column position even when the pointer sits above or below the list shell.
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      lastMousePointRef.current = { x: event.clientX, y: event.clientY };
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+    };
+  }, []);
+
+  const registerTaskElement = useCallback(
+    (taskId: number, el: HTMLElement | null) => {
+      if (el) {
+        taskElementsRef.current.set(taskId, el);
+        if (highlightedTaskIdRef.current === taskId) {
+          syncTaskHighlightVisual(taskId, true);
+        }
+        if (pendingRevealTaskIdRef.current === taskId) {
+          pendingRevealTaskIdRef.current = null;
+          scrollElementIntoViewWithMargin(el);
+        }
+      } else {
+        taskElementsRef.current.delete(taskId);
+      }
+    },
+    [syncTaskHighlightVisual],
+  );
+
+  const registerTaskRevealer = useCallback((reveal: (taskId: number) => boolean) => {
+    const id = nextTaskRevealerIdRef.current++;
+    taskRevealersRef.current.set(id, reveal);
+    return () => {
+      taskRevealersRef.current.delete(id);
+    };
+  }, []);
+
+  const revealTaskElement = useCallback((taskId: number) => {
+    for (const reveal of taskRevealersRef.current.values()) {
+      if (!reveal(taskId)) continue;
+      pendingRevealTaskIdRef.current = taskId;
+      return true;
+    }
+    return false;
+  }, []);
+
+  const scrollTaskHighlightIntoView = useCallback(
+    (taskId: number | null) => {
+      if (taskId == null) {
+        pendingRevealTaskIdRef.current = null;
+        return;
+      }
+      const el = taskElementsRef.current.get(taskId);
+      if (el) {
+        pendingRevealTaskIdRef.current = null;
+        scrollElementIntoViewWithMargin(el);
+        return;
+      }
+      // Keyboard navigation keeps the logical task highlight even when the row is
+      // not mounted; ask the owning virtualizer to bring it into view first.
+      revealTaskElement(taskId);
+    },
+    [revealTaskElement],
+  );
+
+  const scrollListHighlightIntoView = useCallback((listId: number | null) => {
+    if (listId == null) return;
+    scrollElementIntoViewWithMargin(listElementsRef.current.get(listId) ?? null);
+  }, []);
+
+  const setHighlightedTaskId = useCallback(
+    (id: number | null) => {
+      const prevTaskId = highlightedTaskIdRef.current;
+      const prevListId = highlightedListIdRef.current;
+      if (prevTaskId === id && prevListId == null) {
+        scrollTaskHighlightIntoView(id);
+        return;
+      }
+      if (prevTaskId != null && prevTaskId !== id) {
+        syncTaskHighlightVisual(prevTaskId, false);
+      }
+      if (prevListId != null) {
+        syncListHighlightVisual(prevListId, false);
+      }
+      highlightedTaskIdRef.current = id;
+      highlightedListIdRef.current = null;
+      if (id == null) {
+        pendingRevealTaskIdRef.current = null;
+        return;
+      }
+      syncTaskHighlightVisual(id, true);
+      scrollTaskHighlightIntoView(id);
+    },
+    [scrollTaskHighlightIntoView, syncListHighlightVisual, syncTaskHighlightVisual],
+  );
 
   const selectTask = useCallback((taskId: number | null) => {
     // Pointer/edit/create flows should reuse the same highlight state that keyboard
@@ -215,10 +398,29 @@ export function BoardKeyboardNavProvider({
     setHighlightedTaskId(taskId);
   }, [setHighlightedTaskId]);
 
-  const setHighlightedListId = useCallback((id: number | null) => {
-    setListIdState(id);
-    if (id != null) setTaskIdState(null);
-  }, []);
+  const setHighlightedListId = useCallback(
+    (id: number | null) => {
+      const prevTaskId = highlightedTaskIdRef.current;
+      const prevListId = highlightedListIdRef.current;
+      if (prevListId === id && prevTaskId == null) {
+        scrollListHighlightIntoView(id);
+        return;
+      }
+      if (prevTaskId != null) {
+        syncTaskHighlightVisual(prevTaskId, false);
+      }
+      if (prevListId != null && prevListId !== id) {
+        syncListHighlightVisual(prevListId, false);
+      }
+      highlightedTaskIdRef.current = null;
+      highlightedListIdRef.current = id;
+      pendingRevealTaskIdRef.current = null;
+      if (id == null) return;
+      syncListHighlightVisual(id, true);
+      scrollListHighlightIntoView(id);
+    },
+    [scrollListHighlightIntoView, syncListHighlightVisual, syncTaskHighlightVisual],
+  );
 
   const selectList = useCallback((listId: number | null) => {
     // Keep list interactions on the shared highlight state so canceling an edit
@@ -226,40 +428,16 @@ export function BoardKeyboardNavProvider({
     setHighlightedListId(listId);
   }, [setHighlightedListId]);
 
-  const columnMap = useMemo(
-    () =>
-      buildListColumnTaskIds(
-        board,
-        layout,
-        listColumnOrder,
-        taskFilter,
-      ),
-    [
-      board,
-      layout,
-      listColumnOrder,
-      taskFilter,
-    ],
-  );
-
-  const initialHighlightAppliedForBoardId = useRef<number | null>(null);
-
-  useEffect(() => {
-    // Clear both highlights without going through wrappers so null task does not leave a stale list id.
-    setTaskIdState(null);
-    setListIdState(null);
-    setHoveredTaskId(null);
-    setHoveredListId(null);
-    initialHighlightAppliedForBoardId.current = null;
-  }, [board.id]);
-
   useEffect(() => {
     // On board load, select the first task in the leftmost list, or that list’s header if it has no visible tasks.
     // Ref avoids re-applying when filters/group/priority change columnMap for the same board.
     if (initialHighlightAppliedForBoardId.current === board.id) return;
     // Notification deep links apply in a child `useLayoutEffect` before this passive effect; honor that selection
     // so we do not overwrite it when listColumnOrder syncs late or the hash is cleared before this runs.
-    if (highlightedTaskId != null || highlightedListId != null) {
+    if (
+      highlightedTaskIdRef.current != null ||
+      highlightedListIdRef.current != null
+    ) {
       initialHighlightAppliedForBoardId.current = board.id;
       return;
     }
@@ -294,8 +472,6 @@ export function BoardKeyboardNavProvider({
     board.id,
     board.lists,
     columnMap,
-    highlightedListId,
-    highlightedTaskId,
     listColumnOrder,
     setHighlightedListId,
     setHighlightedTaskId,
@@ -303,66 +479,40 @@ export function BoardKeyboardNavProvider({
 
   // Selection stays keyboard-driven; pointer hover only sets a transient target for F.
   useEffect(() => {
-    setTaskIdState((prev) => {
-      if (prev == null) return null;
-      const all = [...columnMap.values()].flat();
-      return all.includes(prev) ? prev : null;
-    });
-    setHoveredTaskId((prev) => {
-      if (prev == null) return null;
-      const all = [...columnMap.values()].flat();
-      return all.includes(prev) ? prev : null;
-    });
-  }, [listColumnOrder, columnMap]);
+    const all = [...columnMap.values()].flat();
+    const highlightedTaskId = highlightedTaskIdRef.current;
+    if (highlightedTaskId != null && !all.includes(highlightedTaskId)) {
+      setHighlightedTaskId(null);
+    }
+    const ht = hoveredTaskIdRef.current;
+    if (ht != null && !all.includes(ht)) {
+      hoveredTaskIdRef.current = null;
+    }
+  }, [columnMap, setHighlightedTaskId]);
 
   useEffect(() => {
-    setListIdState((prev) => {
-      if (prev == null) return null;
-      return listColumnOrder.includes(prev) ? prev : null;
-    });
-  }, [listColumnOrder]);
-
-  useEffect(() => {
-    setHoveredListId((prev) => {
-      if (prev == null) return null;
-      return listColumnOrder.includes(prev) ? prev : null;
-    });
-  }, [listColumnOrder]);
-
-  const taskElementsRef = useRef<Map<number, HTMLElement>>(new Map());
-  const listElementsRef = useRef<Map<number, HTMLElement>>(new Map());
-  const addTaskComposersRef = useRef<Map<number, () => void>>(new Map());
-  const listRenameOpenersRef = useRef<Map<number, () => void>>(new Map());
-  const lastMousePointRef = useRef<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    // Remember the latest mouse coordinates so Tab can still resolve a list
-    // by column position even when the pointer sits above or below the list shell.
-    const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      lastMousePointRef.current = { x: event.clientX, y: event.clientY };
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-    };
-  }, []);
-
-  const registerTaskElement = useCallback(
-    (taskId: number, el: HTMLElement | null) => {
-      if (el) taskElementsRef.current.set(taskId, el);
-      else taskElementsRef.current.delete(taskId);
-    },
-    [],
-  );
+    const highlightedListId = highlightedListIdRef.current;
+    if (highlightedListId != null && !listColumnOrder.includes(highlightedListId)) {
+      setHighlightedListId(null);
+    }
+    const hl = hoveredListIdRef.current;
+    if (hl != null && !listColumnOrder.includes(hl)) {
+      hoveredListIdRef.current = null;
+    }
+  }, [listColumnOrder, setHighlightedListId]);
 
   const registerListElement = useCallback(
     (listId: number, el: HTMLElement | null) => {
-      if (el) listElementsRef.current.set(listId, el);
-      else listElementsRef.current.delete(listId);
+      if (el) {
+        listElementsRef.current.set(listId, el);
+        if (highlightedListIdRef.current === listId) {
+          syncListHighlightVisual(listId, true);
+        }
+      } else {
+        listElementsRef.current.delete(listId);
+      }
     },
-    [],
+    [syncListHighlightVisual],
   );
 
   const registerAddTaskComposer = useCallback(
@@ -414,18 +564,6 @@ export function BoardKeyboardNavProvider({
     [],
   );
 
-  useEffect(() => {
-    if (highlightedTaskId == null) return;
-    const el = taskElementsRef.current.get(highlightedTaskId);
-    scrollTaskIntoViewWithMargin(el ?? null);
-  }, [highlightedTaskId]);
-
-  useEffect(() => {
-    if (highlightedListId == null) return;
-    const el = listElementsRef.current.get(highlightedListId);
-    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [highlightedListId]);
-
   const resolvePointerListId = useCallback(() => {
     const point = lastMousePointRef.current;
     if (!point) return null;
@@ -442,12 +580,12 @@ export function BoardKeyboardNavProvider({
 
   const focusOrScrollHighlight = useCallback(() => {
     const all = [...columnMap.values()].flat();
+    const hoveredTaskId = hoveredTaskIdRef.current;
     if (hoveredTaskId != null && all.includes(hoveredTaskId)) {
       setHighlightedTaskId(hoveredTaskId);
-      const hoveredEl = taskElementsRef.current.get(hoveredTaskId);
-      scrollTaskIntoViewWithMargin(hoveredEl ?? null);
       return;
     }
+    const hoveredListId = hoveredListIdRef.current;
     const pointerListId =
       hoveredListId != null && listColumnOrder.includes(hoveredListId)
         ? hoveredListId
@@ -456,36 +594,33 @@ export function BoardKeyboardNavProvider({
       // Match the user's current mouse column when they are over list chrome or
       // whitespace, instead of skipping straight to the first task on the board.
       setHighlightedListId(pointerListId);
-      const pointerListEl = listElementsRef.current.get(pointerListId);
-      pointerListEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
       return;
     }
+    const highlightedListId = highlightedListIdRef.current;
     if (highlightedListId != null) {
-      const el = listElementsRef.current.get(highlightedListId);
-      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      scrollListHighlightIntoView(highlightedListId);
       return;
     }
+    const highlightedTaskId = highlightedTaskIdRef.current;
     if (highlightedTaskId == null) {
       const first = findFirstTaskId(listColumnOrder, columnMap);
       if (first != null) setHighlightedTaskId(first);
       return;
     }
-    const el = taskElementsRef.current.get(highlightedTaskId);
-    scrollTaskIntoViewWithMargin(el ?? null);
+    scrollTaskHighlightIntoView(highlightedTaskId);
   }, [
-    hoveredTaskId,
-    hoveredListId,
-    highlightedTaskId,
-    highlightedListId,
     listColumnOrder,
     columnMap,
     resolvePointerListId,
+    scrollListHighlightIntoView,
+    scrollTaskHighlightIntoView,
     setHighlightedListId,
     setHighlightedTaskId,
   ]);
 
   const moveHighlight = useCallback(
     (dir: "up" | "down" | "left" | "right") => {
+      const highlightedListId = highlightedListIdRef.current;
       if (highlightedListId != null) {
         const li = listColumnOrder.indexOf(highlightedListId);
         if (li < 0) return;
@@ -508,7 +643,7 @@ export function BoardKeyboardNavProvider({
         return;
       }
 
-      const taskId = highlightedTaskId;
+      const taskId = highlightedTaskIdRef.current;
       if (taskId == null) return;
 
       const listId = findListIdForTask(columnMap, taskId);
@@ -572,8 +707,6 @@ export function BoardKeyboardNavProvider({
       }
     },
     [
-      highlightedListId,
-      highlightedTaskId,
       listColumnOrder,
       columnMap,
       setHighlightedListId,
@@ -582,26 +715,29 @@ export function BoardKeyboardNavProvider({
   );
 
   const highlightHome = useCallback(() => {
-    if (highlightedListId != null) return;
+    if (highlightedListIdRef.current != null) return;
+    const highlightedTaskId = highlightedTaskIdRef.current;
     if (highlightedTaskId == null) return;
     const lid = findListIdForTask(columnMap, highlightedTaskId);
     if (lid == null) return;
     const col = columnMap.get(lid) ?? [];
     if (col.length > 0) setHighlightedTaskId(col[0]!);
-  }, [highlightedListId, highlightedTaskId, columnMap, setHighlightedTaskId]);
+  }, [columnMap, setHighlightedTaskId]);
 
   const highlightEnd = useCallback(() => {
-    if (highlightedListId != null) return;
+    if (highlightedListIdRef.current != null) return;
+    const highlightedTaskId = highlightedTaskIdRef.current;
     if (highlightedTaskId == null) return;
     const lid = findListIdForTask(columnMap, highlightedTaskId);
     if (lid == null) return;
     const col = columnMap.get(lid) ?? [];
     if (col.length > 0) setHighlightedTaskId(col[col.length - 1]!);
-  }, [highlightedListId, highlightedTaskId, columnMap, setHighlightedTaskId]);
+  }, [columnMap, setHighlightedTaskId]);
 
   const highlightPage = useCallback(
     (direction: -1 | 1) => {
-      if (highlightedListId != null) return;
+      if (highlightedListIdRef.current != null) return;
+      const highlightedTaskId = highlightedTaskIdRef.current;
       if (highlightedTaskId == null) return;
       const lid = findListIdForTask(columnMap, highlightedTaskId);
       if (lid == null) return;
@@ -614,7 +750,7 @@ export function BoardKeyboardNavProvider({
       );
       setHighlightedTaskId(colIds[next]!);
     },
-    [highlightedListId, highlightedTaskId, columnMap, setHighlightedTaskId],
+    [columnMap, setHighlightedTaskId],
   );
 
   const applyNotificationTarget = useCallback(
@@ -642,17 +778,20 @@ export function BoardKeyboardNavProvider({
 
   const value = useMemo(
     (): BoardKeyboardNavContextValue => ({
-      highlightedTaskId,
+      get highlightedTaskId() {
+        return highlightedTaskIdRef.current;
+      },
       setHighlightedTaskId,
       selectTask,
-      highlightedListId,
+      get highlightedListId() {
+        return highlightedListIdRef.current;
+      },
       setHighlightedListId,
       selectList,
-      hoveredTaskId,
       setHoveredTaskId,
-      hoveredListId,
       setHoveredListId,
       registerTaskElement,
+      registerTaskRevealer,
       registerListElement,
       registerAddTaskComposer,
       openAddTaskForList,
@@ -669,15 +808,14 @@ export function BoardKeyboardNavProvider({
       applyNotificationTarget,
     }),
     [
-      highlightedTaskId,
       setHighlightedTaskId,
       selectTask,
-      highlightedListId,
       setHighlightedListId,
       selectList,
-      hoveredTaskId,
-      hoveredListId,
+      setHoveredTaskId,
+      setHoveredListId,
       registerTaskElement,
+      registerTaskRevealer,
       registerListElement,
       registerAddTaskComposer,
       openAddTaskForList,

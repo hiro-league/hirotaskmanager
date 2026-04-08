@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -15,6 +16,9 @@ import {
  * virtualizers, keyboard-nav registrations) until they scroll into view.
  *
  * Board perf plan #4 addendum — horizontal column gating.
+ * Board perf plan #9B + initial gate: default `inViewport` is false and we promote
+ * synchronously in `useLayoutEffect` when already near the scroll root so the
+ * first paint does not mount all `ListStackedBody` trees (avoids eager mount).
  */
 
 // ── Tuning knobs ──────────────────────────────────────────────────────
@@ -35,6 +39,25 @@ const HIDE_DEBOUNCE_MS = 150;
 const SAFETY_CHECK_MS = 400;
 // ──────────────────────────────────────────────────────────────────────
 
+function columnNearHorizontalViewport(
+  el: HTMLElement,
+  root: HTMLElement | null,
+  marginPx: number,
+): boolean {
+  const elRect = el.getBoundingClientRect();
+  if (root) {
+    const rootRect = root.getBoundingClientRect();
+    return (
+      elRect.right >= rootRect.left - marginPx &&
+      elRect.left <= rootRect.right + marginPx
+    );
+  }
+  return (
+    elRect.right >= -marginPx &&
+    elRect.left <= window.innerWidth + marginPx
+  );
+}
+
 // ── Context: board scroll root for IO ─────────────────────────────────
 // The IO root must be the element that clips columns horizontally
 // (the BoardView scroll container with overflow-x-auto), NOT the
@@ -49,9 +72,25 @@ export function useColumnInViewport(
 ): { columnRef: React.RefObject<HTMLDivElement | null>; inViewport: boolean } {
   const scrollRootRef = useContext(BoardScrollRootContext);
   const columnRef = useRef<HTMLDivElement | null>(null);
-  const [inViewport, setInViewport] = useState(true);
+  // Start false so the first commit does not mount ListStackedBody everywhere;
+  // useLayoutEffect + IntersectionObserver promote when near the scrollport.
+  const [inViewport, setInViewport] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Synchronous visibility before paint so on-screen columns skip a header-only flash.
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setInViewport(true);
+      return;
+    }
+    const el = columnRef.current;
+    if (!el) return;
+    const root = scrollRootRef?.current ?? null;
+    if (columnNearHorizontalViewport(el, root, COLUMN_GATE_MARGIN_PX)) {
+      setInViewport(true);
+    }
+  }, [enabled, scrollRootRef]);
 
   useEffect(() => {
     if (!enabled) {
@@ -64,20 +103,8 @@ export function useColumnInViewport(
 
     const root = scrollRootRef?.current ?? null;
 
-    const isElementVisible = () => {
-      const elRect = el.getBoundingClientRect();
-      if (root) {
-        const rootRect = root.getBoundingClientRect();
-        return (
-          elRect.right >= rootRect.left - COLUMN_GATE_MARGIN_PX &&
-          elRect.left <= rootRect.right + COLUMN_GATE_MARGIN_PX
-        );
-      }
-      return (
-        elRect.right >= -COLUMN_GATE_MARGIN_PX &&
-        elRect.left <= window.innerWidth + COLUMN_GATE_MARGIN_PX
-      );
-    };
+    const isElementVisible = () =>
+      columnNearHorizontalViewport(el, root, COLUMN_GATE_MARGIN_PX);
 
     const clearTimers = () => {
       if (hideTimerRef.current != null) {

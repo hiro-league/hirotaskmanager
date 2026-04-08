@@ -26,6 +26,7 @@ export interface BoardTaskFilterState {
   workflowOrder: readonly string[];
   activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: import("../../../shared/boardFilters").ActiveTaskPriorityIds;
+  activeReleaseIds: import("../../../shared/boardFilters").ActiveReleaseIds;
   dateFilter: TaskDateFilterResolved | null;
 }
 
@@ -81,12 +82,16 @@ export function taskMatchesBoardFilter(
   task: Task,
   filter: Pick<
     BoardTaskFilterState,
-    "activeGroupIds" | "activePriorityIds" | "dateFilter"
+    | "activeGroupIds"
+    | "activePriorityIds"
+    | "activeReleaseIds"
+    | "dateFilter"
   >,
 ): boolean {
   return taskMatchesBoardFilterShared(task, {
     activeGroupIds: filter.activeGroupIds,
     activePriorityIds: filter.activePriorityIds,
+    activeReleaseIds: filter.activeReleaseIds,
     dateFilter: filter.dateFilter,
   });
 }
@@ -97,7 +102,10 @@ export function listStatusTasksSorted(
   status: string,
   filter: Pick<
     BoardTaskFilterState,
-    "activeGroupIds" | "activePriorityIds" | "dateFilter"
+    | "activeGroupIds"
+    | "activePriorityIds"
+    | "activeReleaseIds"
+    | "dateFilter"
   >,
 ): Task[] {
   return board.tasks

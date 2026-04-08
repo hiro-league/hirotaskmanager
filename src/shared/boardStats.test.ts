@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EMPTY_BOARD_CLI_POLICY } from "./cliPolicy";
 import type { Board, List, Status, Task } from "./models";
+import { RELEASE_FILTER_UNTAGGED } from "./boardFilters";
 import {
   boardStatsFilterSignature,
   buildBoardStatsSearchParams,
@@ -70,6 +71,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -90,6 +92,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -113,6 +116,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -135,6 +139,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: {
         mode: "opened",
         startDate: "2025-06-01",
@@ -160,6 +165,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: {
         mode: "opened",
         startDate: "2025-06-01",
@@ -178,6 +184,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: [],
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -201,6 +208,7 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: ["0", "2"],
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -215,10 +223,39 @@ describe("computeBoardStats", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: [],
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
     expect(r.board.total).toBe(0);
+  });
+
+  test("release filter OR with untagged", () => {
+    const board = minimalBoard({
+      releases: [
+        {
+          id: 5,
+          name: "v1",
+          color: "#ff0000",
+          releaseDate: null,
+          createdAt: iso("2025-01-01T00:00:00Z"),
+        },
+      ],
+      tasks: [
+        task({ id: 1, listId: 1, status: "open", releaseId: 5 }),
+        task({ id: 2, listId: 1, status: "open", releaseId: null }),
+        task({ id: 3, listId: 1, status: "open", releaseId: 5 }),
+      ],
+    });
+    const closed = closedStatusIdsFromStatuses(workflowThree);
+    const filter: BoardStatsFilter = {
+      activeGroupIds: null,
+      activePriorityIds: null,
+      activeReleaseIds: [RELEASE_FILTER_UNTAGGED, "5"],
+      dateFilter: null,
+    };
+    const r = computeBoardStats(board, closed, filter);
+    expect(r.board.total).toBe(3);
   });
 });
 
@@ -227,6 +264,7 @@ describe("buildBoardStatsSearchParams / boardStatsFilterSignature", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: null,
       activePriorityIds: ["10", "20"],
+      activeReleaseIds: null,
       dateFilter: {
         mode: "opened",
         startDate: "2025-06-01",
@@ -237,6 +275,7 @@ describe("buildBoardStatsSearchParams / boardStatsFilterSignature", () => {
     const parsed = parseBoardStatsFilter(sp);
     expect(parsed.activeGroupIds).toBeNull();
     expect(parsed.activePriorityIds).toEqual(filter.activePriorityIds);
+    expect(parsed.activeReleaseIds).toBeNull();
     expect(parsed.dateFilter).toEqual(filter.dateFilter);
     expect(boardStatsFilterSignature(filter).length).toBeGreaterThan(0);
   });
@@ -245,6 +284,7 @@ describe("buildBoardStatsSearchParams / boardStatsFilterSignature", () => {
     const filter: BoardStatsFilter = {
       activeGroupIds: ["2", "0", "1"],
       activePriorityIds: null,
+      activeReleaseIds: null,
       dateFilter: null,
     };
     const sp = buildBoardStatsSearchParams(filter);

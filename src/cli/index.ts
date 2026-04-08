@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Command } from "commander";
+import { RELEASE_FILTER_UNTAGGED } from "../shared/boardFilters";
 import type {
   Board,
   BoardIndexEntry,
@@ -32,6 +33,11 @@ import {
   runListsDelete,
   runListsMove,
   runListsUpdate,
+  runReleasesAdd,
+  runReleasesDelete,
+  runReleasesList,
+  runReleasesShow,
+  runReleasesUpdate,
   runTasksAdd,
   runTasksDelete,
   runTasksMove,
@@ -227,6 +233,16 @@ addPortOption(
       collectMultiValue,
       [] as string[],
     )
+    .option(
+      "--release-id <id>",
+      "Release id filter (repeat or comma-separated; OR with other release filters)",
+      collectMultiValue,
+      [] as string[],
+    )
+    .option(
+      "--untagged",
+      "Include tasks with no release (OR with --release-id when both are used)",
+    )
     .option("--date-mode <mode>", "Date filter mode: opened, closed, or any")
     .option("--from <yyyy-mm-dd>", "Inclusive start date")
     .option("--to <yyyy-mm-dd>", "Inclusive end date"),
@@ -239,6 +255,8 @@ addPortOption(
       group?: string[];
       priority?: string[];
       status?: string[];
+      releaseId?: string[];
+      untagged?: boolean;
       dateMode?: string;
       from?: string;
       to?: string;
@@ -256,6 +274,12 @@ addPortOption(
       }
       for (const status of options.status ?? []) {
         params.append("status", status);
+      }
+      for (const rid of options.releaseId ?? []) {
+        params.append("releaseId", rid);
+      }
+      if (options.untagged) {
+        params.append("releaseId", RELEASE_FILTER_UNTAGGED);
       }
       if (options.dateMode?.trim()) params.set("dateMode", options.dateMode.trim());
       if (options.from?.trim()) params.set("from", options.from.trim());
@@ -463,6 +487,153 @@ addPortOption(
   },
 );
 
+const releasesCommand = program
+  .command("releases")
+  .description("List and manage board releases (writes require manageStructure on the board)");
+
+addPortOption(
+  releasesCommand
+    .command("list")
+    .description("List releases for a board")
+    .requiredOption("--board <id-or-slug>", "Board id or slug"),
+).action(async (options: { port?: string; board: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runReleasesList({ port, board: options.board });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  releasesCommand
+    .command("show")
+    .description("Show one release by id")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<release-id>", "Numeric release id"),
+).action(async (releaseId: string, options: { port?: string; board: string }) => {
+  try {
+    const port = resolvePort({ port: parsePortOption(options.port) });
+    await runReleasesShow({
+      port,
+      board: options.board,
+      releaseId,
+    });
+  } catch (error) {
+    exitWithError(error);
+  }
+});
+
+addPortOption(
+  releasesCommand
+    .command("add")
+    .description("Create a release on a board")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .requiredOption("--name <text>", "Release name (unique per board)")
+    .option("--color <css>", "Optional release color (CSS)")
+    .option("--clear-color", "Store release with no color")
+    .option("--release-date <text>", "Optional date label (e.g. YYYY-MM-DD)")
+    .option("--clear-release-date", "Clear release date"),
+).action(
+  async (options: {
+    port?: string;
+    board: string;
+    name: string;
+    color?: string;
+    clearColor?: boolean;
+    releaseDate?: string;
+    clearReleaseDate?: boolean;
+  }) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runReleasesAdd({
+        port,
+        board: options.board,
+        name: options.name,
+        color: options.color,
+        clearColor: options.clearColor,
+        releaseDate: options.releaseDate,
+        clearReleaseDate: options.clearReleaseDate,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  releasesCommand
+    .command("update")
+    .description("Patch a release")
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<release-id>", "Numeric release id")
+    .option("--name <text>", "New name")
+    .option("--color <css>", "Release color (CSS)")
+    .option("--clear-color", "Clear color")
+    .option("--release-date <text>", "Release date")
+    .option("--clear-release-date", "Clear release date"),
+).action(
+  async (
+    releaseId: string,
+    options: {
+      port?: string;
+      board: string;
+      name?: string;
+      color?: string;
+      clearColor?: boolean;
+      releaseDate?: string;
+      clearReleaseDate?: boolean;
+    },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runReleasesUpdate({
+        port,
+        board: options.board,
+        releaseId,
+        name: options.name,
+        color: options.color,
+        clearColor: options.clearColor,
+        releaseDate: options.releaseDate,
+        clearReleaseDate: options.clearReleaseDate,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
+addPortOption(
+  releasesCommand
+    .command("delete")
+    .description(
+      "Delete a release (tasks become untagged unless --move-tasks-to targets another release)",
+    )
+    .requiredOption("--board <id-or-slug>", "Board id or slug")
+    .argument("<release-id>", "Numeric release id")
+    .option(
+      "--move-tasks-to <id>",
+      "Move tasks on this release to another release before delete",
+    ),
+).action(
+  async (
+    releaseId: string,
+    options: { port?: string; board: string; moveTasksTo?: string },
+  ) => {
+    try {
+      const port = resolvePort({ port: parsePortOption(options.port) });
+      await runReleasesDelete({
+        port,
+        board: options.board,
+        releaseId,
+        moveTasksTo: options.moveTasksTo,
+      });
+    } catch (error) {
+      exitWithError(error);
+    }
+  },
+);
+
 const listsCommand = program
   .command("lists")
   .description("Create and manage lists on boards");
@@ -643,6 +814,11 @@ addPortOption(
       "--priority <id>",
       "Task priority row id (omit to use builtin none for this board)",
     )
+    .option(
+      "--release <name-or-none>",
+      "Release by exact board name, or none for untagged (omit with --release-id for server auto-assign)",
+    )
+    .option("--release-id <id>", "Numeric release id (mutually exclusive with --release)")
     .option("--emoji <text>", "Optional emoji before the title")
     .option("--clear-emoji", "Clear task emoji")
     .option("--body <text>", "Task body (Markdown)")
@@ -657,6 +833,8 @@ addPortOption(
     title?: string;
     status?: string;
     priority?: string;
+    release?: string;
+    releaseId?: string;
     emoji?: string;
     clearEmoji?: boolean;
     body?: string;
@@ -673,6 +851,8 @@ addPortOption(
         title: options.title,
         status: options.status,
         priority: options.priority,
+        release: options.release,
+        releaseId: options.releaseId,
         emoji: options.emoji,
         clearEmoji: options.clearEmoji,
         body: options.body,
@@ -702,6 +882,11 @@ addPortOption(
       "--priority <id>",
       "Task priority row id (use builtin none id to reset to default)",
     )
+    .option(
+      "--release <name-or-none>",
+      "Set release by exact board name, or none to clear",
+    )
+    .option("--release-id <id>", "Set release by numeric id (mutually exclusive with --release)")
     .option("--color <css>", "Card color (CSS)")
     .option("--clear-color", "Clear card color")
     .option("--emoji <text>", "Emoji before the title")
@@ -720,6 +905,8 @@ addPortOption(
       list?: string;
       group?: string;
       priority?: string;
+      release?: string;
+      releaseId?: string;
       color?: string;
       clearColor?: boolean;
       emoji?: string;
@@ -740,6 +927,8 @@ addPortOption(
         list: options.list,
         group: options.group,
         priority: options.priority,
+        release: options.release,
+        releaseId: options.releaseId,
         color: options.color,
         clearColor: options.clearColor,
         emoji: options.emoji,

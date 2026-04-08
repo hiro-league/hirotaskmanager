@@ -1,9 +1,16 @@
-import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
+import {
+  memo,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Bot, Check } from "lucide-react";
 import {
   NONE_TASK_PRIORITY_VALUE,
   priorityDisplayLabel,
   taskDisplayTitle,
+  type Board,
   type Task,
   type TaskPriorityDefinition,
   type TaskStatus,
@@ -111,6 +118,8 @@ interface TaskCardProps {
   viewMode: TaskCardViewMode;
   /** Display label for `task.groupId` (resolved from board definitions). */
   groupLabel: string;
+  /** Optional release chip (same styling as priority when color is set). */
+  releasePill?: { label: string; color?: string | null } | null;
   onOpen: () => void;
   /** When true, render an inline title-only editor instead of the normal task title. */
   editingTitle?: boolean;
@@ -163,12 +172,40 @@ function isVeryLightPriorityBackground(color: string): boolean {
   return c === "#ffffff" || c === "#fff" || c === "white";
 }
 
+/** Resolved release label/color for a task, or null when untagged / unknown id. */
+export function taskReleasePill(
+  board: Pick<Board, "releases">,
+  task: Pick<Task, "releaseId">,
+): { label: string; color?: string | null } | null {
+  const rid = task.releaseId;
+  if (rid == null) return null;
+  const r = board.releases.find((x) => x.id === rid);
+  if (!r) return null;
+  return { label: r.name, color: r.color };
+}
+
+/** Bold “r” + space before release name in chips (priority pills stay unchanged). */
+function ReleaseChipPrefix(): ReactNode {
+  return (
+    <>
+      <span className="font-bold">r&nbsp;&nbsp;</span>
+    </>
+  );
+}
+
+function releaseChipTitle(label: string): string {
+  return `r ${label.trim()}`;
+}
+
 function PriorityPill({
   label,
   color,
+  prefixNode,
 }: {
   label: string;
   color: string;
+  /** Rendered before the display label (not passed through `priorityDisplayLabel`). */
+  prefixNode?: ReactNode;
 }) {
   const displayLabel = priorityDisplayLabel(label);
   if (!displayLabel) return null;
@@ -181,11 +218,12 @@ function PriorityPill({
           ? "border border-border/70 text-foreground"
           : "text-black/85",
       )}
-      title={label}
+      title={prefixNode != null ? releaseChipTitle(label) : label}
       style={{
         backgroundColor: color,
       }}
     >
+      {prefixNode}
       {displayLabel}
     </span>
   );
@@ -200,6 +238,7 @@ function TaskCardContent({
   taskPriorities,
   viewMode,
   groupLabel,
+  releasePill,
   preview,
   onOpen,
   editingTitle = false,
@@ -213,6 +252,7 @@ function TaskCardContent({
   taskPriorities: TaskPriorityDefinition[];
   viewMode: TaskCardViewMode;
   groupLabel: string;
+  releasePill?: { label: string; color?: string | null } | null;
   preview: string;
   onOpen: () => void;
   editingTitle?: boolean;
@@ -227,6 +267,8 @@ function TaskCardContent({
   // Default builtin `none` is not surfaced as a chip (same UX as “no priority”).
   const showPriorityPill =
     priorityRow != null && priorityRow.value !== NONE_TASK_PRIORITY_VALUE;
+  const showReleasePill =
+    releasePill != null && releasePill.label.trim().length > 0;
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const titleBlurModeRef = useRef<"commit" | "cancel">("commit");
 
@@ -322,6 +364,21 @@ function TaskCardContent({
           {showPriorityPill && priorityRow ? (
             <PriorityPill label={priorityRow.label} color={priorityRow.color} />
           ) : null}
+          {showReleasePill && releasePill?.color ? (
+            <PriorityPill
+              label={releasePill.label}
+              color={releasePill.color}
+              prefixNode={<ReleaseChipPrefix />}
+            />
+          ) : showReleasePill ? (
+            <span
+              className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title={releaseChipTitle(releasePill!.label)}
+            >
+              <ReleaseChipPrefix />
+              {releasePill!.label}
+            </span>
+          ) : null}
           <CliCreatedIndicator task={task} />
         </div>
       ) : null}
@@ -364,6 +421,7 @@ export const TaskCard = memo(function TaskCard({
   taskPriorities,
   viewMode,
   groupLabel,
+  releasePill = null,
   onOpen,
   editingTitle = false,
   titleDraft,
@@ -467,6 +525,7 @@ export const TaskCard = memo(function TaskCard({
               taskPriorities={taskPriorities}
               viewMode={viewMode}
               groupLabel={groupLabel}
+              releasePill={releasePill}
               preview={preview}
               onOpen={onOpen}
               editingTitle={editingTitle}
@@ -489,6 +548,7 @@ export const TaskCard = memo(function TaskCard({
             taskPriorities={taskPriorities}
             viewMode={viewMode}
             groupLabel={groupLabel}
+            releasePill={releasePill}
             preview={preview}
             onOpen={onOpen}
             editingTitle={editingTitle}

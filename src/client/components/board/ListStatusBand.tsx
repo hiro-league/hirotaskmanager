@@ -9,12 +9,13 @@ import {
 } from "../../../shared/models";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses } from "@/api/queries";
-import { TaskCard } from "@/components/task/TaskCard";
+import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import {
   type TaskCardViewMode,
+  useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
@@ -56,6 +57,7 @@ export function ListStatusBand({
     board.id,
     board.taskPriorities,
   );
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const boardNav = useBoardKeyboardNavOptional();
@@ -69,14 +71,21 @@ export function ListStatusBand({
   }, [board.tasks]);
 
   const taskFilter = useMemo<
-    Pick<BoardTaskFilterState, "activeGroupIds" | "activePriorityIds" | "dateFilter">
+    Pick<
+      BoardTaskFilterState,
+      | "activeGroupIds"
+      | "activePriorityIds"
+      | "activeReleaseIds"
+      | "dateFilter"
+    >
   >(
     () => ({
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilter: dateFilterResolved,
     }),
-    [activeGroupIds, activePriorityIds, dateFilterResolved],
+    [activeGroupIds, activePriorityIds, activeReleaseIds, dateFilterResolved],
   );
 
   const tasks = useMemo(() => {
@@ -310,6 +319,7 @@ export function ListStatusBand({
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
                 taskPriorities={board.taskPriorities}
+                releases={board.releases}
                 viewMode={taskCardViewMode}
                 listId={list.id}
                 status={status}
@@ -333,6 +343,7 @@ export function ListStatusBand({
                     taskPriorities={board.taskPriorities}
                     viewMode={taskCardViewMode}
                     groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
+                    releasePill={taskReleasePill(board, task)}
                     onOpen={() => setEditingTask(task)}
                     editingTitle={editingTitleTaskId === task.id}
                     titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -441,6 +452,7 @@ export function ListStatusBand({
             taskMap={taskMap}
             taskGroups={board.taskGroups}
             taskPriorities={board.taskPriorities}
+            releases={board.releases}
             viewMode={taskCardViewMode}
             listId={list.id}
             status={status}
@@ -464,6 +476,7 @@ export function ListStatusBand({
                 taskPriorities={board.taskPriorities}
                 viewMode={taskCardViewMode}
                 groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
+                releasePill={taskReleasePill(board, task)}
                 onOpen={() => setEditingTask(task)}
                 editingTitle={editingTitleTaskId === task.id}
                 titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
@@ -496,6 +509,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   task,
   taskGroups,
   taskPriorities,
+  releases,
   viewMode,
   onComplete,
   onEdit,
@@ -512,6 +526,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   task: Task;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
+  releases: Board["releases"];
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
@@ -536,6 +551,7 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
       taskPriorities={taskPriorities}
       viewMode={viewMode}
       groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+      releasePill={taskReleasePill({ releases }, task)}
       onOpen={handleOpen}
       editingTitle={editingTitle}
       titleDraft={titleDraft}
@@ -555,6 +571,7 @@ const SortableBandContent = memo(function SortableBandContent({
   taskMap,
   taskGroups,
   taskPriorities,
+  releases,
   viewMode,
   listId,
   status,
@@ -572,6 +589,7 @@ const SortableBandContent = memo(function SortableBandContent({
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
+  releases: Board["releases"];
   viewMode: TaskCardViewMode;
   listId: number;
   status: string;
@@ -614,6 +632,7 @@ const SortableBandContent = memo(function SortableBandContent({
             task={task}
             taskGroups={taskGroups}
             taskPriorities={taskPriorities}
+            releases={releases}
             viewMode={viewMode}
             onComplete={onComplete}
             onEdit={onEdit}

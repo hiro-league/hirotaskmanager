@@ -1,3 +1,5 @@
+import type { ReleaseDefinition } from "./models";
+
 export type BoardEventBase = {
   boardId: number;
   boardUpdatedAt: string;
@@ -5,6 +7,12 @@ export type BoardEventBase = {
 
 export type BoardChangedEvent = BoardEventBase & {
   kind: "board-changed";
+};
+
+/** Create or patch of a board release — clients may merge into cache without refetching the full board. */
+export type ReleaseUpsertedEvent = BoardEventBase & {
+  kind: "release-upserted";
+  release: ReleaseDefinition;
 };
 
 export type TaskCreatedEvent = BoardEventBase & {
@@ -73,6 +81,7 @@ export type ListPurgedEvent = BoardEventBase & {
 
 export type BoardEvent =
   | BoardChangedEvent
+  | ReleaseUpsertedEvent
   | TaskCreatedEvent
   | TaskUpdatedEvent
   | TaskDeletedEvent

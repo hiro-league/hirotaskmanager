@@ -6,8 +6,10 @@ import {
 import { parseEmojiField } from "../../shared/emojiField";
 import {
   isValidYmd,
+  RELEASE_FILTER_UNTAGGED,
   taskMatchesBoardFilter,
   visibleStatusesForBoard,
+  type ActiveReleaseIds,
   type TaskDateFilterResolved,
 } from "../../shared/boardFilters";
 import {
@@ -386,7 +388,13 @@ boardsRoute.post("/:id/releases", async (c) => {
   }
   const board = loadBoard(entry.id);
   if (board) {
-    publishBoardChanged(entry.id, board.updatedAt);
+    // Granular SSE: other tabs merge `releases` without refetching the full board (phase 5 sync).
+    publishBoardEvent({
+      kind: "release-upserted",
+      boardId: entry.id,
+      boardUpdatedAt: board.updatedAt,
+      release: created,
+    });
   }
   return c.json(created, 201);
 });
@@ -440,7 +448,14 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
     return c.json({ error: "Release not found or duplicate name" }, 400);
   }
   const board = loadBoard(entry.id);
-  if (board) publishBoardChanged(entry.id, board.updatedAt);
+  if (board) {
+    publishBoardEvent({
+      kind: "release-upserted",
+      boardId: entry.id,
+      boardUpdatedAt: board.updatedAt,
+      release: updated,
+    });
+  }
   return c.json(updated);
 });
 
@@ -787,6 +802,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
     }
   }
 
+  // releaseId: omitted → server may auto-assign from board default + principal; null → force untagged.
   let releaseId: number | null | undefined = undefined;
   if ("releaseId" in body) {
     if (body.releaseId === null) {
@@ -869,6 +885,24 @@ boardsRoute.get("/:id/tasks", async (c) => {
     return c.json({ error: "Invalid priorityId" }, 400);
   }
 
+  const hasReleaseFilterKey = searchParams.has("releaseId");
+  const releaseFilterRaw = repeatedSearchParamValues(searchParams, "releaseId");
+  let activeReleaseIds: ActiveReleaseIds;
+  if (!hasReleaseFilterKey) {
+    activeReleaseIds = null;
+  } else if (releaseFilterRaw.length === 0) {
+    activeReleaseIds = [];
+  } else {
+    for (const part of releaseFilterRaw) {
+      if (part === RELEASE_FILTER_UNTAGGED) continue;
+      const n = Number(part);
+      if (!Number.isFinite(n)) {
+        return c.json({ error: "Invalid releaseId filter" }, 400);
+      }
+    }
+    activeReleaseIds = releaseFilterRaw;
+  }
+
   const workflowOrder = listStatuses().map((status) => status.id);
   const allowedStatuses = new Set(workflowOrder);
   if (statusRaw.some((status) => !allowedStatuses.has(status))) {
@@ -911,6 +945,7 @@ boardsRoute.get("/:id/tasks", async (c) => {
       taskMatchesBoardFilter(task, {
         activeGroupIds,
         activePriorityIds,
+        activeReleaseIds,
         dateFilter,
       }),
     )
@@ -1343,6 +1378,15 @@ boardsRoute.get("/:id/stats", async (c) => {
     !filter.activeGroupIds.every((g) => Number.isFinite(Number(g)))
   ) {
     return c.json({ error: "Invalid groupId" }, 400);
+  }
+  if (
+    filter.activeReleaseIds !== null &&
+    filter.activeReleaseIds.length > 0 &&
+    !filter.activeReleaseIds.every(
+      (r) => r === RELEASE_FILTER_UNTAGGED || Number.isFinite(Number(r)),
+    )
+  ) {
+    return c.json({ error: "Invalid releaseId" }, 400);
   }
   const closedIds = closedStatusIdsFromStatuses(statuses);
   const stats = computeBoardStats(board, closedIds, filter);

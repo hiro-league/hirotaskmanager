@@ -5,6 +5,15 @@ export type ActiveTaskPriorityIds = string[] | null;
 /** `null` = all groups; `[]` = explicit empty (no tasks); otherwise OR by id string. */
 export type ActiveTaskGroupIds = string[] | null;
 
+/**
+ * Sentinel id in filter URL/store for tasks with no release (`releaseId` null).
+ * Must not collide with numeric release id strings.
+ */
+export const RELEASE_FILTER_UNTAGGED = "__untagged__";
+
+/** `null` = all releases; `[]` = explicit empty; otherwise OR across ids + optional untagged. */
+export type ActiveReleaseIds = string[] | null;
+
 /** Which timestamps participate in the inclusive calendar-day range. */
 export type TaskDateFilterMode = "opened" | "closed" | "any";
 
@@ -86,9 +95,26 @@ export function taskMatchesGroupFilter(
   return activeGroupIds.includes(String(task.groupId));
 }
 
+/** `null` = all releases; `[]` = no tasks; OR across numeric ids and/or untagged bucket. */
+export function taskMatchesReleaseFilter(
+  task: Task,
+  activeReleaseIds: ActiveReleaseIds | undefined,
+): boolean {
+  if (activeReleaseIds == null) return true;
+  if (activeReleaseIds.length === 0) return false;
+  const includeUntagged = activeReleaseIds.includes(RELEASE_FILTER_UNTAGGED);
+  const idSet = new Set(
+    activeReleaseIds.filter((id) => id !== RELEASE_FILTER_UNTAGGED),
+  );
+  const rid = task.releaseId ?? null;
+  if (rid == null) return includeUntagged;
+  return idSet.has(String(rid));
+}
+
 export interface BoardFilterGroupPriorityDate {
   activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: ActiveTaskPriorityIds;
+  activeReleaseIds: ActiveReleaseIds;
   dateFilter: TaskDateFilterResolved | null;
 }
 
@@ -98,14 +124,21 @@ export function taskMatchesBoardFilter(
   task: Task,
   filter: Pick<
     BoardFilterGroupPriorityDate,
-    "activeGroupIds" | "activePriorityIds" | "dateFilter"
+    | "activeGroupIds"
+    | "activePriorityIds"
+    | "activeReleaseIds"
+    | "dateFilter"
   >,
 ): boolean {
-  const { activeGroupIds, activePriorityIds, dateFilter } = filter;
+  const { activeGroupIds, activePriorityIds, activeReleaseIds, dateFilter } =
+    filter;
   if (!taskMatchesGroupFilter(task, activeGroupIds)) {
     return false;
   }
   if (!taskMatchesPriorityFilter(task, activePriorityIds)) {
+    return false;
+  }
+  if (!taskMatchesReleaseFilter(task, activeReleaseIds)) {
     return false;
   }
   if (dateFilter != null && !taskMatchesDateFilter(task, dateFilter)) {

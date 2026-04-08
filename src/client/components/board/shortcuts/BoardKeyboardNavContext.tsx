@@ -11,6 +11,7 @@ import {
 import type { Board } from "../../../../shared/models";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import {
+  useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
@@ -162,6 +163,7 @@ export function BoardKeyboardNavProvider({
     board.id,
     board.taskPriorities,
   );
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
@@ -174,6 +176,7 @@ export function BoardKeyboardNavProvider({
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilter: dateFilterResolved,
     }),
     [
@@ -181,6 +184,7 @@ export function BoardKeyboardNavProvider({
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilterResolved,
     ],
   );

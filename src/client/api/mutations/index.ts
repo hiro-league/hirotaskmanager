@@ -8,6 +8,11 @@ export {
   usePatchBoardViewPrefs,
 } from "./board";
 export {
+  useCreateBoardRelease,
+  useDeleteBoardRelease,
+  useUpdateBoardRelease,
+} from "./releases";
+export {
   useCreateList,
   useDeleteList,
   useMoveList,

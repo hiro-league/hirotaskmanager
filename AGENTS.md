@@ -27,8 +27,14 @@ hirotm search "bug" --board <id-or-slug>   # one board
 hirotm search "drag" --format table        # fixed-width table
 hirotm boards add --client-name "Cursor Agent" "Sprint" [--emoji <text>]
 hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> "Ready" [--emoji <text>]
-hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--title ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [field flags...]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--release <name>|none|--release-id <id>] [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [field flags...]  # e.g. --release none, --release <name>, --release-id <id>
+hirotm boards tasks <id-or-slug> [--release-id <id> ...] [--untagged]  # OR filter; repeat --release-id like --group
+hirotm releases list --board <id-or-slug>
+hirotm releases show --board <id-or-slug> <release-id>
+hirotm releases add --board <id-or-slug> --name <text> [--color|--release-date ...]
+hirotm releases update --board <id-or-slug> <release-id> [--name ...]
+hirotm releases delete --board <id-or-slug> <release-id> [--move-tasks-to <id>]
 hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm trash boards                        # JSON: trashed boards
 hirotm trash lists | hirotm trash tasks    # JSON: trashed lists/tasks
@@ -42,5 +48,6 @@ hirotm start --background
 ## Notes
 
 - Task **priority** is always a board `task_priority` row: builtin **`none`** (value `0`, white) is the default when `--priority` is omitted on `tasks add`. Use `--priority <id>` with the row id from `boards show` (or the API) to set another level or to switch back to `none` on `tasks update`.
+- **Releases:** omit both `--release` and `--release-id` on `tasks add` so the server can auto-assign when the board enables CLI auto-assign and a default release exists. Use `--release none` or `--release-id` with an explicit id to override. Release CRUD uses **`manageStructure`** (same as task groups), not a separate policy flag.
 - The CLI talks to the local HTTP API; it should not bypass the server and touch SQLite directly.
 - Read command errors are JSON on `stderr` with a non-zero exit code.

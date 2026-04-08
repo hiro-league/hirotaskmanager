@@ -1,5 +1,5 @@
 import { parseBoardColor } from "../../shared/boardColor";
-import type { Board } from "../../shared/models";
+import type { Board, ReleaseDefinition } from "../../shared/models";
 import { parsePatchBoardTaskGroupConfigBody } from "../../shared/taskGroupConfig";
 import type {
   ListDeleteMutationResult,
@@ -38,6 +38,65 @@ function parseTaskId(raw: string | undefined): number {
     throw new CliError("Invalid task id", 2, { taskId: raw });
   }
   return n;
+}
+
+type CliReleaseFlagInput =
+  | { mode: "omit" }
+  | { mode: "null" }
+  | { mode: "id"; id: number }
+  | { mode: "name"; name: string };
+
+function parseCliReleaseFlags(opts: {
+  release?: string;
+  releaseId?: string;
+}): CliReleaseFlagInput {
+  const rawName = opts.release?.trim();
+  const rawId = opts.releaseId?.trim();
+  const hasName = rawName !== undefined && rawName.length > 0;
+  const hasId = rawId !== undefined && rawId.length > 0;
+  if (hasName && hasId) {
+    throw new CliError("Use only one of --release or --release-id", 2);
+  }
+  if (!hasName && !hasId) return { mode: "omit" };
+  if (hasId) {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id < 1) {
+      throw new CliError("Invalid release id", 2, { releaseId: rawId });
+    }
+    return { mode: "id", id };
+  }
+  const name = rawName!;
+  if (name.toLowerCase() === "none") return { mode: "null" };
+  return { mode: "name", name };
+}
+
+async function resolveCliReleaseToApiValue(
+  boardId: string,
+  input: CliReleaseFlagInput,
+  port: number | undefined,
+): Promise<number | null | undefined> {
+  switch (input.mode) {
+    case "omit":
+      return undefined;
+    case "null":
+      return null;
+    case "id":
+      return input.id;
+    case "name": {
+      const board = await fetchApi<Board>(
+        `/boards/${encodeURIComponent(boardId)}`,
+        { port },
+      );
+      const hit = board.releases.find((rel) => rel.name === input.name);
+      if (!hit) {
+        throw new CliError("Release not found for name", 2, {
+          board: boardId,
+          name: input.name,
+        });
+      }
+      return hit.id;
+    }
+  }
 }
 
 type TextInputSource = "flag" | "file" | "stdin";
@@ -611,6 +670,10 @@ export async function runTasksAdd(opts: {
   title?: string;
   status?: string;
   priority?: string;
+  /** Release name, or `none` for untagged. Omit both this and `releaseId` for server auto-assign when enabled. */
+  release?: string;
+  /** Numeric release id (mutually exclusive with `release`). */
+  releaseId?: string;
   emoji?: string;
   clearEmoji?: boolean;
   body?: string;
@@ -645,6 +708,7 @@ export async function runTasksAdd(opts: {
 
   const titleRaw = opts.title?.trim() ?? "";
   const title = titleRaw || "Untitled";
+  const port = opts.port;
 
   const payload: Record<string, unknown> = {
     listId,
@@ -662,14 +726,24 @@ export async function runTasksAdd(opts: {
     payload.priorityId = p;
   }
 
+  const relInput = parseCliReleaseFlags({
+    release: opts.release,
+    releaseId: opts.releaseId,
+  });
+  if (relInput.mode !== "omit") {
+    payload.releaseId = await resolveCliReleaseToApiValue(
+      boardId,
+      relInput,
+      port,
+    );
+  }
+
   if (opts.clearEmoji) {
     payload.emoji = null;
   } else if (opts.emoji !== undefined) {
     const emojiOpt = parseOptionalEmojiFlag(opts.emoji);
     if (!emojiOpt.omit) payload.emoji = emojiOpt.value;
   }
-
-  const port = opts.port;
 
   try {
     const result = await fetchApiMutate<TaskMutationResult>(
@@ -704,6 +778,8 @@ export async function runTasksUpdate(opts: {
   list?: string;
   group?: string;
   priority?: string;
+  release?: string;
+  releaseId?: string;
   color?: string;
   clearColor?: boolean;
   emoji?: string;
@@ -753,6 +829,17 @@ export async function runTasksUpdate(opts: {
     const pid = parsePositiveInt("priorityId", opts.priority);
     if (pid === undefined) throw new CliError("Invalid priority id", 2);
     patch.priorityId = pid;
+  }
+  const relInput = parseCliReleaseFlags({
+    release: opts.release,
+    releaseId: opts.releaseId,
+  });
+  if (relInput.mode !== "omit") {
+    patch.releaseId = await resolveCliReleaseToApiValue(
+      boardId,
+      relInput,
+      port,
+    );
   }
   if (opts.clearColor) patch.color = null;
   else if (opts.color !== undefined) patch.color = opts.color;
@@ -912,6 +999,192 @@ export async function runTasksMove(opts: {
         board: boardId,
         taskId,
       });
+    }
+    throw e;
+  }
+}
+
+export async function runReleasesList(opts: {
+  port?: number;
+  board: string | undefined;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const rows = await fetchApi<ReleaseDefinition[]>(
+    `/boards/${encodeURIComponent(boardId)}/releases`,
+    { port: opts.port },
+  );
+  printJson(rows);
+}
+
+export async function runReleasesShow(opts: {
+  port?: number;
+  board: string | undefined;
+  releaseId: string | undefined;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const rid = parsePositiveInt("releaseId", opts.releaseId);
+  if (rid === undefined) {
+    throw new CliError("Invalid release id", 2, { releaseId: opts.releaseId });
+  }
+  const rows = await fetchApi<ReleaseDefinition[]>(
+    `/boards/${encodeURIComponent(boardId)}/releases`,
+    { port: opts.port },
+  );
+  const hit = rows.find((r) => r.id === rid);
+  if (!hit) {
+    throw new CliError("Release not found", 1, {
+      board: boardId,
+      releaseId: rid,
+    });
+  }
+  printJson(hit);
+}
+
+export async function runReleasesAdd(opts: {
+  port?: number;
+  board: string | undefined;
+  name?: string;
+  color?: string;
+  clearColor?: boolean;
+  releaseDate?: string;
+  clearReleaseDate?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const name = opts.name?.trim() ?? "";
+  if (!name) {
+    throw new CliError("Missing required option: --name", 2);
+  }
+  if (opts.clearColor && opts.color !== undefined) {
+    throw new CliError("Cannot use --color together with --clear-color", 2);
+  }
+  if (opts.clearReleaseDate && opts.releaseDate !== undefined) {
+    throw new CliError(
+      "Cannot use --release-date together with --clear-release-date",
+      2,
+    );
+  }
+  const body: Record<string, unknown> = { name };
+  if (opts.clearColor) body.color = null;
+  else if (opts.color !== undefined) body.color = opts.color.trim();
+  if (opts.clearReleaseDate) body.releaseDate = null;
+  else if (opts.releaseDate !== undefined) {
+    body.releaseDate = opts.releaseDate.trim();
+  }
+
+  try {
+    const created = await fetchApiMutate<ReleaseDefinition>(
+      `/boards/${encodeURIComponent(boardId)}/releases`,
+      { method: "POST", body },
+      { port: opts.port },
+    );
+    printJson(created);
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runReleasesUpdate(opts: {
+  port?: number;
+  board: string | undefined;
+  releaseId: string | undefined;
+  name?: string;
+  color?: string;
+  clearColor?: boolean;
+  releaseDate?: string;
+  clearReleaseDate?: boolean;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const rid = parsePositiveInt("releaseId", opts.releaseId);
+  if (rid === undefined) {
+    throw new CliError("Invalid release id", 2, { releaseId: opts.releaseId });
+  }
+  if (opts.clearColor && opts.color !== undefined) {
+    throw new CliError("Cannot use --color together with --clear-color", 2);
+  }
+  if (opts.clearReleaseDate && opts.releaseDate !== undefined) {
+    throw new CliError(
+      "Cannot use --release-date together with --clear-release-date",
+      2,
+    );
+  }
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.clearColor) patch.color = null;
+  else if (opts.color !== undefined) patch.color = opts.color.trim();
+  if (opts.clearReleaseDate) patch.releaseDate = null;
+  else if (opts.releaseDate !== undefined) {
+    patch.releaseDate = opts.releaseDate.trim();
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new CliError("At least one update field is required", 2);
+  }
+
+  try {
+    const updated = await fetchApiMutate<ReleaseDefinition>(
+      `/boards/${encodeURIComponent(boardId)}/releases/${rid}`,
+      { method: "PATCH", body: patch },
+      { port: opts.port },
+    );
+    printJson(updated);
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
+    }
+    throw e;
+  }
+}
+
+export async function runReleasesDelete(opts: {
+  port?: number;
+  board: string | undefined;
+  releaseId: string | undefined;
+  moveTasksTo?: string;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2);
+  }
+  const rid = parsePositiveInt("releaseId", opts.releaseId);
+  if (rid === undefined) {
+    throw new CliError("Invalid release id", 2, { releaseId: opts.releaseId });
+  }
+  const moveRaw = opts.moveTasksTo?.trim();
+  let query = "";
+  if (moveRaw) {
+    const mid = Number(moveRaw);
+    if (!Number.isInteger(mid) || mid < 1) {
+      throw new CliError("Invalid move-tasks-to release id", 2, {
+        moveTasksTo: moveRaw,
+      });
+    }
+    query = `?moveTasksTo=${encodeURIComponent(String(mid))}`;
+  }
+
+  try {
+    await fetchApiMutate<undefined>(
+      `/boards/${encodeURIComponent(boardId)}/releases/${rid}${query}`,
+      { method: "DELETE" },
+      { port: opts.port },
+    );
+    printJson({ ok: true, board: boardId, deletedReleaseId: rid });
+  } catch (e) {
+    if (e instanceof CliError && e.message === "Board not found") {
+      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
     }
     throw e;
   }

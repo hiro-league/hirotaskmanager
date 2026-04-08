@@ -2,6 +2,7 @@ import { statusIdsInWorkflowOrder, type Board, type Status, type Task } from "./
 import {
   isValidYmd,
   taskMatchesBoardFilter,
+  type ActiveReleaseIds,
   type ActiveTaskGroupIds,
   type TaskDateFilterResolved,
 } from "./boardFilters";
@@ -15,6 +16,8 @@ export interface BoardStatsFilter {
   /** `null` = all groups; `[]` = no tasks; otherwise OR by task group id string. */
   activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: string[] | null;
+  /** `null` = all releases; `[]` = no tasks; OR across release ids + untagged sentinel. */
+  activeReleaseIds: ActiveReleaseIds;
   dateFilter: TaskDateFilterResolved | null;
 }
 
@@ -40,6 +43,7 @@ function taskMatchesStatsScope(task: Task, filter: BoardStatsFilter): boolean {
   return taskMatchesBoardFilter(task, {
     activeGroupIds: filter.activeGroupIds,
     activePriorityIds: filter.activePriorityIds,
+    activeReleaseIds: filter.activeReleaseIds,
     dateFilter: filter.dateFilter,
   });
 }
@@ -127,6 +131,17 @@ export function parseBoardStatsFilter(
       .filter(Boolean);
   }
 
+  const hasReleaseKey = searchParams.has("releaseId");
+  const releaseParts = repeatedSearchParamValues(searchParams, "releaseId");
+  let activeReleaseIds: ActiveReleaseIds;
+  if (!hasReleaseKey) {
+    activeReleaseIds = null;
+  } else if (releaseParts.length === 0) {
+    activeReleaseIds = [];
+  } else {
+    activeReleaseIds = releaseParts;
+  }
+
   const dateMode = searchParams.get("dateMode");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
@@ -149,6 +164,7 @@ export function parseBoardStatsFilter(
   return {
     activeGroupIds,
     activePriorityIds,
+    activeReleaseIds,
     dateFilter,
   };
 }
@@ -181,6 +197,15 @@ export function buildBoardStatsSearchParams(
   } else {
     sp.set("priorityIds", filter.activePriorityIds.join(","));
   }
+  if (filter.activeReleaseIds === null) {
+    // omit — all releases
+  } else if (filter.activeReleaseIds.length === 0) {
+    sp.append("releaseId", "");
+  } else {
+    for (const id of filter.activeReleaseIds) {
+      sp.append("releaseId", id);
+    }
+  }
   if (filter.dateFilter != null) {
     sp.set("dateMode", filter.dateFilter.mode);
     sp.set("startDate", filter.dateFilter.startDate);
@@ -199,8 +224,12 @@ export function boardStatsFilterSignature(filter: BoardStatsFilter): string {
     filter.activePriorityIds === null
       ? "null"
       : [...filter.activePriorityIds].sort().join(",");
+  const rel =
+    filter.activeReleaseIds === null
+      ? "null"
+      : [...filter.activeReleaseIds].sort().join(",");
   const df = filter.dateFilter
     ? `${filter.dateFilter.mode}|${filter.dateFilter.startDate}|${filter.dateFilter.endDate}`
     : "";
-  return `${grp}|${pri}|${df}`;
+  return `${grp}|${pri}|${rel}|${df}`;
 }

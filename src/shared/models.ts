@@ -222,7 +222,12 @@ export interface Task {
   /** Who created this task (`web` vs `cli`); optional on older payloads. */
   createdByPrincipal?: CreatorPrincipalType;
   createdByLabel?: string | null;
-  /** References `board_release.id`; null = untagged. */
+  /**
+   * References `board_release.id` for this board; `null` = untagged.
+   * **Create API:** omit the field to apply board auto-assign when enabled for the caller’s principal;
+   * send `releaseId: null` to force untagged (never auto-assign). **Update:** omit leaves release unchanged;
+   * `null` clears the release.
+   */
   releaseId?: number | null;
 }
 

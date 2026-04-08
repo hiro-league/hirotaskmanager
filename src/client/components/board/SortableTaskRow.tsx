@@ -13,6 +13,7 @@ export interface SortableTaskRowProps {
   taskPriorities: TaskPriorityDefinition[];
   viewMode: TaskCardViewMode;
   groupLabel: string;
+  releasePill?: { label: string; color?: string | null } | null;
   onOpen: () => void;
   editingTitle?: boolean;
   titleDraft?: string;
@@ -32,6 +33,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   taskPriorities,
   viewMode,
   groupLabel,
+  releasePill = null,
   onOpen,
   editingTitle = false,
   titleDraft,
@@ -75,6 +77,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
         taskPriorities={taskPriorities}
         viewMode={viewMode}
         groupLabel={groupLabel}
+        releasePill={releasePill}
         onOpen={onOpen}
         editingTitle={editingTitle}
         titleDraft={titleDraft}

@@ -94,9 +94,9 @@ Execution-oriented checklists. Product rules live in [releases requirements](./r
 
 ### Checklist
 
-- [ ] Sync payloads and conflict rules for `releaseId` and release rows.
-- [ ] Integration tests: keyboard, filters, CLI round-trip.
-- [ ] Large boards: ensure release list on board payload is acceptable (consider lazy-load later if needed—defer if not an issue).
+- [x] Sync payloads and conflict rules for `releaseId` and release rows (`release-upserted` SSE + `board-changed` on release delete; design doc updated).
+- [x] Regression tests: shared release filter predicates + SSE merge helper (keyboard/CLI covered by existing app + storage tests; no separate E2E harness).
+- [x] Large boards: document that embedded `releases[]` is acceptable for v1; lazy-load deferred.
 
 ### Exit criteria
 

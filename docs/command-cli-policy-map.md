@@ -55,6 +55,22 @@ Task mutations use **`cliManageTaskError`**: **either** `manageAnyTasks` **or** 
 
 ---
 
+## Releases
+
+Release routes use **`manageStructure`** for writes (create / update / delete), matching task group management. Listing releases is read-only under **`readBoard`**.
+
+| hirotm command | Extra board CLI policy (beyond `readBoard`) | Notes |
+|----------------|-----------------------------------------------|-------|
+| `releases list` | *(none)* | `GET /boards/:id/releases` |
+| `releases show` | *(none)* | Same list endpoint; client picks one id |
+| `releases add` | `manageStructure` | `POST /boards/:id/releases` |
+| `releases update` | `manageStructure` | `PATCH /boards/:id/releases/:releaseId` |
+| `releases delete` | `manageStructure` | `DELETE …` — optional `moveTasksTo` query |
+
+Filtered task listing **`boards tasks`** only requires **`readBoard`** (same as other board read/query routes that accept filter query params).
+
+---
+
 ## Implementation reference
 
 Guards live in `src/server/cliPolicyGuard.ts`. Trash routes apply them in `src/server/routes/trash.ts`; live deletes in `src/server/routes/boards.ts`.

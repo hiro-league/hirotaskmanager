@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
 import {
   sortPrioritiesByValue,
   type GroupDefinition,
+  type ReleaseDefinition,
   type TaskPriorityDefinition,
 } from "../../shared/models";
 import {
@@ -140,6 +142,8 @@ interface PersistedShape {
     activeTaskGroupByBoardId?: Record<string, string>;
     activeTaskGroupIdsByBoardId?: Record<string, string[]>;
     activeTaskPriorityIdsByBoardId?: Record<string, string[]>;
+    /** Board release filter selections; values are release id strings and/or {@link RELEASE_FILTER_UNTAGGED}. */
+    activeReleaseIdsByBoardId?: Record<string, string[]>;
     taskCardViewModeByBoardId?: Record<string, TaskCardViewMode>;
     taskCardSizeByBoardId?: Record<string, TaskCardViewMode>;
     taskDateFilterByBoardId?: Record<string, TaskDateFilterPersisted>;
@@ -211,6 +215,7 @@ function readPersistedSlice(): {
   boardFilterStripCollapsed: boolean;
   activeTaskGroupIdsByBoardId: Record<string, string[]>;
   activeTaskPriorityIdsByBoardId: Record<string, string[]>;
+  activeReleaseIdsByBoardId: Record<string, string[]>;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   taskDateFilterByBoardId: Record<string, TaskDateFilterPersisted>;
   boardShortcutHelpDismissed: boolean;
@@ -224,6 +229,7 @@ function readPersistedSlice(): {
       boardFilterStripCollapsed: false,
       activeTaskGroupIdsByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
+      activeReleaseIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       taskDateFilterByBoardId: {},
       boardShortcutHelpDismissed: false,
@@ -240,6 +246,7 @@ function readPersistedSlice(): {
         boardFilterStripCollapsed: false,
         activeTaskGroupIdsByBoardId: {},
         activeTaskPriorityIdsByBoardId: {},
+        activeReleaseIdsByBoardId: {},
         taskCardViewModeByBoardId: {},
         taskDateFilterByBoardId: {},
         boardShortcutHelpDismissed: false,
@@ -260,6 +267,19 @@ function readPersistedSlice(): {
       !Array.isArray(rawPriorityMap)
         ? Object.fromEntries(
             Object.entries(rawPriorityMap).filter(
+              ([, value]) =>
+                Array.isArray(value) &&
+                value.every((entry) => typeof entry === "string"),
+            ),
+          )
+        : {};
+    const rawReleaseMap = s?.activeReleaseIdsByBoardId;
+    const activeReleaseIdsByBoardId =
+      rawReleaseMap &&
+      typeof rawReleaseMap === "object" &&
+      !Array.isArray(rawReleaseMap)
+        ? Object.fromEntries(
+            Object.entries(rawReleaseMap).filter(
               ([, value]) =>
                 Array.isArray(value) &&
                 value.every((entry) => typeof entry === "string"),
@@ -296,6 +316,7 @@ function readPersistedSlice(): {
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
       activeTaskGroupIdsByBoardId,
       activeTaskPriorityIdsByBoardId,
+      activeReleaseIdsByBoardId,
       taskCardViewModeByBoardId,
       taskDateFilterByBoardId,
       boardShortcutHelpDismissed: Boolean(s?.boardShortcutHelpDismissed),
@@ -309,6 +330,7 @@ function readPersistedSlice(): {
       boardFilterStripCollapsed: false,
       activeTaskGroupIdsByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
+      activeReleaseIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       taskDateFilterByBoardId: {},
       boardShortcutHelpDismissed: false,
@@ -340,6 +362,11 @@ interface PreferencesState {
   setActiveTaskPriorityIdsForBoard: (
     boardId: string | number,
     priorityIds: string[] | undefined,
+  ) => void;
+  activeReleaseIdsByBoardId: Record<string, string[]>;
+  setActiveReleaseIdsForBoard: (
+    boardId: string | number,
+    releaseIds: string[] | undefined,
   ) => void;
   taskDateFilterByBoardId: Record<string, TaskDateFilterPersisted>;
   setTaskDateFilterForBoard: (
@@ -402,6 +429,18 @@ export const usePreferencesStore = create<PreferencesState>()(
           }
           return { activeTaskPriorityIdsByBoardId: next };
         }),
+      activeReleaseIdsByBoardId: initial.activeReleaseIdsByBoardId,
+      setActiveReleaseIdsForBoard: (boardId, releaseIds) =>
+        set((s) => {
+          const key = String(boardId);
+          const next = { ...s.activeReleaseIdsByBoardId };
+          if (releaseIds === undefined) {
+            delete next[key];
+          } else {
+            next[key] = [...releaseIds];
+          }
+          return { activeReleaseIdsByBoardId: next };
+        }),
       taskDateFilterByBoardId: initial.taskDateFilterByBoardId,
       setTaskDateFilterForBoard: (boardId, filter) =>
         set((s) => ({
@@ -431,6 +470,11 @@ export const usePreferencesStore = create<PreferencesState>()(
               validIds.has(id),
             ),
           );
+          const nextActiveReleaseIdsByBoardId = Object.fromEntries(
+            Object.entries(s.activeReleaseIdsByBoardId).filter(([id]) =>
+              validIds.has(id),
+            ),
+          );
           const nextTaskCardViewModeByBoardId = Object.fromEntries(
             Object.entries(s.taskCardViewModeByBoardId).filter(([id]) =>
               validIds.has(id),
@@ -446,6 +490,8 @@ export const usePreferencesStore = create<PreferencesState>()(
               Object.keys(s.activeTaskGroupIdsByBoardId).length &&
             Object.keys(nextActiveTaskPriorityIdsByBoardId).length ===
               Object.keys(s.activeTaskPriorityIdsByBoardId).length &&
+            Object.keys(nextActiveReleaseIdsByBoardId).length ===
+              Object.keys(s.activeReleaseIdsByBoardId).length &&
             Object.keys(nextTaskCardViewModeByBoardId).length ===
               Object.keys(s.taskCardViewModeByBoardId).length &&
             Object.keys(nextTaskDateFilterByBoardId).length ===
@@ -458,6 +504,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           return {
             activeTaskGroupIdsByBoardId: nextActiveTaskGroupIdsByBoardId,
             activeTaskPriorityIdsByBoardId: nextActiveTaskPriorityIdsByBoardId,
+            activeReleaseIdsByBoardId: nextActiveReleaseIdsByBoardId,
             taskCardViewModeByBoardId: nextTaskCardViewModeByBoardId,
             taskDateFilterByBoardId: nextTaskDateFilterByBoardId,
           };
@@ -476,6 +523,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
         activeTaskGroupIdsByBoardId: state.activeTaskGroupIdsByBoardId,
         activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,
+        activeReleaseIdsByBoardId: state.activeReleaseIdsByBoardId,
         taskCardViewModeByBoardId: state.taskCardViewModeByBoardId,
         taskDateFilterByBoardId: state.taskDateFilterByBoardId,
         boardShortcutHelpDismissed: state.boardShortcutHelpDismissed,
@@ -526,6 +574,28 @@ export function useResolvedActiveTaskPriorityIds(
     const filtered = raw.filter((id) => validIds.has(id));
     return filtered.length > 0 ? filtered : null;
   }, [raw, taskPriorities]);
+}
+
+/**
+ * `null` = all releases; `[]` = explicit empty filter; otherwise OR across valid release ids
+ * and/or the untagged sentinel.
+ */
+export function useResolvedActiveReleaseIds(
+  boardId: string | number,
+  releases: ReleaseDefinition[],
+): string[] | null {
+  const key = String(boardId);
+  const raw = usePreferencesStore((s) => s.activeReleaseIdsByBoardId[key]);
+  return useMemo(() => {
+    if (raw === undefined) return null;
+    if (!Array.isArray(raw)) return null;
+    if (raw.length === 0) return [];
+    const validIds = new Set(releases.map((r) => String(r.id)));
+    const filtered = raw.filter(
+      (id) => id === RELEASE_FILTER_UNTAGGED || validIds.has(id),
+    );
+    return filtered.length > 0 ? filtered : null;
+  }, [raw, releases]);
 }
 
 export function useResolvedTaskCardViewMode(boardId: string | number): TaskCardViewMode {

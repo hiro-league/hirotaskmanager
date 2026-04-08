@@ -444,6 +444,21 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
       actions.reopenHighlightedTask(board);
     },
   },
+  {
+    id: "assign-default-release",
+    scope: "board",
+    helpTab: "tasks",
+    helpContext: "Task is Selected; board has a default release",
+    keys: ["E"],
+    description: "Set task release to the board default",
+    preventDefault: true,
+    matchKey: letterKey("e"),
+    enabled: (b) =>
+      Boolean(b && b.defaultReleaseId != null && b.releases.some((r) => r.id === b.defaultReleaseId)),
+    run: (board, actions) => {
+      actions.assignDefaultReleaseToHighlightedTask(board);
+    },
+  },
 ];
 
 export function cycleTaskGroupForBoard(

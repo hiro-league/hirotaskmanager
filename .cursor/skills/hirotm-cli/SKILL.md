@@ -1,6 +1,6 @@
 ---
 name: hirotm-cli
-description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks, and lists, list workflow statuses, and run FTS search through the local HTTP API. Use when working on TaskManager data, validating live board state, or when the user asks about boards, tasks, lists, statuses, search, or the local server.
+description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks, lists, and releases, list workflow statuses, and run FTS search through the local HTTP API. Use when working on TaskManager data, validating live board state, or when the user asks about boards, tasks, lists, releases, statuses, search, or the local server.
 ---
 
 # hirotm CLI
@@ -11,7 +11,7 @@ description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks,
 
 Use this skill when:
 
-- The user asks about current boards, tasks, lists, statuses, or task search results.
+- The user asks about current boards, tasks, lists, releases, statuses, or task search results.
 - You need live app state instead of reading source files.
 - You need to confirm whether the local TaskManager server is running.
 - You are considering touching `data/taskmanager.db` directly.
@@ -32,8 +32,11 @@ hirotm boards list
 hirotm boards show <id-or-slug>
 hirotm boards add --client-name "Cursor Agent" [name] [--emoji <text>]
 hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> [name] [--emoji <text>]
-hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--title ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--release <name>|none|--release-id <id>] [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--release ...] [--body|--body-file|--body-stdin ...]
+hirotm boards tasks <id-or-slug> [--release-id <id> ...] [--untagged]
+hirotm releases list --board <id-or-slug>
+hirotm releases add --board <id-or-slug> --name <text>
 hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm statuses list
 hirotm search "<query>"

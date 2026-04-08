@@ -3,7 +3,7 @@ import {
   type Board,
   type Task,
 } from "../../../shared/models";
-import { TaskCard } from "@/components/task/TaskCard";
+import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
 import { useResolvedTaskCardViewMode } from "@/store/preferences";
 import { boardTaskDragOverlayClass } from "./boardDragOverlayShell";
 import { BoardListColumnOverlay } from "./BoardListColumn";
@@ -24,6 +24,7 @@ export function BoardTaskDragOverlay({
         taskPriorities={board.taskPriorities}
         viewMode={taskCardViewMode}
         groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
+        releasePill={taskReleasePill(board, task)}
         onOpen={() => {}}
       />
     </div>

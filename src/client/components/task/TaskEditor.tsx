@@ -9,6 +9,12 @@ import {
   type Board,
   type Task,
 } from "../../../shared/models";
+
+// Release select values mirror API omit vs null vs id (see task create contract in server routes).
+/** Create: omit `releaseId` in API body so server can auto-assign from board rules. */
+const RELEASE_SELECT_AUTO = "__auto__";
+/** Explicit untagged (`releaseId: null`). */
+const RELEASE_SELECT_NONE = "__none__";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
@@ -34,6 +40,7 @@ interface Baseline {
   body: string;
   group: string;
   priority: string;
+  release: string;
   emoji: string | null;
 }
 
@@ -61,6 +68,8 @@ export function TaskEditor({
   const [group, setGroup] = useState("");
   /** Select value — matches `String(taskPriority.id)` (default builtin `none`). */
   const [priority, setPriority] = useState("");
+  /** `RELEASE_SELECT_*` or `String(releaseId)` for edit/create. */
+  const [release, setRelease] = useState(RELEASE_SELECT_AUTO);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef<Baseline>({
@@ -68,6 +77,7 @@ export function TaskEditor({
     body: "",
     group: "",
     priority: "",
+    release: RELEASE_SELECT_AUTO,
     emoji: null,
   });
   const [showDiscard, setShowDiscard] = useState(false);
@@ -82,11 +92,15 @@ export function TaskEditor({
       setEmoji(task.emoji ?? null);
       setGroup(String(task.groupId));
       setPriority(String(task.priorityId));
+      const rel =
+        task.releaseId != null ? String(task.releaseId) : RELEASE_SELECT_NONE;
+      setRelease(rel);
       baselineRef.current = {
         title: task.title,
         body: task.body,
         group: String(task.groupId),
         priority: String(task.priorityId),
+        release: rel,
         emoji: task.emoji ?? null,
       };
     } else if (mode === "create" && createContext) {
@@ -101,11 +115,13 @@ export function TaskEditor({
           sortPrioritiesByValue(board.taskPriorities)[0]!.id,
       );
       setPriority(defaultPri);
+      setRelease(RELEASE_SELECT_AUTO);
       baselineRef.current = {
         title: "",
         body: "",
         group: defaultGroup,
         priority: defaultPri,
+        release: RELEASE_SELECT_AUTO,
         emoji: null,
       };
     }
@@ -131,6 +147,7 @@ export function TaskEditor({
         body !== baselineRef.current.body ||
         group !== baselineRef.current.group ||
         priority !== baselineRef.current.priority ||
+        release !== baselineRef.current.release ||
         (emoji ?? null) !== (baselineRef.current.emoji ?? null)
       );
     }
@@ -142,11 +159,12 @@ export function TaskEditor({
         body.trim() !== "" ||
         group !== baselineRef.current.group ||
         priority !== baselineRef.current.priority ||
+        release !== baselineRef.current.release ||
         (emoji ?? null) !== (baselineRef.current.emoji ?? null)
       );
     }
     return false;
-  }, [open, mode, task, createContext, title, body, group, priority, emoji]);
+  }, [open, mode, task, createContext, title, body, group, priority, release, emoji]);
 
   const busy =
     createTask.isPending || updateTask.isPending || deleteTask.isPending;
@@ -188,6 +206,10 @@ export function TaskEditor({
       const gid =
         Number(group) || effectiveDefaultTaskGroupId(board);
       const defaultNone = noneTaskPriorityId(board.taskPriorities);
+      let releasePayload: number | null | undefined;
+      if (release === RELEASE_SELECT_NONE) releasePayload = null;
+      else if (release !== RELEASE_SELECT_AUTO) releasePayload = Number(release);
+      else releasePayload = undefined;
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
@@ -196,10 +218,13 @@ export function TaskEditor({
         body,
         groupId: gid,
         ...(priorityId !== defaultNone ? { priorityId } : {}),
+        ...(releasePayload !== undefined ? { releaseId: releasePayload } : {}),
         emoji: emoji ?? null,
       });
     } else if (mode === "edit" && task) {
       const gid = Number(group) || task.groupId;
+      const nextReleaseId =
+        release === RELEASE_SELECT_NONE ? null : Number(release);
       await updateTask.mutateAsync({
         boardId: board.id,
         task: {
@@ -208,6 +233,7 @@ export function TaskEditor({
           body,
           groupId: gid,
           priorityId,
+          releaseId: nextReleaseId,
           emoji: emoji ?? null,
           updatedAt: now,
         },
@@ -224,6 +250,7 @@ export function TaskEditor({
     emoji,
     group,
     priority,
+    release,
     createTask,
     updateTask,
     onClose,
@@ -383,6 +410,30 @@ export function TaskEditor({
                 {sortedPriorities.map((taskPriority) => (
                   <option key={taskPriority.id} value={String(taskPriority.id)}>
                     {taskPriority.value} - {priorityDisplayLabel(taskPriority.label)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${titleId}-release`} className="text-xs font-medium text-muted-foreground">
+                Release
+              </label>
+              <select
+                id={`${titleId}-release`}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
+                value={release}
+                disabled={busy}
+                onChange={(e) => setRelease(e.target.value)}
+              >
+                {mode === "create" ? (
+                  <option value={RELEASE_SELECT_AUTO}>
+                    Auto (board default when enabled)
+                  </option>
+                ) : null}
+                <option value={RELEASE_SELECT_NONE}>Untagged</option>
+                {board.releases.map((r) => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name}
                   </option>
                 ))}
               </select>

@@ -3,6 +3,7 @@ import type { Board } from "../../../shared/models";
 import { useMoveTask } from "@/api/mutations";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import {
+  useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
@@ -83,6 +84,8 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     board.taskPriorities,
   );
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
+  // Must resolve store ids + untagged sentinel so releaseSig/taskFilter match the visible board (hook was missing → ReferenceError at runtime).
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
 
   const listIds = listIdsOverride ?? list.localListIds;
 
@@ -91,7 +94,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       board.tasks
         .map(
           (t) =>
-            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}`,
+            `${t.id}:${t.listId}:${t.status}:${t.order}:${t.groupId}:${t.priorityId ?? ""}:${t.releaseId ?? ""}`,
         )
         .join("|"),
     [board.tasks],
@@ -105,7 +108,9 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     dateFilterResolved == null
       ? "__nodate__"
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${dateSig}`;
+  const releaseSig =
+    activeReleaseIds === null ? "__all__" : activeReleaseIds.join("\0");
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
 
   const taskFilter = useMemo<BoardTaskFilterState>(
     () => ({
@@ -114,6 +119,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilter: dateFilterResolved,
     }),
     [
@@ -121,6 +127,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilterResolved,
     ],
   );
@@ -146,5 +153,6 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     visibleStatuses,
     activeGroupIds,
     activePriorityIds,
+    activeReleaseIds,
   };
 }

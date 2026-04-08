@@ -20,7 +20,7 @@ import {
 } from "../../../shared/models";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
-import { TaskCard } from "@/components/task/TaskCard";
+import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
@@ -28,6 +28,7 @@ import { ListHeader } from "@/components/list/ListHeader";
 import {
   type TaskCardViewMode,
   usePreferencesStore,
+  useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
@@ -75,6 +76,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   task,
   taskGroups,
   taskPriorities,
+  releases,
   viewMode,
   onComplete,
   onEdit,
@@ -91,6 +93,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   task: Task;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
+  releases: Board["releases"];
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
@@ -115,6 +118,7 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
       taskPriorities={taskPriorities}
       viewMode={viewMode}
       groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+      releasePill={taskReleasePill({ releases }, task)}
       onOpen={handleOpen}
       editingTitle={editingTitle}
       titleDraft={titleDraft}
@@ -134,6 +138,7 @@ const StackedSortableList = memo(function StackedSortableList({
   taskMap,
   taskGroups,
   taskPriorities,
+  releases,
   viewMode,
   listId,
   containerId,
@@ -152,6 +157,7 @@ const StackedSortableList = memo(function StackedSortableList({
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
+  releases: Board["releases"];
   viewMode: TaskCardViewMode;
   listId: number;
   containerId: string;
@@ -195,6 +201,7 @@ const StackedSortableList = memo(function StackedSortableList({
               task={task}
               taskGroups={taskGroups}
               taskPriorities={taskPriorities}
+              releases={releases}
               viewMode={viewMode}
               onComplete={onComplete}
               onEdit={onEdit}
@@ -232,6 +239,7 @@ function ListStackedBody({
     board.id,
     board.taskPriorities,
   );
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
   const dateFilterResolved = useResolvedTaskDateFilter(board.id);
   const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
@@ -461,6 +469,7 @@ function ListStackedBody({
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilter: dateFilterResolved,
     }),
     [
@@ -468,6 +477,7 @@ function ListStackedBody({
       workflowOrder,
       activeGroupIds,
       activePriorityIds,
+      activeReleaseIds,
       dateFilterResolved,
     ],
   );
@@ -643,6 +653,7 @@ function ListStackedBody({
                 taskMap={taskMap}
                 taskGroups={board.taskGroups}
                 taskPriorities={board.taskPriorities}
+                releases={board.releases}
                 viewMode={taskCardViewMode}
                 listId={listId}
                 containerId={taskContainerId}
@@ -668,6 +679,7 @@ function ListStackedBody({
                       taskPriorities={board.taskPriorities}
                       viewMode={taskCardViewMode}
                       groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
+                      releasePill={taskReleasePill(board, task)}
                       onOpen={() => setEditingTask(task)}
                       editingTitle={editingTitleTaskId === task.id}
                       titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}

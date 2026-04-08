@@ -41,6 +41,7 @@ function isBoardDetailNotFound(error: unknown): boolean {
 }
 import {
   usePreferencesStore,
+  useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
@@ -58,6 +59,8 @@ import { BoardTaskDateFilter } from "./BoardTaskDateFilter";
 import { BoardEditDialog } from "./BoardEditDialog";
 import { TaskGroupsEditorDialog } from "./TaskGroupsEditorDialog";
 import { TaskPrioritiesEditorDialog } from "./TaskPrioritiesEditorDialog";
+import { ReleaseSwitcher } from "./ReleaseSwitcher";
+import { ReleasesEditorDialog } from "./ReleasesEditorDialog";
 import {
   BoardKeyboardNavProvider,
   useBoardKeyboardNavOptional,
@@ -87,6 +90,7 @@ import { getBoardThemeStyle } from "./boardTheme";
 import { cn } from "@/lib/utils";
 import { useBoardSearch } from "@/context/BoardSearchContext";
 import type { BoardStatsFilter } from "../../../shared/boardStats";
+import { RELEASE_FILTER_UNTAGGED } from "../../../shared/boardFilters";
 import { BoardStatsChipsRow } from "./BoardStatsChips";
 import {
   BoardStatsDisplayProvider,
@@ -437,6 +441,24 @@ function BoardShortcutBindings({
           },
         });
       },
+      assignDefaultReleaseToHighlightedTask: (b) => {
+        const def = b.defaultReleaseId;
+        if (def == null) return;
+        const id = nav?.highlightedTaskId;
+        if (id == null) return;
+        const task = b.tasks.find((t) => t.id === id);
+        if (!task) return;
+        if (!b.releases.some((r) => r.id === def)) return;
+        const now = new Date().toISOString();
+        updateTask.mutate({
+          boardId: b.id,
+          task: {
+            ...task,
+            releaseId: def,
+            updatedAt: now,
+          },
+        });
+      },
     }),
     [
       openHelp,
@@ -492,6 +514,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [boardEditOpen, setBoardEditOpen] = useState(false);
   const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
   const [prioritiesEditorOpen, setPrioritiesEditorOpen] = useState(false);
+  const [releasesEditorOpen, setReleasesEditorOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [editingBoardName, setEditingBoardName] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
@@ -766,6 +789,10 @@ export function BoardView({ boardId }: BoardViewProps) {
     data?.id ?? boardId ?? "",
     data?.taskPriorities ?? [],
   );
+  const activeReleaseIds = useResolvedActiveReleaseIds(
+    data?.id ?? boardId ?? "",
+    data?.releases ?? [],
+  );
   const dateFilterResolved = useResolvedTaskDateFilter(
     data?.id ?? boardId ?? "",
   );
@@ -790,9 +817,16 @@ export function BoardView({ boardId }: BoardViewProps) {
     return {
       activeGroupIds: activeTaskGroupIds,
       activePriorityIds: activeTaskPriorityIds,
+      activeReleaseIds: activeReleaseIds,
       dateFilter: dateFilterResolved,
     };
-  }, [data, activeTaskGroupIds, activeTaskPriorityIds, dateFilterResolved]);
+  }, [
+    data,
+    activeTaskGroupIds,
+    activeTaskPriorityIds,
+    activeReleaseIds,
+    dateFilterResolved,
+  ]);
 
   const boardStatsQuery = useBoardStats(data?.id ?? null, statsFilter, {
     enabled: Boolean(data?.showStats),
@@ -948,6 +982,33 @@ export function BoardView({ boardId }: BoardViewProps) {
           (priority) => String(priority.id) === activeTaskPriorityIds[0],
         )?.color
       : undefined;
+  const activeReleaseLabels =
+    activeReleaseIds?.map((releaseId) => {
+      if (releaseId === RELEASE_FILTER_UNTAGGED) return "Untagged";
+      const r = data.releases.find((x) => String(x.id) === releaseId);
+      return r?.name ?? "";
+    }).filter(Boolean) ?? null;
+  const activeReleaseSummary =
+    activeReleaseLabels == null
+      ? null
+      : activeReleaseLabels.length === 1
+        ? activeReleaseLabels[0]!
+        : `(${activeReleaseLabels.length} Releases)`;
+  const activeReleaseTooltip =
+    activeReleaseLabels != null && activeReleaseLabels.length > 1
+      ? activeReleaseLabels.join(", ")
+      : undefined;
+  const activeReleaseColor =
+    activeReleaseIds &&
+    activeReleaseIds.length === 1 &&
+    activeReleaseIds[0] !== RELEASE_FILTER_UNTAGGED
+      ? data.releases.find((r) => String(r.id) === activeReleaseIds[0])?.color ??
+        undefined
+      : undefined;
+  const defaultReleaseForHeaderChip =
+    data.defaultReleaseId != null
+      ? data.releases.find((r) => r.id === data.defaultReleaseId) ?? null
+      : null;
   const activeDateSummary = dateFilterResolved
     ? formatTaskDateFilterBadge(
         dateFilterResolved.startDate,
@@ -1200,6 +1261,24 @@ export function BoardView({ boardId }: BoardViewProps) {
                   </span>
                 </div>
               ) : null}
+              {activeReleaseSummary ? (
+                <div
+                  className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                  title={activeReleaseTooltip}
+                >
+                  <span className="uppercase tracking-wide">Release</span>
+                  {activeReleaseColor ? (
+                    <span
+                      className="size-2.5 shrink-0 rounded-full border border-black/30"
+                      style={{ backgroundColor: activeReleaseColor }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="truncate font-medium text-foreground">
+                    {activeReleaseSummary}
+                  </span>
+                </div>
+              ) : null}
               {activeDateSummary ? (
                 <div className="inline-flex min-w-0 max-w-[14rem] items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
                   <span className="uppercase tracking-wide">Dates</span>
@@ -1336,6 +1415,35 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <div className="min-w-0">
                   <BoardTaskDateFilter board={data} />
                 </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1 basis-[min(100%,24rem)]">
+                    <ReleaseSwitcher
+                      board={data}
+                      headerHovered={headerHovered}
+                      onOpenReleasesEditor={() => setReleasesEditorOpen(true)}
+                    />
+                  </div>
+                  {defaultReleaseForHeaderChip ? (
+                    <div
+                      className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                      title={`Default release: ${defaultReleaseForHeaderChip.name}`}
+                    >
+                      <span className="uppercase tracking-wide">Default</span>
+                      {defaultReleaseForHeaderChip.color ? (
+                        <span
+                          className="size-2.5 shrink-0 rounded-full border border-black/30"
+                          style={{
+                            backgroundColor: defaultReleaseForHeaderChip.color,
+                          }}
+                          aria-hidden
+                        />
+                      ) : null}
+                      <span className="truncate font-medium text-foreground">
+                        {defaultReleaseForHeaderChip.name}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
@@ -1391,6 +1499,12 @@ export function BoardView({ boardId }: BoardViewProps) {
         board={data}
         open={prioritiesEditorOpen}
         onClose={() => setPrioritiesEditorOpen(false)}
+      />
+
+      <ReleasesEditorDialog
+        board={data}
+        open={releasesEditorOpen}
+        onClose={() => setReleasesEditorOpen(false)}
       />
 
       <BoardTaskDeleteConfirm

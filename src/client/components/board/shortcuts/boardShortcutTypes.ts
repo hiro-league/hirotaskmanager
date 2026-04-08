@@ -44,6 +44,8 @@ export interface BoardShortcutActions {
   toggleBoardStats: (board: Board) => void;
   /** R — reopen highlighted task to canonical open if closed. */
   reopenHighlightedTask: (board: Board) => void;
+  /** E — set highlighted task release to the board default (overwrite). */
+  assignDefaultReleaseToHighlightedTask: (board: Board) => void;
 }
 
 /** Help dialog tab — must match {@link BoardShortcutDefinition.helpTab} on each registry entry. */

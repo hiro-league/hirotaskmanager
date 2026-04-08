@@ -36,6 +36,8 @@ export function useCreateTask() {
       groupId: number;
       /** Omitted → server uses builtin `none` for the board. */
       priorityId?: number;
+      /** Omitted → server applies board auto-assign rules; `null` → untagged. */
+      releaseId?: number | null;
       emoji?: string | null;
     }) => {
       const body: Record<string, unknown> = {
@@ -48,6 +50,9 @@ export function useCreateTask() {
       };
       if (input.priorityId !== undefined) {
         body.priorityId = input.priorityId;
+      }
+      if (input.releaseId !== undefined) {
+        body.releaseId = input.releaseId;
       }
       return fetchJson<TaskMutationResult>(`/api/boards/${input.boardId}/tasks`, {
         method: "POST",
@@ -77,6 +82,7 @@ export function useCreateTask() {
         status: input.status,
         order: maxOrder + 1,
         emoji: input.emoji ?? null,
+        ...(input.releaseId !== undefined ? { releaseId: input.releaseId } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -135,6 +141,7 @@ export function useUpdateTask() {
             order: t.order,
             color: t.color ?? null,
             emoji: t.emoji ?? null,
+            releaseId: t.releaseId ?? null,
           }),
         },
       );

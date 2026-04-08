@@ -36,6 +36,10 @@ function buildOptimisticBoard(id: number, name: string): Board {
     defaultTaskGroupId: firstGroupId,
     deletedGroupFallbackId: firstGroupId,
     taskPriorities,
+    releases: [],
+    defaultReleaseId: null,
+    autoAssignReleaseOnCreateUi: false,
+    autoAssignReleaseOnCreateCli: false,
     visibleStatuses: [...DEFAULT_STATUS_IDS],
     boardLayout: "stacked",
     boardColor: DEFAULT_BOARD_COLOR,
@@ -135,6 +139,9 @@ export function usePatchBoard() {
       cliPolicy?: BoardCliPolicy;
       description?: string | null;
       boardColor?: Board["boardColor"];
+      defaultReleaseId?: number | null;
+      autoAssignReleaseOnCreateUi?: boolean;
+      autoAssignReleaseOnCreateCli?: boolean;
     }) => {
       const body: Record<string, unknown> = {};
       if (input.name !== undefined) body.name = input.name;
@@ -142,6 +149,15 @@ export function usePatchBoard() {
       if (input.cliPolicy !== undefined) body.cliPolicy = input.cliPolicy;
       if (input.description !== undefined) body.description = input.description;
       if (input.boardColor !== undefined) body.boardColor = input.boardColor;
+      if (input.defaultReleaseId !== undefined) {
+        body.defaultReleaseId = input.defaultReleaseId;
+      }
+      if (input.autoAssignReleaseOnCreateUi !== undefined) {
+        body.autoAssignReleaseOnCreateUi = input.autoAssignReleaseOnCreateUi;
+      }
+      if (input.autoAssignReleaseOnCreateCli !== undefined) {
+        body.autoAssignReleaseOnCreateCli = input.autoAssignReleaseOnCreateCli;
+      }
       return fetchJson<Board>(`/api/boards/${input.boardId}`, {
         method: "PATCH",
         headers: jsonHeaders,
@@ -184,6 +200,17 @@ export function usePatchBoard() {
             : {}),
           ...(input.boardColor !== undefined
             ? { boardColor: input.boardColor ?? undefined }
+            : {}),
+          ...(input.defaultReleaseId !== undefined
+            ? { defaultReleaseId: input.defaultReleaseId }
+            : {}),
+          ...(input.autoAssignReleaseOnCreateUi !== undefined
+            ? { autoAssignReleaseOnCreateUi: input.autoAssignReleaseOnCreateUi }
+            : {}),
+          ...(input.autoAssignReleaseOnCreateCli !== undefined
+            ? {
+                autoAssignReleaseOnCreateCli: input.autoAssignReleaseOnCreateCli,
+              }
             : {}),
           updatedAt: new Date().toISOString(),
         });

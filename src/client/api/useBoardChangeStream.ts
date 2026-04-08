@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BoardEvent } from "../../shared/boardEvents";
+import { mergeReleaseUpsertIntoList } from "../../shared/boardReleaseMerge";
 import type { Board } from "../../shared/models";
 import {
   boardDetailQueryKey,
@@ -91,6 +92,24 @@ export function useBoardChangeStream(
       const event = JSON.parse((raw as MessageEvent<string>).data) as BoardEvent;
       if (isAlreadyApplied(event)) return;
       invalidateBoard();
+    };
+
+    const onReleaseUpserted = (raw: Event) => {
+      const event = JSON.parse((raw as MessageEvent<string>).data) as BoardEvent;
+      if (event.kind !== "release-upserted" || isAlreadyApplied(event)) {
+        return;
+      }
+      const current = getCurrentBoard();
+      if (!current) {
+        invalidateBoard();
+        return;
+      }
+      setBoardCaches((b) => ({
+        ...b,
+        releases: mergeReleaseUpsertIntoList(b.releases, event.release),
+        updatedAt: event.boardUpdatedAt,
+      }));
+      invalidateBoardStatsQueries(qc, event.boardId);
     };
 
     const onTaskCreatedOrUpdated = async (raw: Event) => {
@@ -198,6 +217,7 @@ export function useBoardChangeStream(
     };
 
     es.addEventListener("board-changed", onBoardChanged);
+    es.addEventListener("release-upserted", onReleaseUpserted);
     es.addEventListener("task-created", onTaskCreatedOrUpdated);
     es.addEventListener("task-updated", onTaskCreatedOrUpdated);
     es.addEventListener("task-deleted", onTaskRemovedFromLiveBoard);
@@ -212,6 +232,7 @@ export function useBoardChangeStream(
     es.addEventListener("list-restored", onTaskOrListRestored);
     return () => {
       es.removeEventListener("board-changed", onBoardChanged);
+      es.removeEventListener("release-upserted", onReleaseUpserted);
       es.removeEventListener("task-created", onTaskCreatedOrUpdated);
       es.removeEventListener("task-updated", onTaskCreatedOrUpdated);
       es.removeEventListener("task-deleted", onTaskRemovedFromLiveBoard);

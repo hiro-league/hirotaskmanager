@@ -5,7 +5,7 @@ import { runPendingMigrations } from "../migrations/runner";
 import { createBoardWithDefaults, loadBoard, patchBoard } from "./board";
 import { createBoardRelease, deleteBoardRelease } from "./releases";
 import { createListOnBoard } from "./lists";
-import { createTaskOnBoard } from "./tasks";
+import { createTaskOnBoard, patchTaskOnBoard } from "./tasks";
 
 beforeAll(() => {
   const mem = new Database(":memory:");
@@ -143,5 +143,111 @@ describe("board releases (phase 1–2)", () => {
       { principal: "web", label: null },
     )!;
     expect(tn.task.releaseId).toBeNull();
+  });
+
+  test("auto-assign off: default set but toggles false leaves new tasks untagged", async () => {
+    const board = await createBoardWithDefaults("R4", "r4", null, "", {
+      cliBootstrap: "cli_full",
+    });
+    const list = createListOnBoard(board.id, { name: "L" })!;
+    const rel = createBoardRelease(board.id, { name: "Rel" })!;
+    const g = board.taskGroups[0]!.id;
+    await patchBoard(board.id, {
+      defaultReleaseId: rel.id,
+      autoAssignReleaseOnCreateUi: false,
+      autoAssignReleaseOnCreateCli: false,
+    });
+    const t = createTaskOnBoard(
+      board.id,
+      {
+        listId: list.list.id,
+        groupId: g,
+        title: "x",
+        body: "",
+        status: "open",
+      },
+      { principal: "web", label: null },
+    )!;
+    expect(t.task.releaseId).toBeNull();
+  });
+
+  test("auto-assign split: UI on, CLI off", async () => {
+    const board = await createBoardWithDefaults("R5", "r5", null, "", {
+      cliBootstrap: "cli_full",
+    });
+    const list = createListOnBoard(board.id, { name: "L" })!;
+    const rel = createBoardRelease(board.id, { name: "S" })!;
+    const g = board.taskGroups[0]!.id;
+    await patchBoard(board.id, {
+      defaultReleaseId: rel.id,
+      autoAssignReleaseOnCreateUi: true,
+      autoAssignReleaseOnCreateCli: false,
+    });
+    const tw = createTaskOnBoard(
+      board.id,
+      {
+        listId: list.list.id,
+        groupId: g,
+        title: "w",
+        body: "",
+        status: "open",
+      },
+      { principal: "web", label: null },
+    )!;
+    expect(tw.task.releaseId).toBe(rel.id);
+    const tc = createTaskOnBoard(
+      board.id,
+      {
+        listId: list.list.id,
+        groupId: g,
+        title: "c",
+        body: "",
+        status: "open",
+      },
+      { principal: "cli", label: null },
+    )!;
+    expect(tc.task.releaseId).toBeNull();
+  });
+
+  test("reject release id from another board on create and patch", async () => {
+    const a = await createBoardWithDefaults("RA", "ra", null, "", {
+      cliBootstrap: "cli_full",
+    });
+    const b = await createBoardWithDefaults("RB", "rb", null, "", {
+      cliBootstrap: "cli_full",
+    });
+    createListOnBoard(a.id, { name: "LA" })!;
+    const listB = createListOnBoard(b.id, { name: "LB" })!;
+    const relA = createBoardRelease(a.id, { name: "onlyA" })!;
+    const gB = b.taskGroups[0]!.id;
+    const badCreate = createTaskOnBoard(
+      b.id,
+      {
+        listId: listB.list.id,
+        groupId: gB,
+        title: "t",
+        body: "",
+        status: "open",
+        releaseId: relA.id,
+      },
+      { principal: "web", label: null },
+    );
+    expect(badCreate).toBeNull();
+
+    const onB = createTaskOnBoard(
+      b.id,
+      {
+        listId: listB.list.id,
+        groupId: gB,
+        title: "t2",
+        body: "",
+        status: "open",
+      },
+      { principal: "web", label: null },
+    )!;
+    const badPatch = patchTaskOnBoard(b.id, onB.task.id, {
+      releaseId: relA.id,
+    });
+    expect(badPatch).toBeNull();
   });
 });

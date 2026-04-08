@@ -32,7 +32,7 @@ hirotm boards list
 hirotm boards show <id-or-slug>
 hirotm boards add --client-name "Cursor Agent" [name] [--emoji <text>]
 hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> [name] [--emoji <text>]
-hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--title ...] [--body|--body-file|--body-stdin ...]
 hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--body|--body-file|--body-stdin ...]
 hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm statuses list
@@ -55,6 +55,10 @@ hirotm start --background
 3. Use read commands to inspect current state.
 4. Keep outputs in JSON when reporting or making follow-up decisions.
 5. When performing writes as an automated agent, add `--client-name "Cursor Agent"` unless the user asked for a different writer label.
+
+## Task priority
+
+Every task has a priority row on the board (builtin **`none`**, value `0`, is the default). Omit `--priority` on `tasks add` for that default; pass `--priority <id>` with a row id from `boards show` to set or change priority (including resetting to `none` on `tasks update`).
 
 ## Output Expectations
 

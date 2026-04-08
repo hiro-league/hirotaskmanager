@@ -1,8 +1,8 @@
 import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { Bot, Check } from "lucide-react";
 import {
+  NONE_TASK_PRIORITY_VALUE,
   priorityDisplayLabel,
-  priorityLabelForId,
   taskDisplayTitle,
   type Task,
   type TaskPriorityDefinition,
@@ -157,6 +157,12 @@ function CliCreatedIndicator({
   );
 }
 
+/** Light priority swatches need a border so the pill stays visible on light card backgrounds. */
+function isVeryLightPriorityBackground(color: string): boolean {
+  const c = color.trim().toLowerCase();
+  return c === "#ffffff" || c === "#fff" || c === "white";
+}
+
 function PriorityPill({
   label,
   color,
@@ -166,9 +172,15 @@ function PriorityPill({
 }) {
   const displayLabel = priorityDisplayLabel(label);
   if (!displayLabel) return null;
+  const light = isVeryLightPriorityBackground(color);
   return (
     <span
-      className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-black/85"
+      className={cn(
+        "inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+        light
+          ? "border border-border/70 text-foreground"
+          : "text-black/85",
+      )}
       title={label}
       style={{
         backgroundColor: color,
@@ -211,11 +223,10 @@ function TaskCardContent({
   titleEditBusy?: boolean;
 }) {
   const viewSpec = getTaskCardViewSpec(viewMode);
-  const priorityLabel = priorityLabelForId(taskPriorities, task.priorityId);
-  const priorityColor =
-    task.priorityId != null
-      ? taskPriorities.find((priority) => priority.id === task.priorityId)?.color
-      : undefined;
+  const priorityRow = taskPriorities.find((p) => p.id === task.priorityId);
+  // Default builtin `none` is not surfaced as a chip (same UX as “no priority”).
+  const showPriorityPill =
+    priorityRow != null && priorityRow.value !== NONE_TASK_PRIORITY_VALUE;
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const titleBlurModeRef = useRef<"commit" | "cancel">("commit");
 
@@ -308,8 +319,8 @@ function TaskCardContent({
           <span className="uppercase tracking-wide text-muted-foreground/80">
             {groupLabel}
           </span>
-          {priorityLabel && priorityColor ? (
-            <PriorityPill label={priorityLabel} color={priorityColor} />
+          {showPriorityPill && priorityRow ? (
+            <PriorityPill label={priorityRow.label} color={priorityRow.color} />
           ) : null}
           <CliCreatedIndicator task={task} />
         </div>

@@ -57,24 +57,28 @@ export function AppHeader() {
         </span>
       </div>
 
-      {/* Cosmetic search field + icon; single button so the whole row is clickable (avoids overlay dead zones). */}
+      {/* Search: shrinks with the middle flex slot; below container width threshold, collapses to icon-only. */}
       {showBoardSearchButton ? (
-        <div className="flex w-full max-w-md min-w-0 shrink-[2] items-center justify-center sm:min-w-[12rem] sm:shrink">
+        <div className="@container flex min-w-0 max-w-md flex-1 shrink-[2] items-center justify-center px-1">
           <button
             type="button"
             title="Search tasks (K or F3)"
             aria-label="Search tasks on this board"
             onClick={() => boardSearch.openSearch()}
             className={cn(
-              "inline-flex h-9 w-full min-h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-muted/70 px-3 py-0 text-left text-sm text-muted-foreground shadow-sm",
-              "transition-[color,background-color,box-shadow] hover:bg-muted hover:text-foreground hover:shadow",
+              "inline-flex h-9 min-h-9 w-full min-w-9 max-w-md items-center gap-2 rounded-md border border-border bg-muted/70 px-3 py-0 text-left text-sm text-muted-foreground shadow-sm",
+              "transition-[color,background-color,box-shadow,width] hover:bg-muted hover:text-foreground hover:shadow",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-header",
               "active:translate-y-px active:shadow-sm",
+              // Icon-only when the search slot is too narrow (container query on parent).
+              "@max-[280px]:w-9 @max-[280px]:max-w-9 @max-[280px]:flex-none @max-[280px]:justify-center @max-[280px]:gap-0 @max-[280px]:px-0",
             )}
           >
             {/* Icon uses currentColor so it tracks the button’s muted → foreground hover. */}
             <Search className="size-4 shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1 truncate select-none">Search tasks…</span>
+            <span className="min-w-0 flex-1 truncate select-none @max-[280px]:hidden">
+              Search tasks…
+            </span>
           </button>
         </div>
       ) : null}

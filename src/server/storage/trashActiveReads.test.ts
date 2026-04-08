@@ -53,7 +53,6 @@ describe("trash active reads (phase 1)", () => {
       title: "t1",
       body: "",
       groupId,
-      priorityId: board.taskPriorities[0]?.id ?? null,
     });
     expect(tr).not.toBeNull();
     const taskId = tr!.task.id;
@@ -86,7 +85,6 @@ describe("trash active reads (phase 1)", () => {
       title: "uniqueftstoken",
       body: "",
       groupId,
-      priorityId: board.taskPriorities[0]?.id ?? null,
     });
     const taskId = tr!.task.id;
 

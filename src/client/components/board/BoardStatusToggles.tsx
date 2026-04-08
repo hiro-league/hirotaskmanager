@@ -11,6 +11,7 @@ import {
 import { statusDotClass } from "./laneStatusTheme";
 import {
   BOARD_HEADER_FILTER_SECTION_LABEL_CLASS,
+  BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS,
   boardHeaderToggleButtonClass,
 } from "./boardHeaderButtonStyles";
 
@@ -59,40 +60,47 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2"
+      className="flex min-w-0 flex-wrap items-center gap-2"
       role="group"
       aria-label="Show or hide task statuses"
     >
-      <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Status</span>
-      {workflowOrder.map((statusId) => {
-        const active = visibleStatusesForBoard(board, workflowOrder).includes(
-          statusId,
-        );
-        const label =
-          statuses?.find((s) => s.id === statusId)?.label ?? statusId;
-        return (
-          <button
-            key={statusId}
-            type="button"
-            className={boardHeaderToggleButtonClass(active)}
-            aria-pressed={active}
-            onPointerDown={stopPan}
-            onClick={() => toggle(statusId)}
-          >
-            {/* Mirror the board lane colors in the header so each workflow state reads faster at a glance. */}
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                className={cn(
-                  "size-2.5 shrink-0 rounded-full border border-black",
-                  statusDotClass(statusId),
-                )}
-                aria-hidden
-              />
-              <span>{label}</span>
-            </span>
-          </button>
-        );
-      })}
+      {/* Match Groups/Priority label inset: reserve the same leading slot as the pencil row (empty here). */}
+      <span className="inline-flex shrink-0 items-center gap-1">
+        <span className={BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS} aria-hidden />
+        <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Status</span>
+      </span>
+      {/* Keep all status chips in one flex item so the row wraps label vs chip-group, not each chip separately. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {workflowOrder.map((statusId) => {
+          const active = visibleStatusesForBoard(board, workflowOrder).includes(
+            statusId,
+          );
+          const label =
+            statuses?.find((s) => s.id === statusId)?.label ?? statusId;
+          return (
+            <button
+              key={statusId}
+              type="button"
+              className={boardHeaderToggleButtonClass(active)}
+              aria-pressed={active}
+              onPointerDown={stopPan}
+              onClick={() => toggle(statusId)}
+            >
+              {/* Mirror the board lane colors in the header so each workflow state reads faster at a glance. */}
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-full border border-black",
+                    statusDotClass(statusId),
+                  )}
+                  aria-hidden
+                />
+                <span>{label}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

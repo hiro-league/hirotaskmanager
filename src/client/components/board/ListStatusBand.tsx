@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
-  ALL_TASK_GROUPS,
   effectiveDefaultTaskGroupId,
   groupDisplayLabelForId,
   type Board,
@@ -16,7 +15,7 @@ import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTa
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import {
   type TaskCardViewMode,
-  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
   useResolvedTaskDateFilter,
@@ -52,7 +51,7 @@ export function ListStatusBand({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
-  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
     board.id,
     board.taskPriorities,
@@ -70,14 +69,14 @@ export function ListStatusBand({
   }, [board.tasks]);
 
   const taskFilter = useMemo<
-    Pick<BoardTaskFilterState, "activeGroup" | "activePriorityIds" | "dateFilter">
+    Pick<BoardTaskFilterState, "activeGroupIds" | "activePriorityIds" | "dateFilter">
   >(
     () => ({
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilter: dateFilterResolved,
     }),
-    [activeGroup, activePriorityIds, dateFilterResolved],
+    [activeGroupIds, activePriorityIds, dateFilterResolved],
   );
 
   const tasks = useMemo(() => {
@@ -247,10 +246,8 @@ export function ListStatusBand({
     const trimmed = title.trim();
     if (!trimmed) return;
     const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
-    const defaultGroupId =
-      activeGroup !== ALL_TASK_GROUPS
-        ? Number(activeGroup)
-        : effectiveDefaultTaskGroupId(board);
+    // New tasks always start in the board default group, even when the filter narrows visible groups.
+    const defaultGroupId = effectiveDefaultTaskGroupId(board);
     createTask.mutate(
       {
         boardId: board.id,

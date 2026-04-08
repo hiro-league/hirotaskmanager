@@ -9,6 +9,7 @@ import {
 import type { CreatorPrincipalType } from "../../shared/provenance";
 import {
   DEFAULT_STATUS_IDS,
+  NONE_TASK_PRIORITY_VALUE,
   createDefaultTaskGroups,
   createDefaultTaskPriorities,
   sortPrioritiesByValue,
@@ -17,6 +18,7 @@ import {
   type GroupDefinition,
   type List,
   type Status,
+  type ReleaseDefinition,
   type Task,
   type TaskPriorityDefinition,
 } from "../../shared/models";
@@ -37,6 +39,7 @@ import {
   insertFullBoardCliPolicy,
   upsertBoardCliPolicy,
 } from "./cliPolicy";
+import { listReleasesForBoard } from "./releases";
 
 function normalizeCreatorPrincipal(
   raw: string | null | undefined,
@@ -118,6 +121,9 @@ type BoardRowWithPolicyJoin = {
   updated_at: string;
   default_task_group_id: number | null;
   deleted_group_fallback_id: number | null;
+  default_release_id: number | null;
+  auto_assign_release_ui: number | null;
+  auto_assign_release_cli: number | null;
   created_by_principal: string | null;
   created_by_label: string | null;
   read_board: number | null;
@@ -199,6 +205,7 @@ export function loadBoard(boardId: number): Board | null {
     .query(
       `SELECT b.id, b.name, b.slug, b.emoji, b.description, b.created_at, b.updated_at,
               b.default_task_group_id, b.deleted_group_fallback_id,
+              b.default_release_id, b.auto_assign_release_ui, b.auto_assign_release_cli,
               b.created_by_principal, b.created_by_label,
               ${BOARD_INDEX_POLICY_COLS}
        FROM board b
@@ -286,6 +293,17 @@ export function loadBoard(boardId: number): Board | null {
     })),
   );
 
+  const releases: ReleaseDefinition[] = listReleasesForBoard(boardId);
+  const releaseIdSet = new Set(releases.map((r) => r.id));
+  let defaultReleaseId: number | null = boardRow.default_release_id ?? null;
+  if (defaultReleaseId != null && !releaseIdSet.has(defaultReleaseId)) {
+    defaultReleaseId = null;
+  }
+  const autoAssignReleaseOnCreateUi =
+    Boolean(boardRow.auto_assign_release_ui) && defaultReleaseId != null;
+  const autoAssignReleaseOnCreateCli =
+    Boolean(boardRow.auto_assign_release_cli) && defaultReleaseId != null;
+
   const listRows = db
     .query(
       "SELECT id, name, sort_order, color, emoji, created_by_principal, created_by_label FROM list WHERE board_id = ? AND deleted_at IS NULL ORDER BY sort_order, id",
@@ -316,7 +334,7 @@ export function loadBoard(boardId: number): Board | null {
   const taskRows = db
     .query(
       `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji,
-              t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
+              t.release_id, t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
        FROM task t
        INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
        WHERE t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
@@ -326,13 +344,14 @@ export function loadBoard(boardId: number): Board | null {
     id: number;
     list_id: number;
     group_id: number;
-    priority_id: number | null;
+    priority_id: number;
     status_id: string;
     title: string;
     body: string;
     sort_order: number;
     color: string | null;
     emoji: string | null;
+    release_id: number | null;
     created_at: string;
     updated_at: string;
     closed_at: string | null;
@@ -340,26 +359,32 @@ export function loadBoard(boardId: number): Board | null {
     created_by_label: string | null;
   }[];
 
-  const tasks: Task[] = taskRows.map((t) => ({
-    id: t.id,
-    listId: t.list_id,
-    title: t.title,
-    body: t.body,
-    groupId: t.group_id,
-    priorityId: t.priority_id,
-    status: t.status_id as Task["status"],
-    order: t.sort_order,
-    color: t.color ?? undefined,
-    emoji:
-      t.emoji != null && String(t.emoji).trim() !== ""
-        ? String(t.emoji).trim()
-        : null,
-    createdAt: t.created_at,
-    updatedAt: t.updated_at,
-    closedAt: t.closed_at ?? undefined,
-    createdByPrincipal: normalizeCreatorPrincipal(t.created_by_principal),
-    createdByLabel: t.created_by_label,
-  }));
+  const tasks: Task[] = taskRows.map((t) => {
+    const rawRid = t.release_id;
+    const releaseId =
+      rawRid != null && releaseIdSet.has(rawRid) ? rawRid : null;
+    return {
+      id: t.id,
+      listId: t.list_id,
+      title: t.title,
+      body: t.body,
+      groupId: t.group_id,
+      priorityId: t.priority_id,
+      status: t.status_id as Task["status"],
+      order: t.sort_order,
+      color: t.color ?? undefined,
+      emoji:
+        t.emoji != null && String(t.emoji).trim() !== ""
+          ? String(t.emoji).trim()
+          : null,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+      closedAt: t.closed_at ?? undefined,
+      createdByPrincipal: normalizeCreatorPrincipal(t.created_by_principal),
+      createdByLabel: t.created_by_label,
+      releaseId,
+    };
+  });
 
   const rawVis = prefs?.visible_statuses
     ? parseJsonColumn<string[]>(prefs.visible_statuses, [])
@@ -394,6 +419,10 @@ export function loadBoard(boardId: number): Board | null {
     defaultTaskGroupId,
     deletedGroupFallbackId,
     taskPriorities,
+    releases,
+    defaultReleaseId,
+    autoAssignReleaseOnCreateUi,
+    autoAssignReleaseOnCreateCli,
     visibleStatuses,
     statusBandWeights,
     boardLayout:
@@ -659,11 +688,22 @@ function applyTaskPriorityChanges(
     keptPriorityIds.add(Number(result.lastInsertRowid));
   }
 
+  // Every board must keep the system `none` slot so tasks always have a valid `priority_id`.
+  const noneRow = db
+    .query(
+      "SELECT id FROM task_priority WHERE board_id = ? AND value = ?",
+    )
+    .get(boardId, NONE_TASK_PRIORITY_VALUE) as { id: number } | null;
+  if (!noneRow) {
+    throw new Error("Board missing builtin none priority");
+  }
   for (const row of existingRows) {
     if (row.is_system !== 0 || keptPriorityIds.has(row.id)) continue;
-    // Clear assignments before deleting custom priorities so task edits can leave
-    // tasks unassigned after the row disappears.
-    db.run("UPDATE task SET priority_id = NULL WHERE priority_id = ?", [row.id]);
+    // Reassign tasks off deleted custom priorities to builtin `none` before removing the row.
+    db.run("UPDATE task SET priority_id = ? WHERE priority_id = ?", [
+      noneRow.id,
+      row.id,
+    ]);
     db.run("DELETE FROM task_priority WHERE id = ?", [row.id]);
   }
 }
@@ -854,6 +894,9 @@ export async function patchBoard(
     cliPolicy?: BoardCliPolicy;
     description?: string | null;
     boardColor?: Board["boardColor"];
+    defaultReleaseId?: number | null;
+    autoAssignReleaseOnCreateUi?: boolean;
+    autoAssignReleaseOnCreateCli?: boolean;
   },
 ): Promise<Board | null> {
   const hasName = "name" in patch;
@@ -861,7 +904,12 @@ export async function patchBoard(
   const hasCliPolicy = "cliPolicy" in patch;
   const hasDesc = "description" in patch;
   const hasColor = "boardColor" in patch;
-  if (!hasName && !hasEmoji && !hasCliPolicy && !hasDesc && !hasColor) return null;
+  const hasDefaultRel = "defaultReleaseId" in patch;
+  const hasAutoUi = "autoAssignReleaseOnCreateUi" in patch;
+  const hasAutoCli = "autoAssignReleaseOnCreateCli" in patch;
+  const hasReleasePatch = hasDefaultRel || hasAutoUi || hasAutoCli;
+  if (!hasName && !hasEmoji && !hasCliPolicy && !hasDesc && !hasColor && !hasReleasePatch)
+    return null;
 
   const db = getDb();
   if (!boardExists(db, boardId)) return null;
@@ -902,17 +950,59 @@ export async function patchBoard(
     (hasCliPolicy && normalizedPolicy !== null) ||
     (hasDesc && nextDesc !== (existing.description ?? ""));
 
-  if (!metaChanged && !colorChanged) return existing;
+  let nextDefaultReleaseId = existing.defaultReleaseId;
+  if (hasDefaultRel) {
+    const v = patch.defaultReleaseId;
+    if (v != null) {
+      if (!existing.releases.some((r) => r.id === v)) return null;
+      nextDefaultReleaseId = v;
+    } else {
+      nextDefaultReleaseId = null;
+    }
+  }
+
+  let nextAutoUi = existing.autoAssignReleaseOnCreateUi;
+  let nextAutoCli = existing.autoAssignReleaseOnCreateCli;
+  if (hasAutoUi) nextAutoUi = Boolean(patch.autoAssignReleaseOnCreateUi);
+  if (hasAutoCli) nextAutoCli = Boolean(patch.autoAssignReleaseOnCreateCli);
+  // Auto-assign requires a default release (product rule: toggles off when no default).
+  if (nextDefaultReleaseId == null) {
+    nextAutoUi = false;
+    nextAutoCli = false;
+  }
+
+  const releaseChanged =
+    hasReleasePatch &&
+    (nextDefaultReleaseId !== existing.defaultReleaseId ||
+      nextAutoUi !== existing.autoAssignReleaseOnCreateUi ||
+      nextAutoCli !== existing.autoAssignReleaseOnCreateCli);
+
+  if (!metaChanged && !colorChanged && !releaseChanged) return existing;
 
   const now = new Date().toISOString();
-  if (metaChanged) {
+  if (metaChanged || releaseChanged) {
     withTransaction(db, () => {
-      db.run(
-        "UPDATE board SET name = ?, slug = ?, emoji = ?, description = ?, updated_at = ? WHERE id = ?",
-        [nextName, nextSlug, nextEmoji, nextDesc, now, boardId],
-      );
-      if (hasCliPolicy && normalizedPolicy) {
-        upsertBoardCliPolicy(boardId, normalizedPolicy);
+      if (metaChanged) {
+        db.run(
+          "UPDATE board SET name = ?, slug = ?, emoji = ?, description = ?, updated_at = ? WHERE id = ?",
+          [nextName, nextSlug, nextEmoji, nextDesc, now, boardId],
+        );
+        if (hasCliPolicy && normalizedPolicy) {
+          upsertBoardCliPolicy(boardId, normalizedPolicy);
+        }
+      }
+      if (releaseChanged) {
+        db.run(
+          `UPDATE board SET default_release_id = ?, auto_assign_release_ui = ?, auto_assign_release_cli = ?, updated_at = ?
+           WHERE id = ?`,
+          [
+            nextDefaultReleaseId,
+            nextAutoUi ? 1 : 0,
+            nextAutoCli ? 1 : 0,
+            now,
+            boardId,
+          ],
+        );
       }
     });
   }

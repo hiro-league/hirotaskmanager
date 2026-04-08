@@ -1,23 +1,28 @@
 import type { RestoreOutcome } from "../../shared/trashApi";
-import { coerceTaskStatus } from "../../shared/models";
+import {
+  coerceTaskStatus,
+  NONE_TASK_PRIORITY_VALUE,
+} from "../../shared/models";
 import type { Board, Task } from "../../shared/models";
 import type { CreatorPrincipalType } from "../../shared/provenance";
 import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
 import { boardExists, statusIsClosed } from "./helpers";
 import { loadBoard } from "./board";
+import { releaseBelongsToBoard } from "./releases";
 
 type TaskRow = {
   id: number;
   list_id: number;
   group_id: number;
-  priority_id: number | null;
+  priority_id: number;
   status_id: string;
   title: string;
   body: string;
   sort_order: number;
   color: string | null;
   emoji: string | null;
+  release_id?: number | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
@@ -64,6 +69,7 @@ function mapTaskRow(t: TaskRow): Task {
     closedAt: t.closed_at ?? undefined,
     createdByPrincipal: normalizeTaskPrincipal(t.created_by_principal) ?? "web",
     createdByLabel: t.created_by_label,
+    releaseId: t.release_id ?? null,
   };
 }
 
@@ -73,7 +79,7 @@ export function readTaskSnapshotById(boardId: number, taskId: number): Task | nu
   const db = getDb();
   const row = db
     .query(
-      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji,
+      `SELECT id, list_id, group_id, priority_id, status_id, title, body, sort_order, color, emoji, release_id,
               created_at, updated_at, closed_at, created_by_principal, created_by_label
        FROM task WHERE id = ? AND board_id = ?`,
     )
@@ -81,11 +87,50 @@ export function readTaskSnapshotById(boardId: number, taskId: number): Task | nu
   return row ? mapTaskRow(row) : null;
 }
 
+/**
+ * `releaseId` on create: omitted → optional auto-assign from board flags + principal;
+ * `null` → force untagged; a number → must belong to the board or `"invalid"`.
+ */
+function resolveReleaseIdOnTaskCreate(
+  db: ReturnType<typeof getDb>,
+  boardId: number,
+  explicit: number | null | undefined,
+  principal: CreatorPrincipalType,
+): number | null | "invalid" {
+  if (explicit === null) return null;
+  if (explicit !== undefined) {
+    return releaseBelongsToBoard(db, boardId, explicit) ? explicit : "invalid";
+  }
+  const row = db
+    .query(
+      "SELECT default_release_id, auto_assign_release_ui, auto_assign_release_cli FROM board WHERE id = ?",
+    )
+    .get(boardId) as {
+    default_release_id: number | null;
+    auto_assign_release_ui: number;
+    auto_assign_release_cli: number;
+  } | null;
+  const def = row?.default_release_id ?? null;
+  if (def == null) return null;
+  if (principal === "web" && row!.auto_assign_release_ui) return def;
+  if (principal === "cli" && row!.auto_assign_release_cli) return def;
+  return null;
+}
+
+function nonePriorityRowId(db: ReturnType<typeof getDb>, boardId: number): number | null {
+  const row = db
+    .query(
+      "SELECT id FROM task_priority WHERE board_id = ? AND value = ?",
+    )
+    .get(boardId, NONE_TASK_PRIORITY_VALUE) as { id: number } | null;
+  return row?.id ?? null;
+}
+
 export function readTaskById(boardId: number, taskId: number): Task | null {
   const db = getDb();
   const row = db
     .query(
-      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji,
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.release_id,
               t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
        FROM task t
        INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
@@ -104,8 +149,14 @@ export function createTaskOnBoard(
     title: string;
     body: string;
     groupId: number;
-    priorityId?: number | null;
+    /** Omitted → board builtin `none` priority (`value` 0). */
+    priorityId?: number;
     emoji?: string | null;
+    /**
+     * Omitted → apply board auto-assign when enabled for this principal.
+     * `null` → force untagged (no auto-assign).
+     */
+    releaseId?: number | null;
   },
   provenance?: RowProvenance,
 ): TaskWriteResult | null {
@@ -124,13 +175,16 @@ export function createTaskOnBoard(
     .get(input.groupId, boardId) as { id: number } | null;
   if (!gRow) return null;
 
-  const priorityId = input.priorityId ?? null;
-  if (priorityId !== null) {
-    const pRow = db
-      .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
-      .get(priorityId, boardId) as { id: number } | null;
-    if (!pRow) return null;
-  }
+  // Omitted `priorityId` uses the board's builtin `none` row (`task_priority.value` = 0).
+  const priorityId =
+    input.priorityId !== undefined
+      ? input.priorityId
+      : nonePriorityRowId(db, boardId);
+  if (priorityId == null) return null;
+  const pRow = db
+    .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
+    .get(priorityId, boardId) as { id: number } | null;
+  if (!pRow) return null;
 
   const allowedStatusIds = (
     db.query("SELECT id FROM status ORDER BY sort_order ASC, id ASC").all() as {
@@ -156,13 +210,20 @@ export function createTaskOnBoard(
   const emoji = input.emoji ?? null;
   const principal = provenance?.principal ?? "web";
   const label = provenance?.label ?? null;
+  const resolvedRelease = resolveReleaseIdOnTaskCreate(
+    db,
+    boardId,
+    input.releaseId,
+    principal,
+  );
+  if (resolvedRelease === "invalid") return null;
   let taskId: number | null = null;
   withTransaction(db, () => {
     const result = db.run(
       `INSERT INTO task (list_id, group_id, priority_id, board_id, status_id,
-         title, body, sort_order, color, emoji, created_at, updated_at, closed_at,
+         title, body, sort_order, color, emoji, release_id, created_at, updated_at, closed_at,
          created_by_principal, created_by_label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.listId,
         input.groupId,
@@ -174,6 +235,7 @@ export function createTaskOnBoard(
         maxOrder + 1,
         null,
         emoji,
+        resolvedRelease,
         now,
         now,
         closedAt,
@@ -198,11 +260,12 @@ export function patchTaskOnBoard(
     body: string;
     listId: number;
     groupId: number;
-    priorityId: number | null;
+    priorityId: number;
     status: string;
     order: number;
     color: string | null;
     emoji: string | null;
+    releaseId: number | null;
   }>,
 ): TaskWriteResult | null {
   const db = getDb();
@@ -210,7 +273,7 @@ export function patchTaskOnBoard(
 
   const trow = db
     .query(
-      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.created_at, t.updated_at, t.closed_at
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.release_id, t.created_at, t.updated_at, t.closed_at
        FROM task t
        INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
        INNER JOIN board b ON b.id = t.board_id
@@ -218,6 +281,12 @@ export function patchTaskOnBoard(
     )
     .get(taskId, boardId) as TaskRow | null;
   if (!trow) return null;
+
+  let releaseId =
+    patch.releaseId !== undefined ? patch.releaseId : (trow.release_id ?? null);
+  if (releaseId != null && !releaseBelongsToBoard(db, boardId, releaseId)) {
+    return null;
+  }
 
   let listId = patch.listId ?? trow.list_id;
   let groupId = patch.groupId ?? trow.group_id;
@@ -245,13 +314,10 @@ export function patchTaskOnBoard(
     .get(groupId, boardId) as { id: number } | null;
   if (!gOk) return null;
 
-  if (priorityId !== null) {
-    // Nullable priorities are valid, but any non-null id must still belong to this board.
-    const pOk = db
-      .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
-      .get(priorityId, boardId) as { id: number } | null;
-    if (!pOk) return null;
-  }
+  const pOk = db
+    .query("SELECT id FROM task_priority WHERE id = ? AND board_id = ?")
+    .get(priorityId, boardId) as { id: number } | null;
+  if (!pOk) return null;
 
   const statusChanged = trow.status_id !== statusId;
   const listChanged = trow.list_id !== listId;
@@ -290,7 +356,7 @@ export function patchTaskOnBoard(
   withTransaction(db, () => {
     db.run(
       `UPDATE task SET list_id = ?, group_id = ?, priority_id = ?, status_id = ?, title = ?, body = ?,
-         sort_order = ?, color = ?, emoji = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
+         sort_order = ?, color = ?, emoji = ?, release_id = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
       [
         listId,
         groupId,
@@ -301,6 +367,7 @@ export function patchTaskOnBoard(
         order,
         color,
         emoji,
+        releaseId,
         now,
         nextClosedAt,
         taskId,

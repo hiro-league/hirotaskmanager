@@ -2,10 +2,12 @@ import { DEFAULT_STATUS_IDS, type Board, type Task } from "../../../shared/model
 import {
   taskMatchesBoardFilter as taskMatchesBoardFilterShared,
   visibleStatusesForBoard as visibleStatusesForBoardShared,
+  type ActiveTaskGroupIds,
   type TaskDateFilterResolved,
 } from "../../../shared/boardFilters";
 
 export type {
+  ActiveTaskGroupIds,
   ActiveTaskPriorityIds,
   TaskDateFilterMode,
   TaskDateFilterResolved,
@@ -22,7 +24,7 @@ export { taskMatchesPriorityFilter } from "../../../shared/boardFilters";
 export interface BoardTaskFilterState {
   visibleStatuses: readonly string[];
   workflowOrder: readonly string[];
-  activeGroup: string;
+  activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: import("../../../shared/boardFilters").ActiveTaskPriorityIds;
   dateFilter: TaskDateFilterResolved | null;
 }
@@ -79,10 +81,14 @@ export function taskMatchesBoardFilter(
   task: Task,
   filter: Pick<
     BoardTaskFilterState,
-    "activeGroup" | "activePriorityIds" | "dateFilter"
+    "activeGroupIds" | "activePriorityIds" | "dateFilter"
   >,
 ): boolean {
-  return taskMatchesBoardFilterShared(task, filter);
+  return taskMatchesBoardFilterShared(task, {
+    activeGroupIds: filter.activeGroupIds,
+    activePriorityIds: filter.activePriorityIds,
+    dateFilter: filter.dateFilter,
+  });
 }
 
 export function listStatusTasksSorted(
@@ -91,7 +97,7 @@ export function listStatusTasksSorted(
   status: string,
   filter: Pick<
     BoardTaskFilterState,
-    "activeGroup" | "activePriorityIds" | "dateFilter"
+    "activeGroupIds" | "activePriorityIds" | "dateFilter"
   >,
 ): Task[] {
   return board.tasks
@@ -99,7 +105,7 @@ export function listStatusTasksSorted(
       (task) =>
         task.listId === listId &&
         task.status === status &&
-        taskMatchesBoardFilterShared(task, filter),
+        taskMatchesBoardFilter(task, filter),
     )
     .sort((a, b) => a.order - b.order);
 }
@@ -118,7 +124,7 @@ export function listTasksMergedSorted(
     (task) =>
       task.listId === listId &&
       vis.has(task.status) &&
-      taskMatchesBoardFilterShared(task, filter),
+      taskMatchesBoardFilter(task, filter),
   );
   return [...tasks].sort((a, b) => {
     const da = statusOrderIndex(a.status, filter.workflowOrder);

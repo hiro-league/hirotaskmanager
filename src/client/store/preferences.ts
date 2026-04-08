@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  ALL_TASK_GROUPS,
   sortPrioritiesByValue,
   type GroupDefinition,
   type TaskPriorityDefinition,
@@ -137,7 +136,9 @@ interface PersistedShape {
     notificationHideOwnWrites?: boolean;
     notificationSourceFilter?: NotificationFeedSourceFilter;
     boardFilterStripCollapsed?: boolean;
+    /** @deprecated Migrated to `activeTaskGroupIdsByBoardId`. */
     activeTaskGroupByBoardId?: Record<string, string>;
+    activeTaskGroupIdsByBoardId?: Record<string, string[]>;
     activeTaskPriorityIdsByBoardId?: Record<string, string[]>;
     taskCardViewModeByBoardId?: Record<string, TaskCardViewMode>;
     taskCardSizeByBoardId?: Record<string, TaskCardViewMode>;
@@ -179,13 +180,36 @@ function sanitizeTaskDateFilterMap(
   return out;
 }
 
+function sanitizeActiveTaskGroupIdsMap(
+  raw: unknown,
+  legacyRaw: unknown,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [id, value] of Object.entries(raw)) {
+      if (!Array.isArray(value)) continue;
+      const ids = value.filter((entry): entry is string => typeof entry === "string");
+      if (ids.length > 0) out[id] = ids;
+    }
+  }
+  if (legacyRaw && typeof legacyRaw === "object" && !Array.isArray(legacyRaw)) {
+    for (const [id, value] of Object.entries(legacyRaw)) {
+      if (typeof value !== "string" || value.trim().length === 0 || out[id] != null) {
+        continue;
+      }
+      out[id] = [value];
+    }
+  }
+  return out;
+}
+
 function readPersistedSlice(): {
   themePreference: ThemePreference;
   sidebarCollapsed: boolean;
   notificationPanelScopePreference: NotificationPanelScopePreference;
   notificationSourceFilter: NotificationFeedSourceFilter;
   boardFilterStripCollapsed: boolean;
-  activeTaskGroupByBoardId: Record<string, string>;
+  activeTaskGroupIdsByBoardId: Record<string, string[]>;
   activeTaskPriorityIdsByBoardId: Record<string, string[]>;
   taskCardViewModeByBoardId: Record<string, TaskCardViewMode>;
   taskDateFilterByBoardId: Record<string, TaskDateFilterPersisted>;
@@ -198,7 +222,7 @@ function readPersistedSlice(): {
       notificationPanelScopePreference: "all",
       notificationSourceFilter: "cli",
       boardFilterStripCollapsed: false,
-      activeTaskGroupByBoardId: {},
+      activeTaskGroupIdsByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       taskDateFilterByBoardId: {},
@@ -214,7 +238,7 @@ function readPersistedSlice(): {
         notificationPanelScopePreference: "all",
         notificationSourceFilter: "cli",
         boardFilterStripCollapsed: false,
-        activeTaskGroupByBoardId: {},
+        activeTaskGroupIdsByBoardId: {},
         activeTaskPriorityIdsByBoardId: {},
         taskCardViewModeByBoardId: {},
         taskDateFilterByBoardId: {},
@@ -223,12 +247,13 @@ function readPersistedSlice(): {
     }
     const parsed = JSON.parse(raw) as PersistedShape;
     const s = parsed.state;
-    const rawMap = s?.activeTaskGroupByBoardId;
+    const rawGroupIdsMap = s?.activeTaskGroupIdsByBoardId;
+    const legacyGroupMap = s?.activeTaskGroupByBoardId;
     const rawPriorityMap = s?.activeTaskPriorityIdsByBoardId;
-    const activeTaskGroupByBoardId =
-      rawMap && typeof rawMap === "object" && !Array.isArray(rawMap)
-        ? { ...rawMap }
-        : {};
+    const activeTaskGroupIdsByBoardId = sanitizeActiveTaskGroupIdsMap(
+      rawGroupIdsMap,
+      legacyGroupMap,
+    );
     const activeTaskPriorityIdsByBoardId =
       rawPriorityMap &&
       typeof rawPriorityMap === "object" &&
@@ -269,7 +294,7 @@ function readPersistedSlice(): {
         s?.notificationPanelScopePreference === "current" ? "current" : "all",
       notificationSourceFilter: resolveNotificationSourceFilter(s),
       boardFilterStripCollapsed: Boolean(s?.boardFilterStripCollapsed),
-      activeTaskGroupByBoardId,
+      activeTaskGroupIdsByBoardId,
       activeTaskPriorityIdsByBoardId,
       taskCardViewModeByBoardId,
       taskDateFilterByBoardId,
@@ -282,7 +307,7 @@ function readPersistedSlice(): {
       notificationPanelScopePreference: "all",
       notificationSourceFilter: "cli",
       boardFilterStripCollapsed: false,
-      activeTaskGroupByBoardId: {},
+      activeTaskGroupIdsByBoardId: {},
       activeTaskPriorityIdsByBoardId: {},
       taskCardViewModeByBoardId: {},
       taskDateFilterByBoardId: {},
@@ -306,8 +331,11 @@ interface PreferencesState {
   boardFilterStripCollapsed: boolean;
   setBoardFilterStripCollapsed: (v: boolean) => void;
   toggleBoardFilterStripCollapsed: () => void;
-  activeTaskGroupByBoardId: Record<string, string>;
-  setActiveTaskGroupForBoard: (boardId: string | number, group: string) => void;
+  activeTaskGroupIdsByBoardId: Record<string, string[]>;
+  setActiveTaskGroupIdsForBoard: (
+    boardId: string | number,
+    groupIds: string[] | undefined,
+  ) => void;
   activeTaskPriorityIdsByBoardId: Record<string, string[]>;
   setActiveTaskPriorityIdsForBoard: (
     boardId: string | number,
@@ -350,14 +378,18 @@ export const usePreferencesStore = create<PreferencesState>()(
         set((s) => ({
           boardFilterStripCollapsed: !s.boardFilterStripCollapsed,
         })),
-      activeTaskGroupByBoardId: initial.activeTaskGroupByBoardId,
-      setActiveTaskGroupForBoard: (boardId, group) =>
-        set((s) => ({
-          activeTaskGroupByBoardId: {
-            ...s.activeTaskGroupByBoardId,
-            [String(boardId)]: group,
-          },
-        })),
+      activeTaskGroupIdsByBoardId: initial.activeTaskGroupIdsByBoardId,
+      setActiveTaskGroupIdsForBoard: (boardId, groupIds) =>
+        set((s) => {
+          const key = String(boardId);
+          const next = { ...s.activeTaskGroupIdsByBoardId };
+          if (groupIds === undefined || groupIds.length === 0) {
+            delete next[key];
+          } else {
+            next[key] = [...groupIds];
+          }
+          return { activeTaskGroupIdsByBoardId: next };
+        }),
       activeTaskPriorityIdsByBoardId: initial.activeTaskPriorityIdsByBoardId,
       setActiveTaskPriorityIdsForBoard: (boardId, priorityIds) =>
         set((s) => {
@@ -389,8 +421,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       pruneBoardScopedPreferences: (boardIds) =>
         set((s) => {
           const validIds = new Set(Array.from(boardIds, (id) => String(id)));
-          const nextActiveTaskGroupByBoardId = Object.fromEntries(
-            Object.entries(s.activeTaskGroupByBoardId).filter(([id]) =>
+          const nextActiveTaskGroupIdsByBoardId = Object.fromEntries(
+            Object.entries(s.activeTaskGroupIdsByBoardId).filter(([id]) =>
               validIds.has(id),
             ),
           );
@@ -410,8 +442,8 @@ export const usePreferencesStore = create<PreferencesState>()(
             ),
           );
           if (
-            Object.keys(nextActiveTaskGroupByBoardId).length ===
-              Object.keys(s.activeTaskGroupByBoardId).length &&
+            Object.keys(nextActiveTaskGroupIdsByBoardId).length ===
+              Object.keys(s.activeTaskGroupIdsByBoardId).length &&
             Object.keys(nextActiveTaskPriorityIdsByBoardId).length ===
               Object.keys(s.activeTaskPriorityIdsByBoardId).length &&
             Object.keys(nextTaskCardViewModeByBoardId).length ===
@@ -424,7 +456,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           // SQLite board ids can be reused after deletions, so stale board-local prefs must be
           // pruned or a new board can inherit an old group filter/card size from the recycled id.
           return {
-            activeTaskGroupByBoardId: nextActiveTaskGroupByBoardId,
+            activeTaskGroupIdsByBoardId: nextActiveTaskGroupIdsByBoardId,
             activeTaskPriorityIdsByBoardId: nextActiveTaskPriorityIdsByBoardId,
             taskCardViewModeByBoardId: nextTaskCardViewModeByBoardId,
             taskDateFilterByBoardId: nextTaskDateFilterByBoardId,
@@ -442,7 +474,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         notificationPanelScopePreference: state.notificationPanelScopePreference,
         notificationSourceFilter: state.notificationSourceFilter,
         boardFilterStripCollapsed: state.boardFilterStripCollapsed,
-        activeTaskGroupByBoardId: state.activeTaskGroupByBoardId,
+        activeTaskGroupIdsByBoardId: state.activeTaskGroupIdsByBoardId,
         activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,
         taskCardViewModeByBoardId: state.taskCardViewModeByBoardId,
         taskDateFilterByBoardId: state.taskDateFilterByBoardId,
@@ -452,20 +484,24 @@ export const usePreferencesStore = create<PreferencesState>()(
   ),
 );
 
-/** Subscribe to prefs and validate against current `taskGroups` ids. */
-export function useResolvedActiveTaskGroup(
+/**
+ * Subscribe to board-local group ids and drop stale references when task group definitions change.
+ * `null` means "all groups" so empty picker state and legacy missing prefs behave the same way.
+ */
+export function useResolvedActiveTaskGroupIds(
   boardId: string | number,
   taskGroups: GroupDefinition[],
-): string {
+): string[] | null {
   const key = String(boardId);
   const raw = usePreferencesStore(
-    (s) => s.activeTaskGroupByBoardId[key],
+    (s) => s.activeTaskGroupIdsByBoardId[key],
   );
   return useMemo(() => {
-    if (raw === ALL_TASK_GROUPS) return ALL_TASK_GROUPS;
-    if (raw && taskGroups.some((g) => String(g.id) === raw)) return raw;
-    return ALL_TASK_GROUPS;
-  }, [raw, key, taskGroups]);
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    const validIds = new Set(taskGroups.map((group) => String(group.id)));
+    const filtered = raw.filter((id) => validIds.has(id));
+    return filtered.length > 0 ? filtered : null;
+  }, [raw, taskGroups]);
 }
 
 /**

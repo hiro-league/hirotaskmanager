@@ -37,9 +37,9 @@ Expected behavior on first run:
 1. `hirotaskmanager` detects that no launcher config exists yet
 2. it runs launcher setup automatically
 3. it prompts for:
-   - port, default `3001`
-   - data directory, default under `%USERPROFILE%\.taskmanager\profiles\default\data`
-   - whether to open the browser automatically
+  - port, default `3001`
+  - data directory, default under `%USERPROFILE%\.taskmanager\profiles\default\data`
+  - whether to open the browser automatically
 4. it saves the config
 5. it starts the app
 6. it opens or prints the local URL
@@ -101,6 +101,7 @@ From the repo root:
 
 ```bash
 npm install
+npm link # once from repo root after install
 ```
 
 Or:
@@ -113,11 +114,16 @@ bun install
 
 ```bash
 npm run dev
+
 ```
 
-**CLI:** `node_modules/.bin` is not on `PATH`, so run **`npm link` once** from the repo root (after install) for a global `hirotm`, or use **`npx hirotm`** / **`npm run cli --`**. Re-run **`npm link`** only if the global command breaks (e.g. after `npm unlink` or changing clones).
+**CLI:** `node_modules/.bin` is not on `PATH`, 
 
-**`hirotm` and dev:** the dev API is on **3002**; the CLI defaults to **3001**. Use **`hirotm --profile dev …`** or **`TASKMANAGER_PROFILE=dev`**.
+- so run `npm link` **once** from the repo root (after install) for a global `hirotm`, 
+- or use `**npx hirotm`** / `**npm run cli --**`. 
+- Re-run `**npm link**` only if the global command breaks (e.g. after `npm unlink` or changing clones).
+
+`**hirotm` and dev:** the dev API is on **3002**; the CLI defaults to **3001**. Use `**hirotm --profile dev …`** or `**TASKMANAGER_PROFILE=dev**`.
 
 **SQLite data in the repo:** the dev runtime now defaults to `data/taskmanager.db` under the repository root, so the normal `npm run dev` flow uses the tracked SQLite file without needing env vars.
 
@@ -169,3 +175,4 @@ The final cleanup should remove:
 - duplicated install decision trees
 - temporary compatibility shims
 - old launcher/config/bootstrap paths that only exist to preserve pre-release behavior
+

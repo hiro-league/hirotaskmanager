@@ -20,12 +20,12 @@ import {
 } from "../../shared/mutationResults";
 import type { Board, TaskPriorityDefinition } from "../../shared/models";
 import { parsePatchBoardTaskGroupConfigBody } from "../../shared/taskGroupConfig";
-import { ALL_TASK_GROUPS } from "../../shared/models";
 import {
   closedStatusIdsFromStatuses,
   computeBoardStats,
   parseBoardStatsFilter,
 } from "../../shared/boardStats";
+import { repeatedSearchParamValues } from "../../shared/repeatedSearchParams";
 import {
   createBoardWithDefaults,
   createListOnBoard,
@@ -50,6 +50,9 @@ import {
   readTaskById,
   reorderListsOnBoard,
   reorderTasksInBand,
+  createBoardRelease,
+  updateBoardRelease,
+  deleteBoardRelease,
 } from "../storage";
 import { readBoardCliPolicy } from "../storage/cliPolicy";
 import { getRequestAuthContext, type AppBindings } from "../auth";
@@ -144,14 +147,6 @@ function listDeleteResponse(c: Context, result: ListDeleteMutationResult) {
   const saved = loadBoardAfterGranularWrite(result.boardId);
   if (!saved) return c.json({ error: "Board not found" }, 404);
   return c.json(saved);
-}
-
-function repeatedQueryValues(searchParams: URLSearchParams, key: string): string[] {
-  return searchParams
-    .getAll(key)
-    .flatMap((value) => value.split(","))
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
 }
 
 boardsRoute.get("/", async (c) => {
@@ -337,6 +332,144 @@ boardsRoute.patch("/:id/priorities", async (c) => {
     const msg = e instanceof Error ? e.message : "Invalid task priorities";
     return c.json({ error: msg }, 400);
   }
+});
+
+boardsRoute.get("/:id/releases", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blockedRead = cliBoardReadError(c, entry);
+  if (blockedRead) return blockedRead;
+  const board = loadBoard(entry.id);
+  if (!board) return c.json({ error: "Board not found" }, 404);
+  return c.json(board.releases);
+});
+
+boardsRoute.post("/:id/releases", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blockedRead = cliBoardReadError(c, entry);
+  if (blockedRead) return blockedRead;
+  const blocked = cliManageStructureError(c, entry.id);
+  if (blocked) return blocked;
+  let body: Record<string, unknown>;
+  try {
+    body = (await c.req.json()) as Record<string, unknown>;
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+  let color: string | null | undefined;
+  if ("color" in body) {
+    if (body.color === null || body.color === "") color = null;
+    else if (typeof body.color === "string") color = body.color.trim();
+    else return c.json({ error: "Invalid color" }, 400);
+  }
+  let releaseDate: string | null | undefined;
+  if ("releaseDate" in body) {
+    if (body.releaseDate === null || body.releaseDate === "") releaseDate = null;
+    else if (typeof body.releaseDate === "string") releaseDate = body.releaseDate.trim();
+    else return c.json({ error: "Invalid releaseDate" }, 400);
+  }
+  const created = createBoardRelease(entry.id, {
+    name,
+    color,
+    releaseDate,
+  });
+  if (!created) {
+    return c.json(
+      { error: "Could not create release (duplicate name?)" },
+      400,
+    );
+  }
+  const board = loadBoard(entry.id);
+  if (board) {
+    publishBoardChanged(entry.id, board.updatedAt);
+  }
+  return c.json(created, 201);
+});
+
+boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blockedRead = cliBoardReadError(c, entry);
+  if (blockedRead) return blockedRead;
+  const blocked = cliManageStructureError(c, entry.id);
+  if (blocked) return blocked;
+  const releaseId = Number(c.req.param("releaseId"));
+  if (!Number.isFinite(releaseId)) {
+    return c.json({ error: "Invalid release id" }, 400);
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = (await c.req.json()) as Record<string, unknown>;
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const input: {
+    name?: string;
+    color?: string | null;
+    releaseDate?: string | null;
+  } = {};
+  if (typeof body.name === "string") input.name = body.name;
+  if ("color" in body) {
+    if (body.color === null || body.color === "") input.color = null;
+    else if (typeof body.color === "string") input.color = body.color.trim();
+    else return c.json({ error: "Invalid color" }, 400);
+  }
+  if ("releaseDate" in body) {
+    if (body.releaseDate === null || body.releaseDate === "") {
+      input.releaseDate = null;
+    } else if (typeof body.releaseDate === "string") {
+      input.releaseDate = body.releaseDate.trim();
+    } else {
+      return c.json({ error: "Invalid releaseDate" }, 400);
+    }
+  }
+  if (
+    input.name === undefined &&
+    !("color" in body) &&
+    !("releaseDate" in body)
+  ) {
+    return c.json({ error: "No changes" }, 400);
+  }
+  const updated = updateBoardRelease(entry.id, releaseId, input);
+  if (!updated) {
+    return c.json({ error: "Release not found or duplicate name" }, 400);
+  }
+  const board = loadBoard(entry.id);
+  if (board) publishBoardChanged(entry.id, board.updatedAt);
+  return c.json(updated);
+});
+
+boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blockedRead = cliBoardReadError(c, entry);
+  if (blockedRead) return blockedRead;
+  const blocked = cliManageStructureError(c, entry.id);
+  if (blocked) return blocked;
+  const releaseId = Number(c.req.param("releaseId"));
+  if (!Number.isFinite(releaseId)) {
+    return c.json({ error: "Invalid release id" }, 400);
+  }
+  const url = new URL(c.req.url);
+  const moveRaw = url.searchParams.get("moveTasksTo");
+  let options: { moveTasksToReleaseId?: number } = {};
+  if (moveRaw != null && moveRaw !== "") {
+    const n = Number(moveRaw);
+    if (!Number.isFinite(n)) {
+      return c.json({ error: "Invalid moveTasksTo" }, 400);
+    }
+    options = { moveTasksToReleaseId: n };
+  }
+  const ok = deleteBoardRelease(entry.id, releaseId, options);
+  if (!ok) return c.json({ error: "Release not found or invalid move target" }, 400);
+  const board = loadBoard(entry.id);
+  if (board) publishBoardChanged(entry.id, board.updatedAt);
+  return c.body(null, 204);
 });
 
 boardsRoute.post("/:id/lists", async (c) => {
@@ -625,12 +758,18 @@ boardsRoute.post("/:id/tasks", async (c) => {
   const title = typeof body.title === "string" ? body.title : "";
   const taskBody = typeof body.body === "string" ? body.body : "";
   const status = typeof body.status === "string" ? body.status : "open";
-  const priorityId =
-    body.priorityId === null
-      ? null
-      : body.priorityId === undefined
-        ? undefined
-        : Number(body.priorityId);
+  // Tasks always have a `priority_id`; clients omit the field or send a row id (no JSON null).
+  if ("priorityId" in body && body.priorityId === null) {
+    return c.json({ error: "priorityId must be a number or omitted" }, 400);
+  }
+  let priorityId: number | undefined;
+  if (body.priorityId !== undefined) {
+    const n = Number(body.priorityId);
+    if (!Number.isFinite(n)) {
+      return c.json({ error: "Invalid priorityId" }, 400);
+    }
+    priorityId = n;
+  }
 
   let emoji: string | null | undefined = undefined;
   if ("emoji" in body) {
@@ -648,6 +787,19 @@ boardsRoute.post("/:id/tasks", async (c) => {
     }
   }
 
+  let releaseId: number | null | undefined = undefined;
+  if ("releaseId" in body) {
+    if (body.releaseId === null) {
+      releaseId = null;
+    } else {
+      const n = Number(body.releaseId);
+      if (!Number.isFinite(n)) {
+        return c.json({ error: "Invalid releaseId" }, 400);
+      }
+      releaseId = n;
+    }
+  }
+
   const result = createTaskOnBoard(
     entry.id,
     {
@@ -658,6 +810,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
       body: taskBody,
       status,
       emoji,
+      releaseId,
     },
     provenanceForWrite(c),
   );
@@ -695,9 +848,9 @@ boardsRoute.get("/:id/tasks", async (c) => {
 
   const searchParams = new URL(c.req.url).searchParams;
   const listIdRaw = searchParams.get("listId");
-  const groupIdRaw = searchParams.get("groupId");
-  const priorityIdRaw = repeatedQueryValues(searchParams, "priorityId");
-  const statusRaw = repeatedQueryValues(searchParams, "status");
+  const groupIdRaw = repeatedSearchParamValues(searchParams, "groupId");
+  const priorityIdRaw = repeatedSearchParamValues(searchParams, "priorityId");
+  const statusRaw = repeatedSearchParamValues(searchParams, "status");
   const dateModeRaw = searchParams.get("dateMode");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
@@ -707,9 +860,8 @@ boardsRoute.get("/:id/tasks", async (c) => {
   if (listId !== undefined && !Number.isFinite(listId)) {
     return c.json({ error: "Invalid listId" }, 400);
   }
-  const groupId =
-    groupIdRaw == null || groupIdRaw === "" ? undefined : Number(groupIdRaw);
-  if (groupId !== undefined && !Number.isFinite(groupId)) {
+  const groupIds = groupIdRaw.map((value) => Number(value));
+  if (!groupIds.every((value) => Number.isFinite(value))) {
     return c.json({ error: "Invalid groupId" }, 400);
   }
   const priorityIds = priorityIdRaw.map((value) => Number(value));
@@ -748,15 +900,16 @@ boardsRoute.get("/:id/tasks", async (c) => {
   const statusOrder = new Map(workflowOrder.map((status, index) => [status, index] as const));
   const activePriorityIds =
     priorityIds.length > 0 ? priorityIds.map((id) => String(id)) : null;
-  const activeGroup =
-    groupId !== undefined ? String(groupId) : ALL_TASK_GROUPS;
+  // Repeated `groupId` is OR; omitted = all groups (same convention as `priorityId`).
+  const activeGroupIds =
+    groupIds.length > 0 ? groupIds.map((id) => String(id)) : null;
 
   const tasks = board.tasks
     .filter((task) => (listId === undefined ? true : task.listId === listId))
     .filter((task) => visibleSet.has(task.status))
     .filter((task) =>
       taskMatchesBoardFilter(task, {
-        activeGroup,
+        activeGroupIds,
         activePriorityIds,
         dateFilter,
       }),
@@ -905,8 +1058,14 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
   if (body.listId !== undefined) patch.listId = Number(body.listId);
   if (body.groupId !== undefined) patch.groupId = Number(body.groupId);
   if (body.priorityId !== undefined) {
-    patch.priorityId =
-      body.priorityId === null ? null : Number(body.priorityId);
+    if (body.priorityId === null) {
+      return c.json({ error: "priorityId must be a number" }, 400);
+    }
+    const n = Number(body.priorityId);
+    if (!Number.isFinite(n)) {
+      return c.json({ error: "Invalid priorityId" }, 400);
+    }
+    patch.priorityId = n;
   }
   if (typeof body.status === "string") patch.status = body.status;
   if (typeof body.order === "number") patch.order = body.order;
@@ -925,6 +1084,17 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
       patch.emoji = parsed.value;
     } else {
       return c.json({ error: "Invalid emoji" }, 400);
+    }
+  }
+  if ("releaseId" in body) {
+    if (body.releaseId === null) {
+      patch.releaseId = null;
+    } else {
+      const n = Number(body.releaseId);
+      if (!Number.isFinite(n)) {
+        return c.json({ error: "Invalid releaseId" }, 400);
+      }
+      patch.releaseId = n;
     }
   }
   const taskBeforePatch = taskForPolicy;
@@ -1036,17 +1206,28 @@ boardsRoute.patch("/:id", async (c) => {
     !("emoji" in body) &&
     !("cliPolicy" in body) &&
     !("description" in body) &&
-    !("boardColor" in body)
+    !("boardColor" in body) &&
+    !("defaultReleaseId" in body) &&
+    !("autoAssignReleaseOnCreateUi" in body) &&
+    !("autoAssignReleaseOnCreateCli" in body)
   ) {
     return c.json(
       {
         error:
-          "At least one of name, emoji, cliPolicy, description, or boardColor is required",
+          "At least one of name, emoji, cliPolicy, description, boardColor, defaultReleaseId, autoAssignReleaseOnCreateUi, or autoAssignReleaseOnCreateCli is required",
       },
       400,
     );
   }
   if (getRequestAuthContext(c).principal === "cli") {
+    const hasReleasePatch =
+      "defaultReleaseId" in body ||
+      "autoAssignReleaseOnCreateUi" in body ||
+      "autoAssignReleaseOnCreateCli" in body;
+    if (hasReleasePatch) {
+      const blockedRel = cliManageStructureError(c, entry.id);
+      if (blockedRel) return blockedRel;
+    }
     const hasMetadataPatch =
       "name" in body ||
       "emoji" in body ||
@@ -1063,6 +1244,9 @@ boardsRoute.patch("/:id", async (c) => {
     cliPolicy?: BoardCliPolicy;
     description?: string | null;
     boardColor?: Board["boardColor"];
+    defaultReleaseId?: number | null;
+    autoAssignReleaseOnCreateUi?: boolean;
+    autoAssignReleaseOnCreateCli?: boolean;
   } = {};
   if ("name" in body) {
     if (typeof body.name !== "string") {
@@ -1112,6 +1296,29 @@ boardsRoute.patch("/:id", async (c) => {
       return c.json({ error: "Invalid boardColor" }, 400);
     }
   }
+  if ("defaultReleaseId" in body) {
+    if (body.defaultReleaseId === null) {
+      patch.defaultReleaseId = null;
+    } else {
+      const n = Number(body.defaultReleaseId);
+      if (!Number.isFinite(n)) {
+        return c.json({ error: "Invalid defaultReleaseId" }, 400);
+      }
+      patch.defaultReleaseId = n;
+    }
+  }
+  if ("autoAssignReleaseOnCreateUi" in body) {
+    if (typeof body.autoAssignReleaseOnCreateUi !== "boolean") {
+      return c.json({ error: "autoAssignReleaseOnCreateUi must be a boolean" }, 400);
+    }
+    patch.autoAssignReleaseOnCreateUi = body.autoAssignReleaseOnCreateUi;
+  }
+  if ("autoAssignReleaseOnCreateCli" in body) {
+    if (typeof body.autoAssignReleaseOnCreateCli !== "boolean") {
+      return c.json({ error: "autoAssignReleaseOnCreateCli must be a boolean" }, 400);
+    }
+    patch.autoAssignReleaseOnCreateCli = body.autoAssignReleaseOnCreateCli;
+  }
   const saved = await patchBoard(entry.id, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
   publishBoardChanged(entry.id, saved.updatedAt);
@@ -1130,6 +1337,13 @@ boardsRoute.get("/:id/stats", async (c) => {
   if (!board) return c.json({ error: "Board not found" }, 404);
   const statuses = listStatuses();
   const filter = parseBoardStatsFilter(new URL(c.req.url).searchParams);
+  if (
+    filter.activeGroupIds !== null &&
+    filter.activeGroupIds.length > 0 &&
+    !filter.activeGroupIds.every((g) => Number.isFinite(Number(g)))
+  ) {
+    return c.json({ error: "Invalid groupId" }, 400);
+  }
   const closedIds = closedStatusIdsFromStatuses(statuses);
   const stats = computeBoardStats(board, closedIds, filter);
   return c.json(stats);

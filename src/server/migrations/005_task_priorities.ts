@@ -6,7 +6,8 @@ export const migration005: Migration = {
   name: "005_task_priorities",
   up(db: Database): void {
     // Seed board-local priorities in the migration so older boards gain the same
-    // built-in rows as newly created boards, while existing tasks stay unassigned.
+    // built-in rows as newly created boards. Tasks keep nullable `priority_id` until
+    // migration 017 backfills the builtin `none` row and assignments.
     db.exec(`
 CREATE TABLE task_priority (
   id        INTEGER PRIMARY KEY,
@@ -26,7 +27,9 @@ INSERT INTO task_priority (board_id, value, label, color, is_system)
 SELECT b.id, seed.value, seed.label, seed.color, 1
 FROM board b
 CROSS JOIN (
-  SELECT 10 AS value, 'low' AS label, '#94a3b8' AS color
+  SELECT 0 AS value, 'none' AS label, '#ffffff' AS color
+  UNION ALL
+  SELECT 10, 'low', '#94a3b8'
   UNION ALL
   SELECT 20, 'medium', '#3b82f6'
   UNION ALL

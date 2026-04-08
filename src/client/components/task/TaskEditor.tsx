@@ -2,17 +2,16 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import {
   effectiveDefaultTaskGroupId,
   formatGroupDisplayLabel,
+  noneTaskPriorityId,
   priorityDisplayLabel,
   sortPrioritiesByValue,
   sortTaskGroupsForDisplay,
   type Board,
   type Task,
 } from "../../../shared/models";
-import { ALL_TASK_GROUPS } from "../../../shared/models";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
-import { useResolvedActiveTaskGroup } from "@/store/preferences";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
@@ -52,7 +51,6 @@ export function TaskEditor({
   const deleteTask = useDeleteTask();
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
-  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
   const completion = useBoardTaskCompletionCelebrationOptional();
 
   const [title, setTitle] = useState("");
@@ -61,7 +59,7 @@ export function TaskEditor({
   const [emoji, setEmoji] = useState<string | null>(null);
   /** Select value — matches `String(taskGroup.id)`. */
   const [group, setGroup] = useState("");
-  /** Select value — matches `String(taskPriority.id)` or empty string for no priority. */
+  /** Select value — matches `String(taskPriority.id)` (default builtin `none`). */
   const [priority, setPriority] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -83,29 +81,31 @@ export function TaskEditor({
       setBody(task.body);
       setEmoji(task.emoji ?? null);
       setGroup(String(task.groupId));
-      setPriority(task.priorityId != null ? String(task.priorityId) : "");
+      setPriority(String(task.priorityId));
       baselineRef.current = {
         title: task.title,
         body: task.body,
         group: String(task.groupId),
-        priority: task.priorityId != null ? String(task.priorityId) : "",
+        priority: String(task.priorityId),
         emoji: task.emoji ?? null,
       };
     } else if (mode === "create" && createContext) {
       setTitle("");
       setBody("");
       setEmoji(null);
-      const defaultGroup =
-        activeGroup !== ALL_TASK_GROUPS
-          ? activeGroup
-          : String(effectiveDefaultTaskGroupId(board));
+      // Creation always starts from the board default group; the board filter only affects visibility.
+      const defaultGroup = String(effectiveDefaultTaskGroupId(board));
       setGroup(defaultGroup);
-      setPriority("");
+      const defaultPri = String(
+        noneTaskPriorityId(board.taskPriorities) ??
+          sortPrioritiesByValue(board.taskPriorities)[0]!.id,
+      );
+      setPriority(defaultPri);
       baselineRef.current = {
         title: "",
         body: "",
         group: defaultGroup,
-        priority: "",
+        priority: defaultPri,
         emoji: null,
       };
     }
@@ -115,8 +115,8 @@ export function TaskEditor({
     task,
     createContext,
     board.taskGroups,
+    board.taskPriorities,
     board.defaultTaskGroupId,
-    activeGroup,
   ]);
 
   useEffect(() => {
@@ -179,10 +179,15 @@ export function TaskEditor({
   const handleSave = useCallback(async () => {
     const trimmedTitle = title.trim() || "Untitled";
     const now = new Date().toISOString();
-    const priorityId = priority ? Number(priority) : null;
+    const priorityNum = Number(priority);
+    const priorityId = Number.isFinite(priorityNum)
+      ? priorityNum
+      : (noneTaskPriorityId(board.taskPriorities) ??
+        sortPrioritiesByValue(board.taskPriorities)[0]!.id);
     if (mode === "create" && createContext) {
       const gid =
         Number(group) || effectiveDefaultTaskGroupId(board);
+      const defaultNone = noneTaskPriorityId(board.taskPriorities);
       await createTask.mutateAsync({
         boardId: board.id,
         listId: createContext.listId,
@@ -190,7 +195,7 @@ export function TaskEditor({
         title: trimmedTitle,
         body,
         groupId: gid,
-        priorityId,
+        ...(priorityId !== defaultNone ? { priorityId } : {}),
         emoji: emoji ?? null,
       });
     } else if (mode === "edit" && task) {
@@ -375,7 +380,6 @@ export function TaskEditor({
                 disabled={busy}
                 onChange={(e) => setPriority(e.target.value)}
               >
-                <option value="">No priority</option>
                 {sortedPriorities.map((taskPriority) => (
                   <option key={taskPriority.id} value={String(taskPriority.id)}>
                     {taskPriority.value} - {priorityDisplayLabel(taskPriority.label)}

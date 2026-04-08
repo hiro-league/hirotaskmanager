@@ -109,9 +109,15 @@ async function main(): Promise<void> {
   const groupIds = groupRows.map((r) => r.id);
 
   const priorityRows = db
-    .query("SELECT id FROM task_priority WHERE board_id = ? ORDER BY id ASC")
+    .query(
+      "SELECT id FROM task_priority WHERE board_id = ? ORDER BY value ASC, id ASC",
+    )
     .all(boardId) as { id: number }[];
   const priorityIds = priorityRows.map((r) => r.id);
+  if (priorityIds.length === 0) {
+    throw new Error("seed-perf-board: board has no task_priority rows");
+  }
+  const nonePriorityId = priorityIds[0]!;
 
   const allowedStatuses = statusWorkflowOrder(db);
   const statusPool = ["open", "in-progress", "closed"] as const;
@@ -136,8 +142,8 @@ async function main(): Promise<void> {
           ? new Date(nowBase + taskIndex).toISOString()
           : null;
         const groupId = pick(groupIds);
-        const usePriority = priorityIds.length > 0 && Math.random() > 0.15;
-        const priorityId = usePriority ? pick(priorityIds) : null;
+        const usePriority = Math.random() > 0.15;
+        const priorityId = usePriority ? pick(priorityIds) : nonePriorityId;
         const title = randomTitle(taskIndex);
         const body = randomBody(taskIndex);
         const sortOrder = nextSortOrder(listId, statusId);

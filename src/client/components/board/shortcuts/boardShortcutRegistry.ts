@@ -448,25 +448,28 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
 
 export function cycleTaskGroupForBoard(
   board: Board,
-  setActive: (boardId: string | number, group: string) => void,
+  setActive: (
+    boardId: string | number,
+    groupIds: string[] | undefined,
+  ) => void,
 ): void {
   if (board.taskGroups.length === 0) return;
   const groupsOrdered = sortTaskGroupsForDisplay(board.taskGroups);
-  const order = [
-    ALL_TASK_GROUPS,
-    ...groupsOrdered.map((g) => String(g.id)),
-  ];
+  const orderedIds = groupsOrdered.map((group) => String(group.id));
   const raw =
-    usePreferencesStore.getState().activeTaskGroupByBoardId[String(board.id)];
+    usePreferencesStore.getState().activeTaskGroupIdsByBoardId[String(board.id)];
   const resolved =
-    raw === ALL_TASK_GROUPS
-      ? ALL_TASK_GROUPS
-      : raw && groupsOrdered.some((g) => String(g.id) === raw)
-        ? raw
-        : ALL_TASK_GROUPS;
+    Array.isArray(raw) && raw.length === 1 && orderedIds.includes(raw[0]!)
+      ? raw[0]!
+      : ALL_TASK_GROUPS;
+  const order = [ALL_TASK_GROUPS, ...orderedIds];
   const idx = Math.max(0, order.indexOf(resolved));
   const next = order[(idx + 1) % order.length] ?? ALL_TASK_GROUPS;
-  setActive(board.id, next);
+  if (next === ALL_TASK_GROUPS) {
+    setActive(board.id, undefined);
+    return;
+  }
+  setActive(board.id, [next]);
 }
 
 export function cycleTaskCardViewModeForBoard(

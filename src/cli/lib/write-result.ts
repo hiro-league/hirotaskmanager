@@ -25,7 +25,7 @@ export type WriteTaskEntity = {
   id: number;
   listId: number;
   groupId: number;
-  priorityId: number | null | undefined;
+  priorityId: number;
   status: string;
   title: string;
   body: string;

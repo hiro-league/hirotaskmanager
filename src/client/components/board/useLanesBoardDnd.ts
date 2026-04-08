@@ -4,7 +4,7 @@ import { useMoveTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
-  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
@@ -107,7 +107,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
-  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
     board.id,
     board.taskPriorities,
@@ -129,24 +129,26 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
 
   const prioritySig =
     activePriorityIds === null ? "__all__" : activePriorityIds.join("\0");
+  const groupSig =
+    activeGroupIds === null ? "__all__" : activeGroupIds.join("\0");
   const dateSig =
     dateFilterResolved == null
       ? "__nodate__"
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${activeGroup}|${prioritySig}|${dateSig}`;
+  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutSig}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${dateSig}`;
 
   const taskFilter = useMemo<BoardTaskFilterState>(
     () => ({
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilter: dateFilterResolved,
     }),
     [
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilterResolved,
     ],
@@ -189,7 +191,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
   return {
     ...core,
     visibleStatuses,
-    activeGroup,
+    activeGroupIds,
     activePriorityIds,
   };
 }

@@ -74,7 +74,6 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
       title: "t",
       body: "",
       groupId: g2.id,
-      priorityId: board.taskPriorities[0]?.id ?? null,
     });
 
     const surviving = [g0, g1];
@@ -178,7 +177,6 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
       title: "sinkme",
       body: "",
       groupId: g2.id,
-      priorityId: board.taskPriorities[0]?.id ?? null,
     });
     const saved = patchBoardTaskGroupConfig(board.id, {
       creates: [

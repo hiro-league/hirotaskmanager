@@ -7,6 +7,7 @@ import {
 } from "@/store/preferences";
 import {
   BOARD_HEADER_FILTER_SECTION_LABEL_CLASS,
+  BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS,
   boardHeaderToggleButtonClass,
 } from "./boardHeaderButtonStyles";
 import { todayDateKeyLocal, type TaskDateFilterMode } from "./boardStatusUtils";
@@ -166,91 +167,98 @@ export function BoardTaskDateFilter({ board }: BoardTaskDateFilterProps) {
       role="group"
       aria-label="Task date filter"
     >
-      <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Dates</span>
-      <button
-        type="button"
-        className={boardHeaderToggleButtonClass(enabled)}
-        aria-pressed={enabled}
-        title={
-          enabled
-            ? "Date filter on — click for none"
-            : "Date filter off — click to filter"
-        }
-        onClick={toggleFilter}
-      >
-        {enabled ? "Filter" : "None"}
-      </button>
-      {enabled ? (
-        <>
-          <button
-            type="button"
-            className={cn(
-              boardHeaderToggleButtonClass(false),
-              "h-7 min-w-[5.75rem] justify-center px-1.5 py-0 text-center text-[11px] font-medium",
-            )}
-            title={`Compare by ${MODE_LABEL[mode].toLowerCase()} date — click to cycle`}
-            aria-label={`Date field: ${MODE_LABEL[mode]}. Click to cycle Opened, Closed, Any.`}
-            onClick={() =>
-              persist({
-                enabled: true,
-                mode: nextMode(mode),
-                startDate,
-                endDate,
-              })
-            }
-          >
-            {MODE_LABEL[mode]}
-          </button>
-          <div className="flex items-center gap-0.5">
+      {/* Match Groups/Priority label inset: reserve the same leading slot as the pencil row (empty here). */}
+      <span className="inline-flex shrink-0 items-center gap-1">
+        <span className={BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS} aria-hidden />
+        <span className={BOARD_HEADER_FILTER_SECTION_LABEL_CLASS}>Dates</span>
+      </span>
+      {/* One flex item for all date controls so they wrap as a block vs the label, not control-by-control. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2">
+        <button
+          type="button"
+          className={boardHeaderToggleButtonClass(enabled)}
+          aria-pressed={enabled}
+          title={
+            enabled
+              ? "Date filter on — click for none"
+              : "Date filter off — click to filter"
+          }
+          onClick={toggleFilter}
+        >
+          {enabled ? "Filter" : "None"}
+        </button>
+        {enabled ? (
+          <>
             <button
               type="button"
               className={cn(
-                "inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-foreground shadow-sm",
-                "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                boardHeaderToggleButtonClass(false),
+                "h-7 min-w-[5.75rem] justify-center px-1.5 py-0 text-center text-[11px] font-medium",
               )}
-              title="Set start and end to today"
-              aria-label="Set start and end to today"
-              onClick={setBothToday}
+              title={`Compare by ${MODE_LABEL[mode].toLowerCase()} date — click to cycle`}
+              aria-label={`Date field: ${MODE_LABEL[mode]}. Click to cycle Opened, Closed, Any.`}
+              onClick={() =>
+                persist({
+                  enabled: true,
+                  mode: nextMode(mode),
+                  startDate,
+                  endDate,
+                })
+              }
             >
-              <Calendar className="size-3.5 shrink-0" aria-hidden />
+              {MODE_LABEL[mode]}
             </button>
-            <DateField
-              value={startDate}
-              ariaLabel="Range start date"
-              titleFull={`Start: ${startDate}`}
-              max={endDate}
-              onChange={(next) =>
-                persist({
-                  enabled: true,
-                  mode,
-                  startDate: next,
-                  // If start moves past end, collapse the range to that day (picker max already limits this).
-                  endDate: next > endDate ? next : endDate,
-                })
-              }
-            />
-            <ArrowRight
-              className="size-3 shrink-0 text-muted-foreground"
-              aria-hidden
-              strokeWidth={2.25}
-            />
-            <DateField
-              value={endDate}
-              ariaLabel="Range end date"
-              titleFull={`End: ${endDate}`}
-              min={startDate}
-              onChange={(next) =>
-                persist({
-                  enabled: true,
-                  mode,
-                  startDate: next < startDate ? next : startDate,
-                  endDate: next,
-                })
-              }
-            />
-          </div>
-        </>
-      ) : null}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-foreground shadow-sm",
+                  "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+                title="Set start and end to today"
+                aria-label="Set start and end to today"
+                onClick={setBothToday}
+              >
+                <Calendar className="size-3.5 shrink-0" aria-hidden />
+              </button>
+              <DateField
+                value={startDate}
+                ariaLabel="Range start date"
+                titleFull={`Start: ${startDate}`}
+                max={endDate}
+                onChange={(next) =>
+                  persist({
+                    enabled: true,
+                    mode,
+                    startDate: next,
+                    // If start moves past end, collapse the range to that day (picker max already limits this).
+                    endDate: next > endDate ? next : endDate,
+                  })
+                }
+              />
+              <ArrowRight
+                className="size-3 shrink-0 text-muted-foreground"
+                aria-hidden
+                strokeWidth={2.25}
+              />
+              <DateField
+                value={endDate}
+                ariaLabel="Range end date"
+                titleFull={`End: ${endDate}`}
+                min={startDate}
+                onChange={(next) =>
+                  persist({
+                    enabled: true,
+                    mode,
+                    startDate: next < startDate ? next : startDate,
+                    endDate: next,
+                  })
+                }
+              />
+            </div>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

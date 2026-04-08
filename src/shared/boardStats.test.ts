@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { EMPTY_BOARD_CLI_POLICY } from "./cliPolicy";
-import { ALL_TASK_GROUPS } from "./models";
 import type { Board, List, Status, Task } from "./models";
 import {
   boardStatsFilterSignature,
@@ -18,6 +17,7 @@ function task(p: Partial<Task> & Pick<Task, "id" | "listId" | "status">): Task {
     title: "",
     body: "",
     groupId: 0,
+    priorityId: 10,
     order: 0,
     createdAt: iso("2025-06-01T12:00:00Z"),
     updatedAt: iso("2025-06-01T12:00:00Z"),
@@ -39,8 +39,13 @@ function minimalBoard(overrides: Partial<Board> = {}): Board {
     defaultTaskGroupId: 0,
     deletedGroupFallbackId: 0,
     taskPriorities: [
+      { id: 1, value: 0, label: "none", color: "#ffffff", isSystem: true },
       { id: 10, value: 10, label: "low", color: "#94a3b8", isSystem: true },
     ],
+    releases: [],
+    defaultReleaseId: null,
+    autoAssignReleaseOnCreateUi: false,
+    autoAssignReleaseOnCreateCli: false,
     visibleStatuses: ["open", "in-progress", "closed"],
     showStats: false,
     muteCelebrationSounds: false,
@@ -63,7 +68,7 @@ describe("computeBoardStats", () => {
     const board = minimalBoard({ lists: [listRow(1), listRow(2)], tasks: [] });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: null,
       dateFilter: null,
     };
@@ -83,7 +88,7 @@ describe("computeBoardStats", () => {
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: null,
       dateFilter: null,
     };
@@ -106,7 +111,7 @@ describe("computeBoardStats", () => {
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: null,
       dateFilter: null,
     };
@@ -128,7 +133,7 @@ describe("computeBoardStats", () => {
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: null,
       dateFilter: {
         mode: "opened",
@@ -153,7 +158,7 @@ describe("computeBoardStats", () => {
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: null,
       dateFilter: {
         mode: "opened",
@@ -171,8 +176,45 @@ describe("computeBoardStats", () => {
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: [],
+      dateFilter: null,
+    };
+    const r = computeBoardStats(board, closed, filter);
+    expect(r.board.total).toBe(0);
+  });
+
+  test("multiple group ids match as OR", () => {
+    const board = minimalBoard({
+      taskGroups: [
+        { id: 0, label: "a", sortOrder: 0 },
+        { id: 1, label: "b", sortOrder: 1 },
+        { id: 2, label: "c", sortOrder: 2 },
+      ],
+      tasks: [
+        task({ id: 1, listId: 1, status: "open", groupId: 0 }),
+        task({ id: 2, listId: 1, status: "open", groupId: 1 }),
+        task({ id: 3, listId: 1, status: "open", groupId: 2 }),
+      ],
+    });
+    const closed = closedStatusIdsFromStatuses(workflowThree);
+    const filter: BoardStatsFilter = {
+      activeGroupIds: ["0", "2"],
+      activePriorityIds: null,
+      dateFilter: null,
+    };
+    const r = computeBoardStats(board, closed, filter);
+    expect(r.board.total).toBe(2);
+  });
+
+  test("explicit empty group filter matches nothing", () => {
+    const board = minimalBoard({
+      tasks: [task({ id: 1, listId: 1, status: "open", groupId: 0 })],
+    });
+    const closed = closedStatusIdsFromStatuses(workflowThree);
+    const filter: BoardStatsFilter = {
+      activeGroupIds: [],
+      activePriorityIds: null,
       dateFilter: null,
     };
     const r = computeBoardStats(board, closed, filter);
@@ -181,9 +223,9 @@ describe("computeBoardStats", () => {
 });
 
 describe("buildBoardStatsSearchParams / boardStatsFilterSignature", () => {
-  test("roundtrip with parseBoardStatsFilter", () => {
+  test("roundtrip with parseBoardStatsFilter (all groups)", () => {
     const filter: BoardStatsFilter = {
-      activeGroupId: ALL_TASK_GROUPS,
+      activeGroupIds: null,
       activePriorityIds: ["10", "20"],
       dateFilter: {
         mode: "opened",
@@ -193,25 +235,36 @@ describe("buildBoardStatsSearchParams / boardStatsFilterSignature", () => {
     };
     const sp = buildBoardStatsSearchParams(filter);
     const parsed = parseBoardStatsFilter(sp);
-    expect(parsed.activeGroupId).toBe(filter.activeGroupId);
+    expect(parsed.activeGroupIds).toBeNull();
     expect(parsed.activePriorityIds).toEqual(filter.activePriorityIds);
     expect(parsed.dateFilter).toEqual(filter.dateFilter);
     expect(boardStatsFilterSignature(filter).length).toBeGreaterThan(0);
   });
+
+  test("roundtrip preserves multiple groupId (OR)", () => {
+    const filter: BoardStatsFilter = {
+      activeGroupIds: ["2", "0", "1"],
+      activePriorityIds: null,
+      dateFilter: null,
+    };
+    const sp = buildBoardStatsSearchParams(filter);
+    const parsed = parseBoardStatsFilter(sp);
+    expect(parsed.activeGroupIds).toEqual(["2", "0", "1"]);
+  });
 });
 
 describe("parseBoardStatsFilter", () => {
-  test("ignores legacy visibleStatuses query param", () => {
+  test("ignores visibleStatuses; reads groupId like tasks API", () => {
     const sp = new URLSearchParams({
       visibleStatuses: "",
-      group: "0",
+      groupId: "0",
       priorityIds: "10,20",
       dateMode: "opened",
       startDate: "2025-06-01",
       endDate: "2025-06-30",
     });
     const f = parseBoardStatsFilter(sp);
-    expect(f.activeGroupId).toBe("0");
+    expect(f.activeGroupIds).toEqual(["0"]);
     expect(f.activePriorityIds).toEqual(["10", "20"]);
     expect(f.dateFilter).toEqual({
       mode: "opened",

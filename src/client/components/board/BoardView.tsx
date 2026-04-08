@@ -24,7 +24,6 @@ import { useBoardChangeStream } from "@/api/useBoardChangeStream";
 import { usePatchBoard, usePatchBoardViewPrefs } from "@/api/mutations";
 import { resolvedBoardColor } from "../../../shared/boardColor";
 import {
-  ALL_TASK_GROUPS,
   groupDisplayLabelForId,
   priorityDisplayLabel,
   priorityLabelForId,
@@ -42,7 +41,7 @@ function isBoardDetailNotFound(error: unknown): boolean {
 }
 import {
   usePreferencesStore,
-  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
@@ -180,7 +179,7 @@ function BoardShortcutBindings({
   setListDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
 }) {
   const setActiveTaskGroupForBoard = usePreferencesStore(
-    (s) => s.setActiveTaskGroupForBoard,
+    (s) => s.setActiveTaskGroupIdsForBoard,
   );
   const setTaskCardViewModeForBoard = usePreferencesStore(
     (s) => s.setTaskCardViewModeForBoard,
@@ -236,7 +235,7 @@ function BoardShortcutBindings({
       cycleTaskGroup: (b) =>
         cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
       allTaskGroups: (b) =>
-        setActiveTaskGroupForBoard(b.id, ALL_TASK_GROUPS),
+        setActiveTaskGroupForBoard(b.id, undefined),
       cycleTaskPriority: (b) =>
         cycleTaskPriorityForBoard(b, setActiveTaskPriorityIdsForBoard),
       cycleHighlightedTaskGroup: (b) => {
@@ -298,19 +297,16 @@ function BoardShortcutBindings({
           queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
         const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
         if (!task) return;
-        const priorityOrder = [
-          null,
-          ...sortPrioritiesByValue(currentBoard.taskPriorities).map(
-            (priority) => priority.id,
-          ),
-        ];
-        const currentPriorityId = task.priorityId ?? null;
-        const currentIndex = Math.max(
-          0,
-          priorityOrder.findIndex((priorityId) => priorityId === currentPriorityId),
+        const priorityOrder = sortPrioritiesByValue(
+          currentBoard.taskPriorities,
+        ).map((priority) => priority.id);
+        const currentPriorityId = task.priorityId;
+        const found = priorityOrder.findIndex(
+          (priorityId) => priorityId === currentPriorityId,
         );
+        const currentIndex = found === -1 ? 0 : found;
         const nextPriorityId =
-          priorityOrder[(currentIndex + 1) % priorityOrder.length] ?? null;
+          priorityOrder[(currentIndex + 1) % priorityOrder.length]!;
         const nextTask = {
           ...task,
           priorityId: nextPriorityId,
@@ -762,7 +758,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   const [listDeleteConfirmId, setListDeleteConfirmId] = useState<number | null>(
     null,
   );
-  const activeTaskGroup = useResolvedActiveTaskGroup(
+  const activeTaskGroupIds = useResolvedActiveTaskGroupIds(
     data?.id ?? boardId ?? "",
     data?.taskGroups ?? [],
   );
@@ -792,11 +788,11 @@ export function BoardView({ boardId }: BoardViewProps) {
   const statsFilter = useMemo((): BoardStatsFilter | null => {
     if (!data) return null;
     return {
-      activeGroupId: activeTaskGroup,
+      activeGroupIds: activeTaskGroupIds,
       activePriorityIds: activeTaskPriorityIds,
       dateFilter: dateFilterResolved,
     };
-  }, [data, activeTaskGroup, activeTaskPriorityIds, dateFilterResolved]);
+  }, [data, activeTaskGroupIds, activeTaskPriorityIds, dateFilterResolved]);
 
   const boardStatsQuery = useBoardStats(data?.id ?? null, statsFilter, {
     enabled: Boolean(data?.showStats),
@@ -917,24 +913,35 @@ export function BoardView({ boardId }: BoardViewProps) {
       </div>
     );
   }
-  const activeGroupLabel =
-    activeTaskGroup !== ALL_TASK_GROUPS
-      ? groupDisplayLabelForId(data.taskGroups, Number(activeTaskGroup))
-      : null;
-  const activePriorityLabel =
-    activeTaskPriorityIds && activeTaskPriorityIds.length === 1
-      ? priorityLabelForId(data.taskPriorities, Number(activeTaskPriorityIds[0]))
-      : null;
-  const activePrioritySummary =
-    activeTaskPriorityIds === null
+  const activeGroupLabels =
+    activeTaskGroupIds?.map((groupId) =>
+      groupDisplayLabelForId(data.taskGroups, Number(groupId)),
+    ) ?? null;
+  const activeGroupSummary =
+    activeGroupLabels == null
       ? null
-      : activeTaskPriorityIds.length === 0
-        ? "None"
-        : activeTaskPriorityIds.length === 1
-          ? activePriorityLabel
-            ? priorityDisplayLabel(activePriorityLabel)
-            : null
-          : `${activeTaskPriorityIds.length} selected`;
+      : activeGroupLabels.length === 1
+        ? activeGroupLabels[0]!
+        : `(${activeGroupLabels.length} Groups)`;
+  const activeGroupTooltip =
+    activeGroupLabels != null && activeGroupLabels.length > 1
+      ? activeGroupLabels.join(", ")
+      : undefined;
+  const activePriorityLabels =
+    activeTaskPriorityIds?.map((priorityId) => {
+      const label = priorityLabelForId(data.taskPriorities, Number(priorityId));
+      return label ? priorityDisplayLabel(label) : "";
+    }).filter(Boolean) ?? null;
+  const activePrioritySummary =
+    activePriorityLabels == null
+      ? null
+      : activePriorityLabels.length === 1
+        ? activePriorityLabels[0]!
+        : `(${activePriorityLabels.length} Priorities)`;
+  const activePriorityTooltip =
+    activePriorityLabels != null && activePriorityLabels.length > 1
+      ? activePriorityLabels.join(", ")
+      : undefined;
   const activePriorityColor =
     activeTaskPriorityIds && activeTaskPriorityIds.length === 1
       ? sortPrioritiesByValue(data.taskPriorities).find(
@@ -1017,8 +1024,15 @@ export function BoardView({ boardId }: BoardViewProps) {
             filterCollapsed ? "gap-1 pb-2" : "gap-2 pb-3",
           )}
         >
-          <div className="grid min-w-0 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <div className="relative flex min-w-0 items-center gap-2">
+          {/*
+           * Header strip: 6 units on one line, no wrap, no scroll.
+           * As header width shrinks, whole units hide via @container queries.
+           * Disappear order (first to hide → last): scroll → filters → stats → controls.
+           * Title + collapse chevron always visible.
+           */}
+          <div className="@container flex min-w-0 items-center gap-3 overflow-hidden">
+            {/* ── Unit 1: Board title (always visible, absorbs remaining space) ── */}
+            <div className="relative flex min-w-0 flex-1 items-center gap-2">
               {boardEmojiFieldError ? (
                 <p className="absolute left-0 top-full z-20 mt-0.5 max-w-[min(100%,12rem)] text-[10px] text-destructive">
                   {boardEmojiFieldError}
@@ -1076,7 +1090,7 @@ export function BoardView({ boardId }: BoardViewProps) {
                 <button
                   type="button"
                   className={cn(
-                    "block max-w-[28rem] truncate rounded-md px-2 py-1 text-left tracking-tight text-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.05]",
+                    "block truncate rounded-md px-2 py-1 text-left tracking-tight text-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.05]",
                     filterCollapsed
                       ? "text-base font-semibold leading-tight"
                       : "text-2xl font-semibold leading-tight",
@@ -1088,7 +1102,6 @@ export function BoardView({ boardId }: BoardViewProps) {
                     setEditingBoardName(true);
                   }}
                 >
-                  {/* Name only — board emoji is the separate control to the left. */}
                   {data.name.trim() || "Untitled"}
                 </button>
               )}
@@ -1154,17 +1167,26 @@ export function BoardView({ boardId }: BoardViewProps) {
                   aria-hidden
                 />
               </span>
-              {activeGroupLabel ? (
-                // Surface the active group near the title so expanded filters read at a glance.
-                <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+            </div>
+
+            {/* ── Unit 2: Filter value chips (hidden < 900px) ── */}
+            <div className="hidden shrink-0 items-center gap-2 @min-[900px]:flex">
+              {activeGroupSummary ? (
+                <div
+                  className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                  title={activeGroupTooltip}
+                >
                   <span className="uppercase tracking-wide">Group</span>
                   <span className="truncate font-medium text-foreground">
-                    {activeGroupLabel}
+                    {activeGroupSummary}
                   </span>
                 </div>
               ) : null}
               {activePrioritySummary ? (
-                <div className="hidden min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                <div
+                  className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                  title={activePriorityTooltip}
+                >
                   <span className="uppercase tracking-wide">Priority</span>
                   {activePriorityColor ? (
                     <span
@@ -1179,7 +1201,7 @@ export function BoardView({ boardId }: BoardViewProps) {
                 </div>
               ) : null}
               {activeDateSummary ? (
-                <div className="hidden min-w-0 max-w-[14rem] items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                <div className="inline-flex min-w-0 max-w-[14rem] items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
                   <span className="uppercase tracking-wide">Dates</span>
                   <span
                     className="truncate font-medium text-foreground"
@@ -1189,6 +1211,10 @@ export function BoardView({ boardId }: BoardViewProps) {
                   </span>
                 </div>
               ) : null}
+            </div>
+
+            {/* ── Unit 3: Statistics (hidden < 750px) ── */}
+            <div className="hidden shrink-0 items-center @min-[750px]:flex">
               {data.showStats ? (
                 boardStatsDisplay.statsError ? (
                   <span
@@ -1213,9 +1239,9 @@ export function BoardView({ boardId }: BoardViewProps) {
                 )
               ) : null}
             </div>
-            {/* Board chrome (color, layout, card size, stats, sound): same cell as collapse chevron whether filters are expanded or minimized. */}
-            <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 justify-self-center">
-              {/* Keep horizontal scrolling next to board-level appearance controls, not at the far edge of the header. */}
+
+            {/* ── Unit 4: Horizontal scroll track (hidden < 1100px) ── */}
+            <div className="hidden shrink-0 items-center @min-[1100px]:flex">
               <div
                 ref={headerScrollTrackRef}
                 role="scrollbar"
@@ -1255,15 +1281,21 @@ export function BoardView({ boardId }: BoardViewProps) {
                   }}
                 />
               </div>
+            </div>
+
+            {/* ── Unit 5: Control buttons (hidden < 550px) ── */}
+            <div className="hidden shrink-0 items-center gap-2 @min-[550px]:flex">
               <BoardColorMenu board={data} compact swatchOnly />
               <BoardLayoutToggle board={data} iconsOnly />
               <BoardTaskCardSizeToggle board={data} />
               <BoardStatsVisibilityToggle board={data} />
               <BoardCelebrationSoundToggle board={data} />
             </div>
+
+            {/* ── Unit 6: Collapse chevron (always visible) ── */}
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center justify-self-end rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted"
               title={filterCollapsed ? "Expand header" : "Collapse header"}
               aria-label={filterCollapsed ? "Expand header" : "Collapse header"}
               aria-expanded={!filterCollapsed}
@@ -1282,23 +1314,23 @@ export function BoardView({ boardId }: BoardViewProps) {
               className="pointer-events-auto pt-1"
               data-board-no-pan
             >
-              {/* 2×2 grid: row1 = priority + status, row2 = groups + reserved cell. */}
-              <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3">
+              {/* Treat each expanded filter as its own responsive unit: wide screens keep 4 across, smaller windows wrap to 2x2 in the same row-major order. */}
+              <div className="grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-2">
                 <div className="min-w-0">
-                  <BoardPriorityToggles
+                  <TaskGroupSwitcher
                     board={data}
                     headerHovered={headerHovered}
-                    onOpenPriorityEditor={() => setPrioritiesEditorOpen(true)}
+                    onOpenGroupsEditor={() => setGroupsEditorOpen(true)}
                   />
                 </div>
                 <div className="min-w-0">
                   <BoardStatusToggles board={data} />
                 </div>
                 <div className="min-w-0">
-                  <TaskGroupSwitcher
+                  <BoardPriorityToggles
                     board={data}
                     headerHovered={headerHovered}
-                    onOpenGroupsEditor={() => setGroupsEditorOpen(true)}
+                    onOpenPriorityEditor={() => setPrioritiesEditorOpen(true)}
                   />
                 </div>
                 <div className="min-w-0">

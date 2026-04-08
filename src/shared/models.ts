@@ -33,6 +33,17 @@ export interface TaskPriorityDefinition {
   isSystem: boolean;
 }
 
+/** Board-scoped release label (`board_release`); tasks may reference at most one per board. */
+export interface ReleaseDefinition {
+  id: number;
+  name: string;
+  /** Same palette conventions as task priorities; omitted when unset. */
+  color?: string | null;
+  /** Optional calendar/metadata date (`YYYY-MM-DD` or ISO string). */
+  releaseDate?: string | null;
+  createdAt: string;
+}
+
 /** Sort by `sortOrder`, then `id`. */
 export function statusIdsInWorkflowOrder(statuses: Status[]): string[] {
   return [...statuses]
@@ -119,14 +130,25 @@ export function groupDisplayLabelForId(
   return formatGroupDisplayLabel(g);
 }
 
+/** Built-in numeric slot for the default "no level" priority (`task_priority.value`). */
+export const NONE_TASK_PRIORITY_VALUE = 0;
+
 /** Default priorities for new boards; placeholder ids are only for optimistic client state. */
 export function createDefaultTaskPriorities(): TaskPriorityDefinition[] {
   return [
+    { id: 5, value: 0, label: "none", color: "#ffffff", isSystem: true },
     { id: 10, value: 10, label: "low", color: "#94a3b8", isSystem: true },
     { id: 20, value: 20, label: "medium", color: "#3b82f6", isSystem: true },
     { id: 30, value: 30, label: "high", color: "#f97316", isSystem: true },
     { id: 40, value: 40, label: "critical", color: "#ef4444", isSystem: true },
   ];
+}
+
+/** Resolve the persisted row id for the builtin `none` priority (`value` = {@link NONE_TASK_PRIORITY_VALUE}), if present. */
+export function noneTaskPriorityId(
+  priorities: readonly TaskPriorityDefinition[],
+): number | undefined {
+  return priorities.find((p) => p.value === NONE_TASK_PRIORITY_VALUE)?.id;
 }
 
 /** Sort by numeric priority value, then stable id order. */
@@ -136,7 +158,7 @@ export function sortPrioritiesByValue(
   return [...priorities].sort((a, b) => a.value - b.value || a.id - b.id);
 }
 
-/** Resolved label for a priority id, or empty string if the task is unassigned. */
+/** Resolved label for a priority id, or empty string if unknown. */
 export function priorityLabelForId(
   priorities: TaskPriorityDefinition[],
   priorityId?: number | null,
@@ -186,8 +208,8 @@ export interface Task {
   body: string;
   /** References `task_group.id` for this board. */
   groupId: number;
-  /** Nullable reference to `task_priority.id` for this board. */
-  priorityId?: number | null;
+  /** References `task_priority.id` for this board (always set; builtin `none` is the default). */
+  priorityId: number;
   status: TaskStatus;
   order: number;
   color?: string;
@@ -200,6 +222,8 @@ export interface Task {
   /** Who created this task (`web` vs `cli`); optional on older payloads. */
   createdByPrincipal?: CreatorPrincipalType;
   createdByLabel?: string | null;
+  /** References `board_release.id`; null = untagged. */
+  releaseId?: number | null;
 }
 
 /** Visible task title line: emoji + space + title when emoji is set. */
@@ -263,6 +287,14 @@ export interface Board {
   deletedGroupFallbackId: number;
   /** Board-local task priorities, sorted by numeric value. */
   taskPriorities: TaskPriorityDefinition[];
+  /** Board-scoped releases; display order by `createdAt`. */
+  releases: ReleaseDefinition[];
+  /** Optional default release for keyboard shortcut `e` and auto-assign (when enabled). */
+  defaultReleaseId: number | null;
+  /** When set with `defaultReleaseId`, new web-created tasks get that release if `releaseId` is omitted on create. */
+  autoAssignReleaseOnCreateUi: boolean;
+  /** When set with `defaultReleaseId`, new CLI-created tasks get that release if `releaseId` is omitted on create. */
+  autoAssignReleaseOnCreateCli: boolean;
   visibleStatuses: string[];
   /** Flex weights for each visible status band (same length / order as rendered visible statuses). */
   statusBandWeights?: number[];

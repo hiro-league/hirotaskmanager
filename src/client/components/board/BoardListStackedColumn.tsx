@@ -11,7 +11,6 @@ import {
   type RefCallback,
 } from "react";
 import {
-  ALL_TASK_GROUPS,
   effectiveDefaultTaskGroupId,
   groupDisplayLabelForId,
   listDisplayName,
@@ -29,7 +28,7 @@ import { ListHeader } from "@/components/list/ListHeader";
 import {
   type TaskCardViewMode,
   usePreferencesStore,
-  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskCardViewMode,
   useResolvedTaskDateFilter,
@@ -228,7 +227,7 @@ function ListStackedBody({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
-  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
     board.id,
     board.taskPriorities,
@@ -407,10 +406,8 @@ function ListStackedBody({
     const trimmed = title.trim();
     if (!trimmed) return;
     const existingTaskIds = new Set(boardRef.current.tasks.map((task) => task.id));
-    const defaultGroupId =
-      activeGroup !== ALL_TASK_GROUPS
-        ? Number(activeGroup)
-        : effectiveDefaultTaskGroupId(board);
+    // New tasks always start in the board default group, even when filters are narrowed.
+    const defaultGroupId = effectiveDefaultTaskGroupId(board);
     createTask.mutate(
       {
         boardId: board.id,
@@ -462,14 +459,14 @@ function ListStackedBody({
       // Reuse the same normalized board filter shape as other board consumers.
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilter: dateFilterResolved,
     }),
     [
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilterResolved,
     ],

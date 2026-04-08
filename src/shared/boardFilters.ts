@@ -1,11 +1,9 @@
-import {
-  ALL_TASK_GROUPS,
-  DEFAULT_STATUS_IDS,
-  type Board,
-  type Task,
-} from "./models";
+import { DEFAULT_STATUS_IDS, type Board, type Task } from "./models";
 
 export type ActiveTaskPriorityIds = string[] | null;
+
+/** `null` = all groups; `[]` = explicit empty (no tasks); otherwise OR by id string. */
+export type ActiveTaskGroupIds = string[] | null;
 
 /** Which timestamps participate in the inclusive calendar-day range. */
 export type TaskDateFilterMode = "opened" | "closed" | "any";
@@ -75,14 +73,21 @@ export function taskMatchesPriorityFilter(
 ): boolean {
   if (activePriorityIds == null) return true;
   if (activePriorityIds.length === 0) return false;
-  return (
-    task.priorityId != null &&
-    activePriorityIds.includes(String(task.priorityId))
-  );
+  return activePriorityIds.includes(String(task.priorityId));
+}
+
+/** `null` = all groups, `[]` = no tasks, otherwise task must be in one of the listed ids. */
+export function taskMatchesGroupFilter(
+  task: Task,
+  activeGroupIds: ActiveTaskGroupIds | undefined,
+): boolean {
+  if (activeGroupIds == null) return true;
+  if (activeGroupIds.length === 0) return false;
+  return activeGroupIds.includes(String(task.groupId));
 }
 
 export interface BoardFilterGroupPriorityDate {
-  activeGroup: string;
+  activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: ActiveTaskPriorityIds;
   dateFilter: TaskDateFilterResolved | null;
 }
@@ -93,11 +98,11 @@ export function taskMatchesBoardFilter(
   task: Task,
   filter: Pick<
     BoardFilterGroupPriorityDate,
-    "activeGroup" | "activePriorityIds" | "dateFilter"
+    "activeGroupIds" | "activePriorityIds" | "dateFilter"
   >,
 ): boolean {
-  const { activeGroup, activePriorityIds, dateFilter } = filter;
-  if (activeGroup !== ALL_TASK_GROUPS && String(task.groupId) !== activeGroup) {
+  const { activeGroupIds, activePriorityIds, dateFilter } = filter;
+  if (!taskMatchesGroupFilter(task, activeGroupIds)) {
     return false;
   }
   if (!taskMatchesPriorityFilter(task, activePriorityIds)) {

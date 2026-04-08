@@ -14,6 +14,8 @@ import { migration013 } from "./013_cli_policy_and_provenance";
 import { migration014 } from "./014_drop_board_cli_access";
 import { migration015 } from "./015_trash_deleted_at";
 import { migration016 } from "./016_task_group_sort_and_board_defaults";
+import { migration017 } from "./017_task_priority_none_default";
+import { migration018 } from "./018_board_releases";
 import type { Migration } from "./types";
 
 /** Numbered migrations, ascending by version. */
@@ -34,4 +36,6 @@ export const migrations: Migration[] = [
   migration014,
   migration015,
   migration016,
+  migration017,
+  migration018,
 ];

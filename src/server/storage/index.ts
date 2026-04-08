@@ -16,6 +16,12 @@ export {
   patchBoardTaskGroupConfig,
 } from "./board";
 export {
+  createBoardRelease,
+  updateBoardRelease,
+  deleteBoardRelease,
+  listReleasesForBoard,
+} from "./releases";
+export {
   createListOnBoard,
   moveListOnBoard,
   patchListOnBoard,

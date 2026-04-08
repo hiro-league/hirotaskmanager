@@ -209,7 +209,12 @@ addPortOption(
     .description("List filtered tasks for one board")
     .argument("<id-or-slug>", "Board id or slug")
     .option("--list <id>", "List id")
-    .option("--group <id>", "Task group id")
+    .option(
+      "--group <id>",
+      "Task group id (repeat or use comma-separated values)",
+      collectMultiValue,
+      [] as string[],
+    )
     .option(
       "--priority <id>",
       "Task priority id (repeat or use comma-separated values)",
@@ -231,7 +236,7 @@ addPortOption(
     options: {
       port?: string;
       list?: string;
-      group?: string;
+      group?: string[];
       priority?: string[];
       status?: string[];
       dateMode?: string;
@@ -243,7 +248,9 @@ addPortOption(
       const port = resolvePort({ port: parsePortOption(options.port) });
       const params = new URLSearchParams();
       if (options.list?.trim()) params.set("listId", options.list.trim());
-      if (options.group?.trim()) params.set("groupId", options.group.trim());
+      for (const group of options.group ?? []) {
+        params.append("groupId", group);
+      }
       for (const priority of options.priority ?? []) {
         params.append("priorityId", priority);
       }
@@ -632,8 +639,10 @@ addPortOption(
     .requiredOption("--group <id>", "Task group id")
     .option("--title <text>", 'Title (default "Untitled")')
     .option("--status <id>", "Workflow status id (default open)")
-    .option("--priority <id>", "Task priority id for this board")
-    .option("--no-priority", "Store task with no priority")
+    .option(
+      "--priority <id>",
+      "Task priority row id (omit to use builtin none for this board)",
+    )
     .option("--emoji <text>", "Optional emoji before the title")
     .option("--clear-emoji", "Clear task emoji")
     .option("--body <text>", "Task body (Markdown)")
@@ -648,7 +657,6 @@ addPortOption(
     title?: string;
     status?: string;
     priority?: string;
-    noPriority?: boolean;
     emoji?: string;
     clearEmoji?: boolean;
     body?: string;
@@ -665,7 +673,6 @@ addPortOption(
         title: options.title,
         status: options.status,
         priority: options.priority,
-        noPriority: options.noPriority,
         emoji: options.emoji,
         clearEmoji: options.clearEmoji,
         body: options.body,
@@ -691,8 +698,10 @@ addPortOption(
     .option("--status <id>", "Workflow status id")
     .option("--list <id>", "List id")
     .option("--group <id>", "Task group id")
-    .option("--priority <id>", "Task priority id")
-    .option("--no-priority", "Clear priority")
+    .option(
+      "--priority <id>",
+      "Task priority row id (use builtin none id to reset to default)",
+    )
     .option("--color <css>", "Card color (CSS)")
     .option("--clear-color", "Clear card color")
     .option("--emoji <text>", "Emoji before the title")
@@ -711,7 +720,6 @@ addPortOption(
       list?: string;
       group?: string;
       priority?: string;
-      noPriority?: boolean;
       color?: string;
       clearColor?: boolean;
       emoji?: string;
@@ -732,7 +740,6 @@ addPortOption(
         list: options.list,
         group: options.group,
         priority: options.priority,
-        noPriority: options.noPriority,
         color: options.color,
         clearColor: options.clearColor,
         emoji: options.emoji,

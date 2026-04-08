@@ -6,6 +6,7 @@ import {
   type TaskMutationResult,
 } from "../../../shared/mutationResults";
 import type { Board, Task } from "../../../shared/models";
+import { noneTaskPriorityId, sortPrioritiesByValue } from "../../../shared/models";
 import { invalidateNotificationQueries } from "../notifications";
 import {
   boardKeys,
@@ -33,21 +34,25 @@ export function useCreateTask() {
       title: string;
       body: string;
       groupId: number;
-      priorityId?: number | null;
+      /** Omitted → server uses builtin `none` for the board. */
+      priorityId?: number;
       emoji?: string | null;
     }) => {
+      const body: Record<string, unknown> = {
+        listId: input.listId,
+        status: input.status,
+        title: input.title,
+        body: input.body,
+        groupId: input.groupId,
+        emoji: input.emoji ?? null,
+      };
+      if (input.priorityId !== undefined) {
+        body.priorityId = input.priorityId;
+      }
       return fetchJson<TaskMutationResult>(`/api/boards/${input.boardId}/tasks`, {
         method: "POST",
         headers: jsonHeaders,
-        body: JSON.stringify({
-          listId: input.listId,
-          status: input.status,
-          title: input.title,
-          body: input.body,
-          groupId: input.groupId,
-          priorityId: input.priorityId ?? null,
-          emoji: input.emoji ?? null,
-        }),
+        body: JSON.stringify(body),
       });
     },
     onMutate: async (input) => {
@@ -58,13 +63,17 @@ export function useCreateTask() {
       );
       const maxOrder = inBand.reduce((m, t) => Math.max(m, t.order), -1);
       const now = new Date().toISOString();
+      const defaultNone =
+        noneTaskPriorityId(prev.taskPriorities) ??
+        sortPrioritiesByValue(prev.taskPriorities)[0]?.id;
+      if (defaultNone == null) return { prev, optimisticTaskId: undefined };
       const task: Task = {
         id: tempNumericId(),
         listId: input.listId,
         title: input.title,
         body: input.body,
         groupId: input.groupId,
-        priorityId: input.priorityId ?? null,
+        priorityId: input.priorityId ?? defaultNone,
         status: input.status,
         order: maxOrder + 1,
         emoji: input.emoji ?? null,
@@ -121,7 +130,7 @@ export function useUpdateTask() {
             body: t.body,
             listId: t.listId,
             groupId: t.groupId,
-            priorityId: t.priorityId ?? null,
+            priorityId: t.priorityId,
             status: t.status,
             order: t.order,
             color: t.color ?? null,

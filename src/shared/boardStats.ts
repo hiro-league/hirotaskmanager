@@ -1,22 +1,19 @@
-import {
-  ALL_TASK_GROUPS,
-  statusIdsInWorkflowOrder,
-  type Board,
-  type Status,
-  type Task,
-} from "./models";
+import { statusIdsInWorkflowOrder, type Board, type Status, type Task } from "./models";
 import {
   isValidYmd,
   taskMatchesBoardFilter,
+  type ActiveTaskGroupIds,
   type TaskDateFilterResolved,
 } from "./boardFilters";
+import { repeatedSearchParamValues } from "./repeatedSearchParams";
 
 /**
  * Normalized filter for stats API and server aggregation.
  * Status visibility toggles are intentionally excluded: T/O/C already partition by open vs closed.
  */
 export interface BoardStatsFilter {
-  activeGroupId: string;
+  /** `null` = all groups; `[]` = no tasks; otherwise OR by task group id string. */
+  activeGroupIds: ActiveTaskGroupIds;
   activePriorityIds: string[] | null;
   dateFilter: TaskDateFilterResolved | null;
 }
@@ -41,7 +38,7 @@ const emptyStat = (): TaskCountStat => ({ total: 0, open: 0, closed: 0 });
 
 function taskMatchesStatsScope(task: Task, filter: BoardStatsFilter): boolean {
   return taskMatchesBoardFilter(task, {
-    activeGroup: filter.activeGroupId,
+    activeGroupIds: filter.activeGroupIds,
     activePriorityIds: filter.activePriorityIds,
     dateFilter: filter.dateFilter,
   });
@@ -99,13 +96,23 @@ export function closedStatusIdsFromStatuses(statuses: Status[]): Set<string> {
 
 /**
  * Parse GET /api/boards/:id/stats query params into a normalized filter.
- * Aligns with design doc: group, priorityIds, dateMode, startDate, endDate.
+ * Uses repeated `groupId` (and comma-separated fragments) like `GET /api/boards/:id/tasks`.
  * (`visibleStatuses` is ignored if present — stats do not scope by status visibility.)
  */
 export function parseBoardStatsFilter(
   searchParams: URLSearchParams,
 ): BoardStatsFilter {
-  const activeGroupId = searchParams.get("group") ?? ALL_TASK_GROUPS;
+  // Absent `groupId` = all groups (like tasks API). Present but empty = explicit no-match, distinct from omission.
+  const hasGroupKey = searchParams.has("groupId");
+  const groupParts = repeatedSearchParamValues(searchParams, "groupId");
+  let activeGroupIds: ActiveTaskGroupIds;
+  if (!hasGroupKey) {
+    activeGroupIds = null;
+  } else if (groupParts.length === 0) {
+    activeGroupIds = [];
+  } else {
+    activeGroupIds = groupParts;
+  }
 
   const priRaw = searchParams.get("priorityIds");
   let activePriorityIds: string[] | null;
@@ -140,7 +147,7 @@ export function parseBoardStatsFilter(
   }
 
   return {
-    activeGroupId,
+    activeGroupIds,
     activePriorityIds,
     dateFilter,
   };
@@ -158,7 +165,15 @@ export function buildBoardStatsSearchParams(
   filter: BoardStatsFilter,
 ): URLSearchParams {
   const sp = new URLSearchParams();
-  sp.set("group", filter.activeGroupId);
+  if (filter.activeGroupIds === null) {
+    // omit — all groups
+  } else if (filter.activeGroupIds.length === 0) {
+    sp.append("groupId", "");
+  } else {
+    for (const id of filter.activeGroupIds) {
+      sp.append("groupId", id);
+    }
+  }
   if (filter.activePriorityIds === null) {
     // omit — server treats as "all priorities"
   } else if (filter.activePriorityIds.length === 0) {
@@ -176,6 +191,10 @@ export function buildBoardStatsSearchParams(
 
 /** Stable string for TanStack Query keys (order-independent where sets are equivalent). */
 export function boardStatsFilterSignature(filter: BoardStatsFilter): string {
+  const grp =
+    filter.activeGroupIds === null
+      ? "null"
+      : [...filter.activeGroupIds].sort().join(",");
   const pri =
     filter.activePriorityIds === null
       ? "null"
@@ -183,5 +202,5 @@ export function boardStatsFilterSignature(filter: BoardStatsFilter): string {
   const df = filter.dateFilter
     ? `${filter.dateFilter.mode}|${filter.dateFilter.startDate}|${filter.dateFilter.endDate}`
     : "";
-  return `${filter.activeGroupId}|${pri}|${df}`;
+  return `${grp}|${pri}|${df}`;
 }

@@ -11,7 +11,7 @@ import {
 import type { Board } from "../../../../shared/models";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import {
-  useResolvedActiveTaskGroup,
+  useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
@@ -157,7 +157,7 @@ export function BoardKeyboardNavProvider({
   children,
 }: ProviderProps) {
   const workflowOrder = useStatusWorkflowOrder();
-  const activeGroup = useResolvedActiveTaskGroup(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
     board.id,
     board.taskPriorities,
@@ -172,14 +172,14 @@ export function BoardKeyboardNavProvider({
       // Keyboard navigation should traverse the exact same filtered task set the board renders.
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilter: dateFilterResolved,
     }),
     [
       visibleStatuses,
       workflowOrder,
-      activeGroup,
+      activeGroupIds,
       activePriorityIds,
       dateFilterResolved,
     ],

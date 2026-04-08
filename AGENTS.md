@@ -27,7 +27,7 @@ hirotm search "bug" --board <id-or-slug>   # one board
 hirotm search "drag" --format table        # fixed-width table
 hirotm boards add --client-name "Cursor Agent" "Sprint" [--emoji <text>]
 hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> "Ready" [--emoji <text>]
-hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--title ...] [--body|--body-file|--body-stdin ...]
+hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--title ...] [--body|--body-file|--body-stdin ...]
 hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [field flags...]
 hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
 hirotm trash boards                        # JSON: trashed boards
@@ -41,5 +41,6 @@ hirotm start --background
 
 ## Notes
 
+- Task **priority** is always a board `task_priority` row: builtin **`none`** (value `0`, white) is the default when `--priority` is omitted on `tasks add`. Use `--priority <id>` with the row id from `boards show` (or the API) to set another level or to switch back to `none` on `tasks update`.
 - The CLI talks to the local HTTP API; it should not bypass the server and touch SQLite directly.
 - Read command errors are JSON on `stderr` with a non-zero exit code.

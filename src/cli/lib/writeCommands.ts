@@ -611,7 +611,6 @@ export async function runTasksAdd(opts: {
   title?: string;
   status?: string;
   priority?: string;
-  noPriority?: boolean;
   emoji?: string;
   clearEmoji?: boolean;
   body?: string;
@@ -629,12 +628,6 @@ export async function runTasksAdd(opts: {
   }
   if (groupId === undefined) {
     throw new CliError("Missing required option: --group", 2);
-  }
-  if (opts.noPriority && opts.priority !== undefined) {
-    throw new CliError(
-      "Cannot use --priority together with --no-priority",
-      2,
-    );
   }
   if (opts.clearEmoji && opts.emoji !== undefined) {
     throw new CliError(
@@ -661,9 +654,7 @@ export async function runTasksAdd(opts: {
     status: opts.status?.trim() || "open",
   };
 
-  if (opts.noPriority) {
-    payload.priorityId = null;
-  } else if (opts.priority !== undefined) {
+  if (opts.priority !== undefined) {
     const p = parsePositiveInt("priorityId", opts.priority);
     if (p === undefined) {
       throw new CliError("Invalid priority id", 2);
@@ -713,7 +704,6 @@ export async function runTasksUpdate(opts: {
   list?: string;
   group?: string;
   priority?: string;
-  noPriority?: boolean;
   color?: string;
   clearColor?: boolean;
   emoji?: string;
@@ -729,12 +719,6 @@ export async function runTasksUpdate(opts: {
   const taskId = parseTaskId(opts.taskId);
   const port = opts.port;
 
-  if (opts.noPriority && opts.priority !== undefined) {
-    throw new CliError(
-      "Cannot use --priority together with --no-priority",
-      2,
-    );
-  }
   if (opts.clearColor && opts.color !== undefined) {
     throw new CliError("Cannot use --color together with --clear-color", 2);
   }
@@ -765,8 +749,7 @@ export async function runTasksUpdate(opts: {
     if (gid === undefined) throw new CliError("Invalid group id", 2);
     patch.groupId = gid;
   }
-  if (opts.noPriority) patch.priorityId = null;
-  else if (opts.priority !== undefined) {
+  if (opts.priority !== undefined) {
     const pid = parsePositiveInt("priorityId", opts.priority);
     if (pid === undefined) throw new CliError("Invalid priority id", 2);
     patch.priorityId = pid;

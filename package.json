@@ -22,12 +22,12 @@
     "README.md"
   ],
   "bin": {
-    "hirotaskmanager": "./src/cli/app.ts",
-    "hirotm": "./src/cli/index.ts"
+    "hirotaskmanager": "./src/cli/bin/hirotaskmanager.ts",
+    "hirotm": "./src/cli/bin/hirotm.ts"
   },
   "scripts": {
-    "app": "bun run src/cli/app.ts",
-    "cli": "bun run src/cli/index.ts",
+    "app": "bun run src/cli/bin/hirotaskmanager.ts",
+    "cli": "bun run src/cli/bin/hirotm.ts",
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npx --yes bun --watch src/server/bootstrapDev.ts",
     "dev:client": "npx --yes wait-on tcp:127.0.0.1:3002 && vite",

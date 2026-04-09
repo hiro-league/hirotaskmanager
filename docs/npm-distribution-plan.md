@@ -192,8 +192,8 @@ Target `bin` shape:
 ```json
 {
   "bin": {
-    "hirotaskmanager": "./src/cli/app.ts",
-    "hirotm": "./src/cli/index.ts"
+    "hirotaskmanager": "./src/cli/bin/hirotaskmanager.ts",
+    "hirotm": "./src/cli/bin/hirotm.ts"
   }
 }
 ```
@@ -201,15 +201,16 @@ Target `bin` shape:
 Notes:
 
 - `hirotm` stays the power-user and automation CLI
-- `hirotaskmanager` becomes the main app launcher
+- `hirotaskmanager` is the main app launcher
+- `src/cli/index.ts` and `src/cli/app.ts` re-export the bin files for older docs/scripts
 
 ## Phase 2: add a dedicated app launcher
 
-Create a new CLI entrypoint for the installed app.
+Implemented under `src/cli/bootstrap/launcher.ts`; thin entry is `src/cli/bin/hirotaskmanager.ts`.
 
-Suggested file:
+Suggested file (historical; logic now in bootstrap):
 
-`src/cli/app.ts`
+`src/cli/bootstrap/launcher.ts` (formerly `app.ts`)
 
 Responsibilities:
 

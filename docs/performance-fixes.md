@@ -1,6 +1,6 @@
 # Board performance — implemented fixes
 
-This document records performance-related code changes for supervisor review. Each entry ties back to `docs/board-performance-plan.md` Phase 2 and the analysis in `docs/profiling-analysis.md`.
+This document records performance-related code changes for supervisor review. Each entry ties back to `docs/board-performance-plan.md` (Phase 2 and Phase 3 where noted) and the analysis in `docs/profiling-analysis.md`.
 
 ---
 
@@ -413,4 +413,59 @@ board tree to re-render just to move one ring.
 
 ---
 
-*Add subsequent fixes as new sections below (e.g. `## Fix #9 — …`).*
+## Fix #9B + initial `inViewport` — Progressive stacked columns and first-paint body gate
+
+**Plan reference:** Phase 3, item 9 (“Chunked / progressive column mounting — break the 7.4s RunTask”), **Option B**; extends the Fix #4 addendum horizontal gating so the **first** React commit does not mount every `ListStackedBody`.
+
+### Problem (before)
+
+- **`BoardColumnsStacked`** rendered all **`BoardListStackedColumn`** instances in one `flatMap` pass. Even with vertical virtualization inside each list, **50 column shells** (headers, scroll roots, DnD wiring, `useColumnInViewport` setup) still landed in a single synchronous render wave.
+- **`useColumnInViewport`** defaulted **`inViewport` to `true`**, so **every** mounted column’s first commit still included **`ListStackedBody`** (virtualizers, droppables, task rows). The **`IntersectionObserver`** only ran after **`useEffect`**, so off-screen columns **paid full body mount once** before the observer could cull them.
+
+### Solution (after)
+
+**1. Progressive column mount (#9B) — `BoardColumnsStacked.tsx`**
+
+- Mount only the first **`STACKED_COLUMNS_INITIAL_MOUNT` (8)** list columns as real **`BoardListStackedColumn`** components on the first slice.
+- Remaining slots render **`w-72 shrink-0`** width placeholders (`data-stacked-column-placeholder`) so horizontal scroll width matches the full board.
+- **`requestIdleCallback`** (with **`setTimeout(..., 1)`** fallback) grows **`mountedColumnCount`** in batches of **`STACKED_COLUMNS_IDLE_BATCH` (8)** until every list has a real column.
+- **`board.id`** change resets the counter; shrinking **`localListIds.length`** clamps **`mountedColumnCount`** so it never exceeds the list count.
+
+**2. Correct initial horizontal gate — `useColumnInViewport.ts`**
+
+- **`inViewport` initial state is `false`** so the first commit does not assume every column is near the scrollport.
+- **`useLayoutEffect`** measures the column element against **`BoardScrollRootContext`** (same **500px** margin as the observer) and sets **`inViewport`** to **`true` before paint** when already near the viewport, avoiding a visible “header-only” flash for on-screen columns.
+- The existing **`IntersectionObserver`**, debounced hide, and **`getBoundingClientRect`** safety check are unchanged for scroll-driven updates.
+
+### Trade-offs (reviewer / QA)
+
+- **DnD / interaction:** Lists that are still **placeholders** have no task surface until their idle batch mounts — drops onto those lists are impossible until then.
+- **Fast horizontal scroll:** The user may scroll into the placeholder region **before** the next batch runs; columns fill in as idle work completes (same class of issue called out in the plan for Option B).
+- **Body unmount on horizontal scroll out:** **`ListStackedBody`** still **unmounts** when a **mounted** column leaves the gated region and **remounts** when it returns — that behavior predates this change; #9B only staggers **when** each column component first appears.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/client/components/board/BoardColumnsStacked.tsx` | `mountedColumnCount`, idle batching, placeholders |
+| `src/client/components/board/useColumnInViewport.ts` | Initial `false`, `useLayoutEffect` sync visibility, shared `columnNearHorizontalViewport` helper |
+
+### Expected impact
+
+- **Shorter initial critical path:** fewer column bodies and less hook work on the first frames; remaining columns hydrate during idle time.
+- **No eager “mount all bodies” frame** from the old **`useState(true)`** default for columns that are actually off-screen once layout is known.
+
+### Suggested verification
+
+1. **Manual:** Board with many lists — first paint shows a subset of full columns; the rest appear shortly without horizontal width collapse.
+2. **Scroll:** Pan horizontally; gated columns still swap between **`ListHeader`**-only and full body near the scrollport (Fix #4 addendum behavior preserved for mounted columns).
+3. **Board switch:** Open another board and confirm progressive mount resets cleanly.
+4. **DnD:** After the board is fully mounted, drag tasks as usual; avoid expecting drops onto not-yet-mounted placeholder columns during the first second of load.
+
+### Related documentation
+
+- `docs/board-performance-plan.md` — Phase 3, item 9 (Options A–C); Phase 2 / Fix #4 addendum for horizontal gating context.
+
+---
+
+*Add subsequent fixes as new sections above this note (e.g. `## Fix #10 — …`).*

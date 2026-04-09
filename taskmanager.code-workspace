@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../hiroleague-website"
+		},
+		{
+			"path": "../hiro-docs"
 		}
 	],
 	"settings": {

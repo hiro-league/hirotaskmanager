@@ -207,8 +207,8 @@ export const BoardListColumn = memo(function BoardListColumn({
   useLayoutEffect(() => {
     if (!boardNav) return;
     const el = listColumnShellRef.current;
-    boardNav.registerListElement(list.id, el);
-    return () => boardNav.registerListElement(list.id, null);
+    boardNav.registerListElement(list.listId, el);
+    return () => boardNav.registerListElement(list.listId, null);
   }, [boardNav, list]);
 
   const mergedOuterRef = useCallback(
@@ -223,11 +223,11 @@ export const BoardListColumn = memo(function BoardListColumn({
     <div
       ref={mergedOuterRef}
       className="relative flex h-full min-h-0 w-72 shrink-0 flex-col"
-      data-list-column={list.id}
+      data-list-column={list.listId}
       data-board-no-pan
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
-        boardNav.setHoveredListId(list.id);
+        boardNav.setHoveredListId(list.listId);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType !== "mouse" || !boardNav) return;
@@ -249,7 +249,7 @@ export const BoardListColumn = memo(function BoardListColumn({
           if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
             return;
           }
-          boardNav.selectList(list.id);
+          boardNav.selectList(list.listId);
         }}
       >
         {!isDragging && inViewport && (

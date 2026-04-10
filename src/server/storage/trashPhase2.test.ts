@@ -22,26 +22,30 @@ describe("trash phase 2 (writes + trash reads)", () => {
     const board = await createBoardWithDefaults("TB", "tb-slug", null, "", {
       cliBootstrap: "cli_full",
     });
-    expect((await readBoardIndex()).some((e) => e.id === board.id)).toBe(true);
-    const t = trashBoardById(board.id);
+    expect(
+      (await readBoardIndex()).some((e) => e.boardId === board.boardId),
+    ).toBe(true);
+    const t = trashBoardById(board.boardId);
     expect(t).not.toBeNull();
-    expect((await readBoardIndex()).some((e) => e.id === board.id)).toBe(false);
+    expect(
+      (await readBoardIndex()).some((e) => e.boardId === board.boardId),
+    ).toBe(false);
     const trashed = readTrashedBoards();
-    expect(trashed.some((b) => b.id === board.id)).toBe(true);
+    expect(trashed.some((b) => b.boardId === board.boardId)).toBe(true);
   });
 
   test("restoreListOnBoard returns conflict when parent board is trashed", async () => {
     const board = await createBoardWithDefaults("PB", "pb-slug", null, "", {
       cliBootstrap: "cli_full",
     });
-    const lr = createListOnBoard(board.id, { name: "L1" });
+    const lr = createListOnBoard(board.boardId, { name: "L1" });
     expect(lr).not.toBeNull();
-    const listId = lr!.list.id;
-    expect(deleteListOnBoard(board.id, listId)).not.toBeNull();
+    const listId = lr!.list.listId;
+    expect(deleteListOnBoard(board.boardId, listId)).not.toBeNull();
     const ts = new Date().toISOString();
-    getDb().run("UPDATE board SET deleted_at = ? WHERE id = ?", [ts, board.id]);
+    getDb().run("UPDATE board SET deleted_at = ? WHERE id = ?", [ts, board.boardId]);
 
-    const out = restoreListOnBoard(board.id, listId);
+    const out = restoreListOnBoard(board.boardId, listId);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected conflict");
     expect(out.reason).toBe("conflict");

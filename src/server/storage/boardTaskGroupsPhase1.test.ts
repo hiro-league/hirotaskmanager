@@ -22,17 +22,17 @@ describe("task groups phase 1 (sort_order + board defaults)", () => {
     });
     expect(board.taskGroups.length).toBe(3);
     expect(board.taskGroups.map((g) => g.sortOrder)).toEqual([0, 1, 2]);
-    const firstId = board.taskGroups[0]!.id;
+    const firstId = board.taskGroups[0]!.groupId;
     expect(board.defaultTaskGroupId).toBe(firstId);
     expect(board.deletedGroupFallbackId).toBe(firstId);
 
-    const loaded = loadBoard(board.id)!;
+    const loaded = loadBoard(board.boardId)!;
     expect(loaded.taskGroups.map((g) => g.sortOrder)).toEqual([0, 1, 2]);
     expect(loaded.defaultTaskGroupId).toBe(firstId);
     expect(loaded.deletedGroupFallbackId).toBe(firstId);
   });
 
-  test("loadBoard orders groups by sort_order then id", async () => {
+  test("loadBoard orders groups by sort_order then groupId", async () => {
     const board = await createBoardWithDefaults("G2", "g2", null, "", {
       cliBootstrap: "cli_full",
     });
@@ -41,15 +41,15 @@ describe("task groups phase 1 (sort_order + board defaults)", () => {
       .query(
         "SELECT id FROM task_group WHERE board_id = ? ORDER BY id ASC",
       )
-      .all(board.id) as { id: number }[];
+      .all(board.boardId) as { id: number }[];
     expect(rows.length).toBeGreaterThanOrEqual(2);
     const [a, b] = [rows[0]!.id, rows[1]!.id];
-    // Swap sort_order so id order differs from display order.
+    // Swap sort_order so row id order differs from display order.
     db.run("UPDATE task_group SET sort_order = ? WHERE id = ?", [1, a]);
     db.run("UPDATE task_group SET sort_order = ? WHERE id = ?", [0, b]);
 
-    const loaded = loadBoard(board.id)!;
-    expect(loaded.taskGroups[0]!.id).toBe(b);
-    expect(loaded.taskGroups[1]!.id).toBe(a);
+    const loaded = loadBoard(board.boardId)!;
+    expect(loaded.taskGroups[0]!.groupId).toBe(b);
+    expect(loaded.taskGroups[1]!.groupId).toBe(a);
   });
 });

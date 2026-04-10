@@ -2,7 +2,7 @@
 
 export type TrashedBoardItem = {
   type: "board";
-  id: number;
+  boardId: number;
   name: string;
   slug: string;
   emoji: string | null;
@@ -13,7 +13,7 @@ export type TrashedBoardItem = {
 
 export type TrashedListItem = {
   type: "list";
-  id: number;
+  listId: number;
   name: string;
   emoji: string | null;
   boardId: number;
@@ -25,7 +25,7 @@ export type TrashedListItem = {
 
 export type TrashedTaskItem = {
   type: "task";
-  id: number;
+  taskId: number;
   title: string;
   emoji: string | null;
   boardId: number;

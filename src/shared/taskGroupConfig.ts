@@ -11,7 +11,7 @@ export type TaskGroupCreateInput = {
 
 /** Existing task group row update. */
 export type TaskGroupUpdateInput = {
-  id: number;
+  groupId: number;
   label: string;
   emoji?: string | null;
   sortOrder: number;
@@ -19,7 +19,7 @@ export type TaskGroupUpdateInput = {
 
 /** Delete a task group; tasks move to `moveTasksToGroupId` or a create row via `moveTasksToClientId`. */
 export type TaskGroupDeleteInput = {
-  id: number;
+  groupId: number;
   moveTasksToGroupId?: number;
   /** After creates are inserted, resolve to `task_group.id` for the move target. */
   moveTasksToClientId?: string;
@@ -123,8 +123,11 @@ export function parsePatchBoardTaskGroupConfigBody(
       return { ok: false, error: "Invalid update entry" };
     }
     const o = item as Record<string, unknown>;
-    if (!isFiniteInt(o.id) || (o.id as number) <= 0) {
-      return { ok: false, error: "Each update requires a positive integer id" };
+    if (!isFiniteInt(o.groupId) || (o.groupId as number) <= 0) {
+      return {
+        ok: false,
+        error: "Each update requires a positive integer groupId",
+      };
     }
     const label = typeof o.label === "string" ? o.label.trim() : "";
     if (!label) {
@@ -136,7 +139,7 @@ export function parsePatchBoardTaskGroupConfigBody(
     const em = parseEmojiValue(o.emoji);
     if (!em.ok) return em;
     updates.push({
-      id: o.id,
+      groupId: o.groupId,
       label,
       emoji: em.value,
       sortOrder: o.sortOrder,
@@ -149,8 +152,11 @@ export function parsePatchBoardTaskGroupConfigBody(
       return { ok: false, error: "Invalid delete entry" };
     }
     const o = item as Record<string, unknown>;
-    if (!isFiniteInt(o.id) || (o.id as number) <= 0) {
-      return { ok: false, error: "Each delete requires a positive integer id" };
+    if (!isFiniteInt(o.groupId) || (o.groupId as number) <= 0) {
+      return {
+        ok: false,
+        error: "Each delete requires a positive integer groupId",
+      };
     }
     let moveTasksToGroupId: number | undefined;
     if ("moveTasksToGroupId" in o) {
@@ -183,7 +189,11 @@ export function parsePatchBoardTaskGroupConfigBody(
         error: "Use either moveTasksToGroupId or moveTasksToClientId per delete, not both",
       };
     }
-    deletes.push({ id: o.id, moveTasksToGroupId, moveTasksToClientId });
+    deletes.push({
+      groupId: o.groupId,
+      moveTasksToGroupId,
+      moveTasksToClientId,
+    });
   }
 
   const defaultTaskGroupClientId =
@@ -296,7 +306,7 @@ function selectionMatchesRow(
   if (s.kind === "clientId") {
     return trimmed.some((r) => r.clientId === s.clientId);
   }
-  return trimmed.some((r) => r.id === s.id);
+  return trimmed.some((r) => r.groupId === s.id);
 }
 
 /**
@@ -308,7 +318,7 @@ export function buildPatchBoardTaskGroupConfigFromEditor(
   rows: TaskGroupEditorRow[],
   patchInput: BuildTaskGroupEditorPatchInput,
 ): PatchBoardTaskGroupConfigInput {
-  const baselineIds = new Set(board.taskGroups.map((g) => g.id));
+  const baselineIds = new Set(board.taskGroups.map((g) => g.groupId));
   const trimmed = rows
     .map((r) => ({
       ...r,
@@ -328,7 +338,7 @@ export function buildPatchBoardTaskGroupConfigFromEditor(
     );
   }
 
-  const currentIds = new Set(trimmed.map((r) => r.id));
+  const currentIds = new Set(trimmed.map((r) => r.groupId));
   const removedIds = [...baselineIds].filter((id) => !currentIds.has(id));
 
   for (const id of removedIds) {
@@ -351,12 +361,12 @@ export function buildPatchBoardTaskGroupConfigFromEditor(
 
   const deletes: TaskGroupDeleteInput[] = removedIds.map((id) => {
     const mv = patchInput.deleteMoves.get(id) ?? null;
-    if (mv == null) return { id };
-    return { id, ...selectionToDeleteMove(mv) };
+    if (mv == null) return { groupId: id };
+    return { groupId: id, ...selectionToDeleteMove(mv) };
   });
 
   const creates = trimmed
-    .filter((r) => !baselineIds.has(r.id))
+    .filter((r) => !baselineIds.has(r.groupId))
     .map((r) => ({
       clientId: r.clientId,
       label: r.label,
@@ -365,9 +375,9 @@ export function buildPatchBoardTaskGroupConfigFromEditor(
     }));
 
   const updates = trimmed
-    .filter((r) => baselineIds.has(r.id))
+    .filter((r) => baselineIds.has(r.groupId))
     .map((r) => ({
-      id: r.id,
+      groupId: r.groupId,
       label: r.label,
       emoji: r.emoji,
       sortOrder: r.sortOrder,
@@ -387,8 +397,8 @@ export function encodeTaskGroupRowRef(
   row: TaskGroupEditorRow,
   baselineIds: Set<number>,
 ): string {
-  if (row.id > 0 && baselineIds.has(row.id)) {
-    return `id:${row.id}`;
+  if (row.groupId > 0 && baselineIds.has(row.groupId)) {
+    return `id:${row.groupId}`;
   }
   return `cid:${row.clientId}`;
 }
@@ -405,7 +415,9 @@ export function decodeTaskGroupRowRef(value: string): TaskGroupSelection {
 }
 
 /** Visible label for a row in selects and summaries. */
-export function formatTaskGroupRowLabel(row: Pick<TaskGroupEditorRow, "label" | "id">): string {
+export function formatTaskGroupRowLabel(
+  row: Pick<TaskGroupEditorRow, "label" | "groupId">,
+): string {
   const t = row.label.trim();
-  return t.length > 0 ? t : `Group ${row.id}`;
+  return t.length > 0 ? t : `Group ${row.groupId}`;
 }

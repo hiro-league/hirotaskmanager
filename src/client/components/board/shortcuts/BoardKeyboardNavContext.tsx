@@ -169,13 +169,13 @@ export function BoardKeyboardNavProvider({
   children,
 }: ProviderProps) {
   const workflowOrder = useStatusWorkflowOrder();
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
+    board.boardId,
     board.taskPriorities,
   );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
+  const dateFilterResolved = useResolvedTaskDateFilter(board.boardId);
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
@@ -201,14 +201,14 @@ export function BoardKeyboardNavProvider({
   );
 
   const [listColumnOrder, setListColumnOrder] = useState<number[]>(() =>
-    [...board.lists].sort((a, b) => a.order - b.order).map((l) => l.id),
+    [...board.lists].sort((a, b) => a.order - b.order).map((l) => l.listId),
   );
 
   useEffect(() => {
     setListColumnOrder(
-      [...board.lists].sort((a, b) => a.order - b.order).map((l) => l.id),
+      [...board.lists].sort((a, b) => a.order - b.order).map((l) => l.listId),
     );
-  }, [board.id, board.lists]);
+  }, [board.boardId, board.lists]);
 
   // Hover in useState rebuilt context on every pointerenter/leave and re-rendered the whole board.
   // Refs keep hover transient for F/Tab without invalidating BoardKeyboardNavContext (board perf plan #1).
@@ -259,7 +259,7 @@ export function BoardKeyboardNavProvider({
     hoveredListIdRef.current = null;
     pendingRevealTaskIdRef.current = null;
     initialHighlightAppliedForBoardId.current = null;
-  }, [board.id]);
+  }, [board.boardId]);
 
   const setKeyboardRing = useCallback((el: HTMLElement | null, active: boolean) => {
     if (!el) return;
@@ -431,14 +431,14 @@ export function BoardKeyboardNavProvider({
   useEffect(() => {
     // On board load, select the first task in the leftmost list, or that list’s header if it has no visible tasks.
     // Ref avoids re-applying when filters/group/priority change columnMap for the same board.
-    if (initialHighlightAppliedForBoardId.current === board.id) return;
+    if (initialHighlightAppliedForBoardId.current === board.boardId) return;
     // Notification deep links apply in a child `useLayoutEffect` before this passive effect; honor that selection
     // so we do not overwrite it when listColumnOrder syncs late or the hash is cleared before this runs.
     if (
       highlightedTaskIdRef.current != null ||
       highlightedListIdRef.current != null
     ) {
-      initialHighlightAppliedForBoardId.current = board.id;
+      initialHighlightAppliedForBoardId.current = board.boardId;
       return;
     }
     const hash =
@@ -447,12 +447,12 @@ export function BoardKeyboardNavProvider({
       hash.length > 1 &&
       (hash.includes("taskId=") || hash.includes("listId="))
     ) {
-      initialHighlightAppliedForBoardId.current = board.id;
+      initialHighlightAppliedForBoardId.current = board.boardId;
       return;
     }
     const orderedFromBoard = [...board.lists]
       .sort((a, b) => a.order - b.order)
-      .map((l) => l.id);
+      .map((l) => l.listId);
     // After a board switch, listColumnOrder can lag one frame behind board.lists; wait until they match.
     if (
       orderedFromBoard.length !== listColumnOrder.length ||
@@ -461,7 +461,7 @@ export function BoardKeyboardNavProvider({
       return;
     }
     const initial = initialHighlightForFirstList(listColumnOrder, columnMap);
-    initialHighlightAppliedForBoardId.current = board.id;
+    initialHighlightAppliedForBoardId.current = board.boardId;
     if (initial == null) return;
     if (initial.kind === "task") {
       setHighlightedTaskId(initial.taskId);
@@ -469,7 +469,7 @@ export function BoardKeyboardNavProvider({
       setHighlightedListId(initial.listId);
     }
   }, [
-    board.id,
+    board.boardId,
     board.lists,
     columnMap,
     listColumnOrder,

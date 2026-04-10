@@ -26,7 +26,7 @@ export function cliBoardReadError(
   entry: BoardIndexEntry,
 ): Response | undefined {
   if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(entry.id).readBoard) return undefined;
+  if (policyForBoard(entry.boardId).readBoard) return undefined;
   return c.json({ error: MSG_READ }, 403);
 }
 
@@ -37,7 +37,7 @@ export function cliBoardAccessError(
   kind: "read" | "write",
 ): Response | undefined {
   if (!isCliRequest(c)) return undefined;
-  const p = policyForBoard(entry.id);
+  const p = policyForBoard(entry.boardId);
   if (kind === "read") {
     if (p.readBoard) return undefined;
     return c.json({ error: MSG_READ }, 403);

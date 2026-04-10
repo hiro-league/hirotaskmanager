@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { SearchHit } from "../../shared/models";
 import type { AppBindings } from "../auth";
 import { cliBoardReadError, isCliRequest } from "../cliPolicyGuard";
+import { parseListPagination } from "../lib/listPagination";
 import { entryByIdOrSlug } from "../storage/board";
-import { searchTasks } from "../storage/search";
+import { searchTasksPaginated } from "../storage/search";
 
 export const searchRoute = new Hono<AppBindings>();
 
@@ -23,14 +23,16 @@ searchRoute.get("/", async (c) => {
 
   const cli = isCliRequest(c);
 
-  let limit = 20;
-  const limitRaw = c.req.query("limit");
-  if (limitRaw !== undefined && limitRaw !== "") {
-    const n = Number(limitRaw);
-    if (!Number.isFinite(n) || n < 1) {
-      return c.json({ error: "Invalid limit" }, 400);
-    }
-    limit = Math.min(50, Math.floor(n));
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: 20,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  const { offset, limit } = page;
+  // defaultLimit 20 ensures `limit` is always set for search.
+  if (limit == null) {
+    return c.json({ error: "Invalid pagination" }, 400);
   }
 
   let boardId: number | undefined;
@@ -42,17 +44,18 @@ searchRoute.get("/", async (c) => {
     }
     const blocked = cliBoardReadError(c, entry);
     if (blocked) return blocked;
-    boardId = entry.id;
+    boardId = entry.boardId;
   }
 
   const prefixRaw = c.req.query("prefix");
   const prefixFinalToken = parsePrefixQuery(prefixRaw);
 
-  let hits: SearchHit[];
+  let body;
   try {
-    hits = searchTasks({
+    body = searchTasksPaginated({
       q,
       boardId,
+      offset,
       limit,
       prefixFinalToken,
       excludeCliNoneBoards: cli,
@@ -62,5 +65,5 @@ searchRoute.get("/", async (c) => {
     return c.json({ error: "Invalid search query" }, 400);
   }
 
-  return c.json(hits);
+  return c.json(body);
 });

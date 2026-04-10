@@ -78,7 +78,7 @@ export function AddListSlot({
     if (!beforeBoard) return;
     const prevOrder = [...beforeBoard.lists]
       .sort((x, y) => x.order - y.order)
-      .map((l) => l.id);
+      .map((l) => l.listId);
     const anchor = insertAfterListId;
 
     createList.mutate(
@@ -89,14 +89,14 @@ export function AddListSlot({
           cancel();
           // After creating a list, make it current so the board follows the
           // user's last action instead of leaving the old selection in place.
-          boardKeyboardNav?.selectList(newList.id);
+          boardKeyboardNav?.selectList(newList.listId);
           if (anchor == null) return;
           const anchorIdx = prevOrder.indexOf(anchor);
           if (anchorIdx < 0) return;
           const nextListId = prevOrder[anchorIdx + 1];
           moveList.mutate({
             boardId: data.boardId,
-            listId: newList.id,
+            listId: newList.listId,
             beforeListId: nextListId == null ? undefined : nextListId,
             position: nextListId == null ? "last" : undefined,
           });
@@ -241,10 +241,10 @@ export function BoardColumns({ board }: BoardColumnsProps) {
 
   useEffect(() => {
     setWeights(bandWeightsForBoard(boardRef.current, workflowOrder));
-  }, [board.id, visKey, weightsSyncKey, workflowOrder]);
+  }, [board.boardId, visKey, weightsSyncKey, workflowOrder]);
 
   const flushWeights = useCallback(() => {
-    const b = qc.getQueryData<Board>(boardKeys.detail(board.id));
+    const b = qc.getQueryData<Board>(boardKeys.detail(board.boardId));
     if (!b) return;
     const w = weightsRef.current;
     const vis = visibleStatusesForBoard(b, workflowOrder);
@@ -258,10 +258,10 @@ export function BoardColumns({ board }: BoardColumnsProps) {
       return;
     }
     patchViewPrefs.mutate({
-      boardId: b.id,
+      boardId: b.boardId,
       patch: { statusBandWeights: [...w] },
     });
-  }, [board.id, qc, patchViewPrefs, workflowOrder]);
+  }, [board.boardId, qc, patchViewPrefs, workflowOrder]);
 
   const adjustAt = useCallback((i: number, deltaY: number) => {
     setWeights((w) => {
@@ -280,7 +280,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
 
   const overlayTask =
     activeTaskId != null
-      ? board.tasks.find((task) => task.id === activeTaskId)
+      ? board.tasks.find((task) => task.taskId === activeTaskId)
       : undefined;
 
   return (
@@ -305,7 +305,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
             />
             <div className="flex min-h-0 flex-row gap-4">
               {localListIds.flatMap((id, index) => {
-                const list = board.lists.find((l) => l.id === id);
+                const list = board.lists.find((l) => l.listId === id);
                 if (!list) return [];
                 const items = [
                   <BoardListColumn
@@ -330,7 +330,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
                   items.push(
                     <AddListSlot
                       key={`add-after-${id}`}
-                      boardId={board.id}
+                      boardId={board.boardId}
                       open
                       insertAfterListId={insertAfterListId}
                       onOpen={setInsertAfterListId}
@@ -342,7 +342,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               })}
             </div>
             <AddListSlot
-              boardId={board.id}
+              boardId={board.boardId}
               open={addListOpen && insertAfterListId == null}
               insertAfterListId={null}
               onOpen={(anchorListId) => {

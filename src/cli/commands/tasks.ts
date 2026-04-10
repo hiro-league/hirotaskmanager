@@ -1,5 +1,7 @@
 import { Command } from "commander";
 import type { CliContext } from "../handlers/context";
+// Board-scoped task listing lives in boards handlers (shared GET /boards/:id/tasks); `tasks list` is the CLI home for that API.
+import { handleBoardsTasks } from "../handlers/boards";
 import {
   handleTasksAdd,
   handleTasksDelete,
@@ -8,7 +10,12 @@ import {
   handleTasksRestore,
   handleTasksUpdate,
 } from "../handlers/tasks";
-import { addPortOption, withCliErrors } from "../lib/command-helpers";
+import {
+  addPortOption,
+  CLI_FIELDS_OPTION_DESC,
+  collectMultiValue,
+  withCliErrors,
+} from "../lib/command-helpers";
 
 export function registerTaskCommands(
   program: Command,
@@ -16,7 +23,93 @@ export function registerTaskCommands(
 ): void {
   const tasksCommand = program
     .command("tasks")
-    .description("Create and update tasks on boards");
+    .description("List, create, and update tasks on boards");
+
+  addPortOption(
+    tasksCommand
+      .command("list")
+      .description("List filtered tasks for one board")
+      .requiredOption("--board <id-or-slug>", "Board id or slug")
+      .option("--list <id>", "List id")
+      .option(
+        "--group <id>",
+        "Task group id (repeat or use comma-separated values)",
+        collectMultiValue,
+        [] as string[],
+      )
+      .option(
+        "--priority <id>",
+        "Task priority id (repeat or use comma-separated values)",
+        collectMultiValue,
+        [] as string[],
+      )
+      .option(
+        "--status <id>",
+        "Workflow status id (repeat or use comma-separated values)",
+        collectMultiValue,
+        [] as string[],
+      )
+      .option(
+        "--release-id <id>",
+        "Release id filter (repeat or comma-separated; OR with other release filters)",
+        collectMultiValue,
+        [] as string[],
+      )
+      .option(
+        "--untagged",
+        "Include tasks with no release (OR with --release-id when both are used)",
+      )
+      .option("--date-mode <mode>", "Date filter mode: opened, closed, or any")
+      .option("--from <yyyy-mm-dd>", "Inclusive start date")
+      .option("--to <yyyy-mm-dd>", "Inclusive end date")
+      .option(
+        "--limit <n>",
+        "Page size (omit to return all matching tasks in one response)",
+      )
+      .option("--offset <n>", "Skip this many tasks after server sort (default 0)")
+      .option(
+        "--page-all",
+        "Fetch every page with --limit (or 500) and merge into one envelope",
+      )
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      board: string;
+      list?: string;
+      group?: string[];
+      priority?: string[];
+      status?: string[];
+      releaseId?: string[];
+      untagged?: boolean;
+      dateMode?: string;
+      from?: string;
+      to?: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() =>
+        handleBoardsTasks(ctx, options.board, {
+          port: options.port,
+          list: options.list,
+          group: options.group,
+          priority: options.priority,
+          status: options.status,
+          releaseId: options.releaseId,
+          untagged: options.untagged,
+          dateMode: options.dateMode,
+          from: options.from,
+          to: options.to,
+          limit: options.limit,
+          offset: options.offset,
+          pageAll: options.pageAll,
+          fields: options.fields,
+        }),
+      );
+    },
+  );
 
   addPortOption(
     tasksCommand
@@ -138,7 +231,7 @@ export function registerTaskCommands(
     tasksCommand
       .command("restore")
       .description("Restore a task from Trash (board and list must allow it)")
-      .argument("<task-id>", "Numeric task id (see: hirotm trash tasks)"),
+      .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
   ).action(async (taskId: string, options: { port?: string }) => {
     await withCliErrors(() => handleTasksRestore(ctx, taskId, options));
   });

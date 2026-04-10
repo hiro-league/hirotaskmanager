@@ -20,7 +20,7 @@ describe("trash board id resolution", () => {
     const rows: TrashedBoardItem[] = [
       {
         type: "board",
-        id: 3,
+        boardId: 3,
         name: "A",
         slug: "Alpha",
         emoji: null,

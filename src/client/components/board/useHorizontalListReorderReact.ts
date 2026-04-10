@@ -17,7 +17,7 @@ import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext
 export function sortedListIds(board: Board): number[] {
   return [...board.lists]
     .sort((a, b) => a.order - b.order)
-    .map((l) => l.id);
+    .map((l) => l.listId);
 }
 
 /**
@@ -148,7 +148,7 @@ export function useHorizontalListReorderReact(board: Board) {
       if (movedIndex < 0) return;
       if (movedIndex === 0) {
         moveList.mutate({
-          boardId: boardRef.current.id,
+          boardId: boardRef.current.boardId,
           listId: movedListId,
           position: "first",
         });
@@ -156,14 +156,14 @@ export function useHorizontalListReorderReact(board: Board) {
       }
       if (movedIndex === finalOrder.length - 1) {
         moveList.mutate({
-          boardId: boardRef.current.id,
+          boardId: boardRef.current.boardId,
           listId: movedListId,
           position: "last",
         });
         return;
       }
       moveList.mutate({
-        boardId: boardRef.current.id,
+        boardId: boardRef.current.boardId,
         listId: movedListId,
         beforeListId: finalOrder[movedIndex + 1],
       });

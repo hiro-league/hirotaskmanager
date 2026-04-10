@@ -46,14 +46,14 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   const {
     ref: setSortableNodeRef,
     isDragging,
-  } = useBoardTaskSortableReact(task.id, sortableId, containerId, index);
+  } = useBoardTaskSortableReact(task.taskId, sortableId, containerId, index);
   const nav = useBoardKeyboardNavOptional();
   const setNodeRef = useCallback(
     (node: HTMLElement | null) => {
       setSortableNodeRef(node);
-      nav?.registerTaskElement(task.id, node);
+      nav?.registerTaskElement(task.taskId, node);
     },
-    [setSortableNodeRef, nav, task.id],
+    [setSortableNodeRef, nav, task.taskId],
   );
   return (
     <div
@@ -65,7 +65,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
       }
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging) return;
-        nav?.setHoveredTaskId(task.id);
+        nav?.setHoveredTaskId(task.taskId);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType !== "mouse") return;

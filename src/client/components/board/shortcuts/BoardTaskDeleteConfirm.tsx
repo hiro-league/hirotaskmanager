@@ -21,7 +21,7 @@ export function BoardTaskDeleteConfirm({
   const deleteTask = useDeleteTask();
   const open = taskId != null;
   const task =
-    taskId != null ? board.tasks.find((t) => t.id === taskId) : undefined;
+    taskId != null ? board.tasks.find((t) => t.taskId === taskId) : undefined;
 
   return (
     <ConfirmDialog
@@ -40,7 +40,7 @@ export function BoardTaskDeleteConfirm({
       onConfirm={() => {
         if (taskId == null) return;
         deleteTask.mutate(
-          { boardId: board.id, taskId },
+          { boardId: board.boardId, taskId },
           {
             onSuccess: () => {
               nav.setHighlightedTaskId(null);

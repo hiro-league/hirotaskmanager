@@ -9,12 +9,11 @@ import {
   handleBoardsPurge,
   handleBoardsRestore,
   handleBoardsShow,
-  handleBoardsTasks,
   handleBoardsUpdate,
 } from "../handlers/boards";
 import {
   addPortOption,
-  collectMultiValue,
+  CLI_FIELDS_OPTION_DESC,
   withCliErrors,
 } from "../lib/command-helpers";
 
@@ -27,10 +26,30 @@ export function registerBoardCommands(
     .description("Inspect TaskManager boards");
 
   addPortOption(
-    boardsCommand.command("list").description("List all boards"),
-  ).action(async (options: { port?: string }) => {
-    await withCliErrors(() => handleBoardsList(ctx, options));
-  });
+    boardsCommand
+      .command("list")
+      .description("List all boards (paginated JSON envelope by default)")
+      .option(
+        "--limit <n>",
+        "Page size (omit to return all boards in one response)",
+      )
+      .option("--offset <n>", "Skip this many boards (default 0)")
+      .option(
+        "--page-all",
+        "Fetch every page with --limit (or 500) and merge into one envelope",
+      )
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() => handleBoardsList(ctx, options));
+    },
+  );
 
   addPortOption(
     boardsCommand
@@ -40,63 +59,6 @@ export function registerBoardCommands(
   ).action(async (idOrSlug: string, options: { port?: string }) => {
     await withCliErrors(() => handleBoardsShow(ctx, idOrSlug, options));
   });
-
-  addPortOption(
-    boardsCommand
-      .command("tasks")
-      .description("List filtered tasks for one board")
-      .argument("<id-or-slug>", "Board id or slug")
-      .option("--list <id>", "List id")
-      .option(
-        "--group <id>",
-        "Task group id (repeat or use comma-separated values)",
-        collectMultiValue,
-        [] as string[],
-      )
-      .option(
-        "--priority <id>",
-        "Task priority id (repeat or use comma-separated values)",
-        collectMultiValue,
-        [] as string[],
-      )
-      .option(
-        "--status <id>",
-        "Workflow status id (repeat or use comma-separated values)",
-        collectMultiValue,
-        [] as string[],
-      )
-      .option(
-        "--release-id <id>",
-        "Release id filter (repeat or comma-separated; OR with other release filters)",
-        collectMultiValue,
-        [] as string[],
-      )
-      .option(
-        "--untagged",
-        "Include tasks with no release (OR with --release-id when both are used)",
-      )
-      .option("--date-mode <mode>", "Date filter mode: opened, closed, or any")
-      .option("--from <yyyy-mm-dd>", "Inclusive start date")
-      .option("--to <yyyy-mm-dd>", "Inclusive end date"),
-  ).action(
-    async (
-      idOrSlug: string,
-      options: {
-        port?: string;
-        list?: string;
-        group?: string[];
-        priority?: string[];
-        status?: string[];
-        releaseId?: string[];
-        untagged?: boolean;
-        dateMode?: string;
-        from?: string;
-        to?: string;
-      },
-    ) => {
-      await withCliErrors(() => handleBoardsTasks(ctx, idOrSlug, options));
-    },
-  );
 
   addPortOption(
     boardsCommand
@@ -194,8 +156,12 @@ export function registerBoardCommands(
     await withCliErrors(() => handleBoardsPurge(ctx, idOrSlug, options));
   });
 
+  const configure = boardsCommand
+    .command("configure")
+    .description("Replace-style board structure from JSON");
+
   addPortOption(
-    boardsCommand
+    configure
       .command("groups")
       .description(
         "Set board task groups (explicit creates, updates, deletes, defaults)",
@@ -217,7 +183,7 @@ export function registerBoardCommands(
   );
 
   addPortOption(
-    boardsCommand
+    configure
       .command("priorities")
       .description("Replace board task priorities from JSON")
       .argument("<id-or-slug>", "Board id or slug")

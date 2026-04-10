@@ -33,12 +33,12 @@ describe("board releases (phase 1–2)", () => {
     const board = await createBoardWithDefaults("R1", "r1", null, "", {
       cliBootstrap: "cli_full",
     });
-    const a = createBoardRelease(board.id, { name: "v1.0" });
+    const a = createBoardRelease(board.boardId, { name: "v1.0" });
     expect(a).not.toBeNull();
     expect(a!.name).toBe("v1.0");
-    const dup = createBoardRelease(board.id, { name: "v1.0" });
+    const dup = createBoardRelease(board.boardId, { name: "v1.0" });
     expect(dup).toBeNull();
-    const loaded = loadBoard(board.id)!;
+    const loaded = loadBoard(board.boardId)!;
     expect(loaded.releases.some((r) => r.name === "v1.0")).toBe(true);
   });
 
@@ -46,47 +46,49 @@ describe("board releases (phase 1–2)", () => {
     const board = await createBoardWithDefaults("R2", "r2", null, "", {
       cliBootstrap: "cli_full",
     });
-    const list = createListOnBoard(board.id, { name: "L" })!;
-    const r1 = createBoardRelease(board.id, { name: "A" })!;
-    const r2 = createBoardRelease(board.id, { name: "B" })!;
-    const g = board.taskGroups[0]!.id;
+    const list = createListOnBoard(board.boardId, { name: "L" })!;
+    const r1 = createBoardRelease(board.boardId, { name: "A" })!;
+    const r2 = createBoardRelease(board.boardId, { name: "B" })!;
+    const g = board.taskGroups[0]!.groupId;
     const t1 = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "t",
         body: "",
         status: "open",
-        releaseId: r1.id,
+        releaseId: r1.releaseId,
       },
       { principal: "web", label: null },
     )!;
-    expect(t1.task.releaseId).toBe(r1.id);
+    expect(t1.task.releaseId).toBe(r1.releaseId);
 
-    deleteBoardRelease(board.id, r1.id, { moveTasksToReleaseId: r2.id });
+    deleteBoardRelease(board.boardId, r1.releaseId, {
+      moveTasksToReleaseId: r2.releaseId,
+    });
     const db = getDb();
     const rid = db
       .query("SELECT release_id FROM task WHERE id = ?")
-      .get(t1.task.id) as { release_id: number | null };
-    expect(rid.release_id).toBe(r2.id);
+      .get(t1.task.taskId) as { release_id: number | null };
+    expect(rid.release_id).toBe(r2.releaseId);
 
     const t2 = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "t2",
         body: "",
         status: "open",
-        releaseId: r2.id,
+        releaseId: r2.releaseId,
       },
       { principal: "web", label: null },
     )!;
-    deleteBoardRelease(board.id, r2.id, {});
+    deleteBoardRelease(board.boardId, r2.releaseId, {});
     const rid2 = db
       .query("SELECT release_id FROM task WHERE id = ?")
-      .get(t2.task.id) as { release_id: number | null };
+      .get(t2.task.taskId) as { release_id: number | null };
     expect(rid2.release_id).toBeNull();
   });
 
@@ -94,20 +96,20 @@ describe("board releases (phase 1–2)", () => {
     const board = await createBoardWithDefaults("R3", "r3", null, "", {
       cliBootstrap: "cli_full",
     });
-    const list = createListOnBoard(board.id, { name: "L" })!;
-    const rel = createBoardRelease(board.id, { name: "Sprint" })!;
-    const g = board.taskGroups[0]!.id;
+    const list = createListOnBoard(board.boardId, { name: "L" })!;
+    const rel = createBoardRelease(board.boardId, { name: "Sprint" })!;
+    const g = board.taskGroups[0]!.groupId;
 
-    await patchBoard(board.id, {
-      defaultReleaseId: rel.id,
+    await patchBoard(board.boardId, {
+      defaultReleaseId: rel.releaseId,
       autoAssignReleaseOnCreateUi: true,
       autoAssignReleaseOnCreateCli: true,
     });
 
     const tw = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "w",
         body: "",
@@ -115,12 +117,12 @@ describe("board releases (phase 1–2)", () => {
       },
       { principal: "web", label: null },
     )!;
-    expect(tw.task.releaseId).toBe(rel.id);
+    expect(tw.task.releaseId).toBe(rel.releaseId);
 
     const tc = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "c",
         body: "",
@@ -128,12 +130,12 @@ describe("board releases (phase 1–2)", () => {
       },
       { principal: "cli", label: null },
     )!;
-    expect(tc.task.releaseId).toBe(rel.id);
+    expect(tc.task.releaseId).toBe(rel.releaseId);
 
     const tn = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "n",
         body: "",
@@ -149,18 +151,18 @@ describe("board releases (phase 1–2)", () => {
     const board = await createBoardWithDefaults("R4", "r4", null, "", {
       cliBootstrap: "cli_full",
     });
-    const list = createListOnBoard(board.id, { name: "L" })!;
-    const rel = createBoardRelease(board.id, { name: "Rel" })!;
-    const g = board.taskGroups[0]!.id;
-    await patchBoard(board.id, {
-      defaultReleaseId: rel.id,
+    const list = createListOnBoard(board.boardId, { name: "L" })!;
+    const rel = createBoardRelease(board.boardId, { name: "Rel" })!;
+    const g = board.taskGroups[0]!.groupId;
+    await patchBoard(board.boardId, {
+      defaultReleaseId: rel.releaseId,
       autoAssignReleaseOnCreateUi: false,
       autoAssignReleaseOnCreateCli: false,
     });
     const t = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "x",
         body: "",
@@ -175,18 +177,18 @@ describe("board releases (phase 1–2)", () => {
     const board = await createBoardWithDefaults("R5", "r5", null, "", {
       cliBootstrap: "cli_full",
     });
-    const list = createListOnBoard(board.id, { name: "L" })!;
-    const rel = createBoardRelease(board.id, { name: "S" })!;
-    const g = board.taskGroups[0]!.id;
-    await patchBoard(board.id, {
-      defaultReleaseId: rel.id,
+    const list = createListOnBoard(board.boardId, { name: "L" })!;
+    const rel = createBoardRelease(board.boardId, { name: "S" })!;
+    const g = board.taskGroups[0]!.groupId;
+    await patchBoard(board.boardId, {
+      defaultReleaseId: rel.releaseId,
       autoAssignReleaseOnCreateUi: true,
       autoAssignReleaseOnCreateCli: false,
     });
     const tw = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "w",
         body: "",
@@ -194,11 +196,11 @@ describe("board releases (phase 1–2)", () => {
       },
       { principal: "web", label: null },
     )!;
-    expect(tw.task.releaseId).toBe(rel.id);
+    expect(tw.task.releaseId).toBe(rel.releaseId);
     const tc = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
-        listId: list.list.id,
+        listId: list.list.listId,
         groupId: g,
         title: "c",
         body: "",
@@ -216,28 +218,28 @@ describe("board releases (phase 1–2)", () => {
     const b = await createBoardWithDefaults("RB", "rb", null, "", {
       cliBootstrap: "cli_full",
     });
-    createListOnBoard(a.id, { name: "LA" })!;
-    const listB = createListOnBoard(b.id, { name: "LB" })!;
-    const relA = createBoardRelease(a.id, { name: "onlyA" })!;
-    const gB = b.taskGroups[0]!.id;
+    createListOnBoard(a.boardId, { name: "LA" })!;
+    const listB = createListOnBoard(b.boardId, { name: "LB" })!;
+    const relA = createBoardRelease(a.boardId, { name: "onlyA" })!;
+    const gB = b.taskGroups[0]!.groupId;
     const badCreate = createTaskOnBoard(
-      b.id,
+      b.boardId,
       {
-        listId: listB.list.id,
+        listId: listB.list.listId,
         groupId: gB,
         title: "t",
         body: "",
         status: "open",
-        releaseId: relA.id,
+        releaseId: relA.releaseId,
       },
       { principal: "web", label: null },
     );
     expect(badCreate).toBeNull();
 
     const onB = createTaskOnBoard(
-      b.id,
+      b.boardId,
       {
-        listId: listB.list.id,
+        listId: listB.list.listId,
         groupId: gB,
         title: "t2",
         body: "",
@@ -245,8 +247,8 @@ describe("board releases (phase 1–2)", () => {
       },
       { principal: "web", label: null },
     )!;
-    const badPatch = patchTaskOnBoard(b.id, onB.task.id, {
-      releaseId: relA.id,
+    const badPatch = patchTaskOnBoard(b.boardId, onB.task.taskId, {
+      releaseId: relA.releaseId,
     });
     expect(badPatch).toBeNull();
   });

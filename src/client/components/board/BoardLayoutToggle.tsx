@@ -23,7 +23,7 @@ export function BoardLayoutToggle({
   const setMode = (next: BoardLayout) => {
     if (next === mode) return;
     patchViewPrefs.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       patch: { boardLayout: next },
     });
   };

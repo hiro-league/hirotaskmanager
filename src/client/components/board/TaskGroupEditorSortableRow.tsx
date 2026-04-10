@@ -67,8 +67,8 @@ export function TaskGroupEditorSortableRow({
     dragDisabled,
   );
 
-  const taskCount = baselineIds.has(row.id)
-    ? (taskCountByGroupId.get(row.id) ?? 0)
+  const taskCount = baselineIds.has(row.groupId)
+    ? (taskCountByGroupId.get(row.groupId) ?? 0)
     : 0;
   const showMoveTo = moveToOptions.length > 0 || taskCount === 0;
   const rowRef = encodeTaskGroupRowRef(row, baselineIds);
@@ -125,13 +125,13 @@ export function TaskGroupEditorSortableRow({
             disabled={busy || isDeleting}
             autoFocus={isNewRow && row.label.trim().length === 0}
             placeholder="Name"
-            aria-label={`Group ${row.label || row.id}`}
+            aria-label={`Group ${row.label || row.groupId}`}
             onChange={(e) => onLabelChange(row.clientId, e.target.value)}
             onBlur={() => onNameBlur?.(row.clientId)}
           />
         </div>
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          {baselineIds.has(row.id)
+          {baselineIds.has(row.groupId)
             ? `${taskCount} task${taskCount === 1 ? "" : "s"}`
             : "New"}
         </span>

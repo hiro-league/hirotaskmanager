@@ -80,7 +80,7 @@ export function registerListCommands(
     listsCommand
       .command("restore")
       .description("Restore a list from Trash (board must be active)")
-      .argument("<list-id>", "Numeric list id (see: hirotm trash lists)"),
+      .argument("<list-id>", "Numeric list id (see: hirotm trash list lists)"),
   ).action(async (listId: string, options: { port?: string }) => {
     await withCliErrors(() => handleListsRestore(ctx, listId, options));
   });

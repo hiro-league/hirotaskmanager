@@ -186,7 +186,7 @@ Phases are **ordered dependencies**: complete earlier phases before leaning hard
 ### Phase 4 — CLI depth (target: aligns with `docs/cli-rearchitecture.md`)
 
 - Extract or add **testable handlers** with injected HTTP/output (Phase **C** in §4.4).
-- Add **subprocess smoke** tests only for **1–2** commands if needed (e.g. `hirotm status` JSON shape against a mocked server or test server).
+- Add **subprocess smoke** tests only for **1–2** commands if needed (e.g. `hirotm server status` JSON shape against a mocked server or test server).
 
 **Exit criteria:** CLI refactors don’t require manual full command matrix verification.
 

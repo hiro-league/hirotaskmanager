@@ -1,9 +1,9 @@
 import type { Database } from "bun:sqlite";
+import type { PaginatedListBody } from "../../shared/pagination";
 import type { SearchHit } from "../../shared/models";
 import { getDb } from "../db";
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 50;
 
 /**
  * bm25 weights for task_search columns:
@@ -43,8 +43,48 @@ function mergeSnippets(...parts: string[]): string {
 }
 
 /**
+ * Search indexed task fields with total count and SQL `LIMIT`/`OFFSET` paging.
+ */
+export function searchTasksPaginated(options: {
+  q: string;
+  boardId?: number;
+  offset: number;
+  limit: number;
+  /** Default true: last token gets a `*` prefix suffix for partial matches. */
+  prefixFinalToken?: boolean;
+  /** When true, omit hits on boards where CLI read is disabled (`board_cli_policy.read_board`). */
+  excludeCliNoneBoards?: boolean;
+}): PaginatedListBody<SearchHit> {
+  const db = getDb();
+  const matchQuery = buildFtsMatchQuery(options.q, {
+    prefixFinalToken: options.prefixFinalToken !== false,
+  });
+  if (!matchQuery) {
+    return { items: [], total: 0, limit: options.limit, offset: options.offset };
+  }
+
+  const opts = { excludeCliNoneBoards: options.excludeCliNoneBoards === true };
+  const total = countSearch(db, matchQuery, options.boardId, opts);
+  const items = selectSearchPage(
+    db,
+    matchQuery,
+    options.boardId,
+    options.limit,
+    options.offset,
+    opts,
+  );
+  return {
+    items,
+    total,
+    limit: options.limit,
+    offset: options.offset,
+  };
+}
+
+/**
  * Search indexed task fields (title, body, list name, group label, status label).
  * Triggers keep `task_search` in sync with tasks and with list/group/status renames.
+ * Prefer `searchTasksPaginated` for HTTP handlers; this returns the first page only (tests, callers).
  */
 export function searchTasks(options: {
   q: string;
@@ -55,27 +95,59 @@ export function searchTasks(options: {
   /** When true, omit hits on boards where CLI read is disabled (`board_cli_policy.read_board`). */
   excludeCliNoneBoards?: boolean;
 }): SearchHit[] {
-  const db = getDb();
-  const matchQuery = buildFtsMatchQuery(options.q, {
-    prefixFinalToken: options.prefixFinalToken !== false,
-  });
-  if (!matchQuery) return [];
-
-  const limit = Math.min(
-    MAX_LIMIT,
-    Math.max(1, options.limit ?? DEFAULT_LIMIT),
-  );
-
-  return runSearch(db, matchQuery, options.boardId, limit, {
-    excludeCliNoneBoards: options.excludeCliNoneBoards === true,
-  });
+  const lim = Math.max(1, options.limit ?? DEFAULT_LIMIT);
+  return searchTasksPaginated({
+    ...options,
+    offset: 0,
+    limit: lim,
+  }).items;
 }
 
-function runSearch(
+function countSearch(
+  db: Database,
+  matchQuery: string,
+  boardId: number | undefined,
+  opts: { excludeCliNoneBoards: boolean },
+): number {
+  const cliFilter = opts.excludeCliNoneBoards
+    ? "AND EXISTS (SELECT 1 FROM board_cli_policy p WHERE p.board_id = b.id AND p.read_board != 0)"
+    : "";
+
+  if (boardId !== undefined) {
+    const row = db
+      .query(
+        `SELECT COUNT(*) AS c
+         FROM task_search
+         INNER JOIN board AS b ON b.id = task_search.board_id
+         INNER JOIN task AS t ON t.id = task_search.task_id
+         INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
+         WHERE task_search MATCH ? AND task_search.board_id = ?
+           AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
+      )
+      .get(matchQuery, boardId) as { c: number } | null;
+    return row?.c ?? 0;
+  }
+
+  const row = db
+    .query(
+      `SELECT COUNT(*) AS c
+       FROM task_search
+       INNER JOIN board AS b ON b.id = task_search.board_id
+       INNER JOIN task AS t ON t.id = task_search.task_id
+       INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE task_search MATCH ?
+         AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
+    )
+    .get(matchQuery) as { c: number } | null;
+  return row?.c ?? 0;
+}
+
+function selectSearchPage(
   db: Database,
   matchQuery: string,
   boardId: number | undefined,
   limit: number,
+  offset: number,
   opts: { excludeCliNoneBoards: boolean },
 ): SearchHit[] {
   const bm25Expr = `bm25(task_search, ${BM25_W.join(", ")})`;
@@ -97,6 +169,7 @@ function runSearch(
            task_search.board_id AS board_id,
            b.slug AS board_slug,
            b.name AS board_name,
+           l.id AS list_id,
            l.name AS list_name,
            t.title AS title,
            ${bm25Expr} AS score,
@@ -108,9 +181,9 @@ function runSearch(
          WHERE task_search MATCH ? AND task_search.board_id = ?
            AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
          ORDER BY score
-         LIMIT ?`,
+         LIMIT ? OFFSET ?`,
       )
-      .all(matchQuery, boardId, limit) as SearchRow[];
+      .all(matchQuery, boardId, limit, offset) as SearchRow[];
     return rows.map(mapRow);
   }
 
@@ -121,6 +194,7 @@ function runSearch(
          task_search.board_id AS board_id,
          b.slug AS board_slug,
          b.name AS board_name,
+         l.id AS list_id,
          l.name AS list_name,
          t.title AS title,
          ${bm25Expr} AS score,
@@ -132,9 +206,9 @@ function runSearch(
        WHERE task_search MATCH ?
          AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
        ORDER BY score
-       LIMIT ?`,
+       LIMIT ? OFFSET ?`,
     )
-    .all(matchQuery, limit) as SearchRow[];
+    .all(matchQuery, limit, offset) as SearchRow[];
   return rows.map(mapRow);
 }
 
@@ -143,6 +217,7 @@ type SearchRow = {
   board_id: number;
   board_slug: string;
   board_name: string;
+  list_id: number;
   list_name: string;
   title: string;
   score: number;
@@ -159,6 +234,7 @@ function mapRow(r: SearchRow): SearchHit {
     boardId: r.board_id,
     boardSlug: r.board_slug,
     boardName: r.board_name,
+    listId: r.list_id,
     listName: r.list_name,
     title: r.title,
     snippet: mergeSnippets(

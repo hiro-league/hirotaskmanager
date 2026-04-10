@@ -46,10 +46,10 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
     });
     const g = board.taskGroups;
     const saved = patchBoardTaskGroupConfig(
-      board.id,
+      board.boardId,
       configWithDefaults(board, {
         updates: g.map((x, i) => ({
-          id: x.id,
+          groupId: x.groupId,
           label: `${x.label}-x`,
           emoji: x.emoji ?? null,
           sortOrder: i,
@@ -59,41 +59,46 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
     expect(saved.taskGroups.map((x) => x.label)).toEqual(
       g.map((x) => `${x.label}-x`),
     );
-    expect(saved.taskGroups.map((x) => x.id)).toEqual(g.map((x) => x.id));
+    expect(saved.taskGroups.map((x) => x.groupId)).toEqual(
+      g.map((x) => x.groupId),
+    );
   });
 
   test("delete one group and reassign tasks", async () => {
     const board = await createBoardWithDefaults("P2B", "p2-b", null, "", {
       cliBootstrap: "cli_full",
     });
-    const lr = createListOnBoard(board.id, { name: "L" })!;
+    const lr = createListOnBoard(board.boardId, { name: "L" })!;
     const [g0, g1, g2] = board.taskGroups;
-    createTaskOnBoard(board.id, {
-      listId: lr.list.id,
+    createTaskOnBoard(board.boardId, {
+      listId: lr.list.listId,
       status: "open",
       title: "t",
       body: "",
-      groupId: g2.id,
+      groupId: g2.groupId,
     });
 
     const surviving = [g0, g1];
     const saved = patchBoardTaskGroupConfig(
-      board.id,
+      board.boardId,
       configWithDefaults(board, {
         updates: surviving.map((x, i) => ({
-          id: x.id,
+          groupId: x.groupId,
           label: x.label,
           emoji: x.emoji ?? null,
           sortOrder: i,
         })),
-        deletes: [{ id: g2.id, moveTasksToGroupId: g0.id }],
-        defaultTaskGroupId: g0.id,
-        deletedGroupFallbackId: g0.id,
+        deletes: [{ groupId: g2.groupId, moveTasksToGroupId: g0.groupId }],
+        defaultTaskGroupId: g0.groupId,
+        deletedGroupFallbackId: g0.groupId,
       }),
     )!;
-    expect(saved.taskGroups.map((x) => x.id)).toEqual([g0.id, g1.id]);
+    expect(saved.taskGroups.map((x) => x.groupId)).toEqual([
+      g0.groupId,
+      g1.groupId,
+    ]);
     const t = saved.tasks.find((x) => x.title === "t")!;
-    expect(t.groupId).toBe(g0.id);
+    expect(t.groupId).toBe(g0.groupId);
   });
 
   test("reject deleting all groups without creates", async () => {
@@ -102,16 +107,16 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
     });
     const [g0, g1, g2] = board.taskGroups;
     expect(() =>
-      patchBoardTaskGroupConfig(board.id, {
+      patchBoardTaskGroupConfig(board.boardId, {
         creates: [],
         updates: [],
         deletes: [
-          { id: g0.id, moveTasksToGroupId: g1.id },
-          { id: g1.id, moveTasksToGroupId: g2.id },
-          { id: g2.id, moveTasksToGroupId: g0.id },
+          { groupId: g0.groupId, moveTasksToGroupId: g1.groupId },
+          { groupId: g1.groupId, moveTasksToGroupId: g2.groupId },
+          { groupId: g2.groupId, moveTasksToGroupId: g0.groupId },
         ],
-        defaultTaskGroupId: g0.id,
-        deletedGroupFallbackId: g0.id,
+        defaultTaskGroupId: g0.groupId,
+        deletedGroupFallbackId: g0.groupId,
       }),
     ).toThrow(/surviving/);
   });
@@ -121,7 +126,7 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
       cliBootstrap: "cli_full",
     });
     const [g0, g1, g2] = board.taskGroups;
-    const saved = patchBoardTaskGroupConfig(board.id, {
+    const saved = patchBoardTaskGroupConfig(board.boardId, {
       creates: [
         {
           clientId: "n1",
@@ -131,15 +136,15 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
         },
       ],
       updates: [
-        { id: g0.id, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
-        { id: g1.id, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
+        { groupId: g0.groupId, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
+        { groupId: g1.groupId, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
       ],
-      deletes: [{ id: g2.id, moveTasksToGroupId: g0.id }],
-      defaultTaskGroupId: g0.id,
-      deletedGroupFallbackId: g0.id,
+      deletes: [{ groupId: g2.groupId, moveTasksToGroupId: g0.groupId }],
+      defaultTaskGroupId: g0.groupId,
+      deletedGroupFallbackId: g0.groupId,
     })!;
     expect(saved.taskGroups.some((x) => x.label === "newgrp")).toBe(true);
-    expect(saved.taskGroups.some((x) => x.id === g2.id)).toBe(false);
+    expect(saved.taskGroups.some((x) => x.groupId === g2.groupId)).toBe(false);
   });
 
   test("reject update and delete same id", async () => {
@@ -149,17 +154,22 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
     const g0 = board.taskGroups[0]!;
     expect(() =>
       patchBoardTaskGroupConfig(
-        board.id,
+        board.boardId,
         configWithDefaults(board, {
           updates: [
             {
-              id: g0.id,
+              groupId: g0.groupId,
               label: "x",
               emoji: null,
               sortOrder: 0,
             },
           ],
-          deletes: [{ id: g0.id, moveTasksToGroupId: board.taskGroups[1]!.id }],
+          deletes: [
+            {
+              groupId: g0.groupId,
+              moveTasksToGroupId: board.taskGroups[1]!.groupId,
+            },
+          ],
         }),
       ),
     ).toThrow(/update and delete/);
@@ -169,31 +179,31 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
     const board = await createBoardWithDefaults("P2G", "p2-g", null, "", {
       cliBootstrap: "cli_full",
     });
-    const lr = createListOnBoard(board.id, { name: "L" })!;
+    const lr = createListOnBoard(board.boardId, { name: "L" })!;
     const [g0, g1, g2] = board.taskGroups;
-    createTaskOnBoard(board.id, {
-      listId: lr.list.id,
+    createTaskOnBoard(board.boardId, {
+      listId: lr.list.listId,
       status: "open",
       title: "sinkme",
       body: "",
-      groupId: g2.id,
+      groupId: g2.groupId,
     });
-    const saved = patchBoardTaskGroupConfig(board.id, {
+    const saved = patchBoardTaskGroupConfig(board.boardId, {
       creates: [
         { clientId: "sink", label: "Sink", emoji: null, sortOrder: 3 },
       ],
       updates: [
-        { id: g0.id, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
-        { id: g1.id, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
+        { groupId: g0.groupId, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
+        { groupId: g1.groupId, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
       ],
-      deletes: [{ id: g2.id, moveTasksToClientId: "sink" }],
-      defaultTaskGroupId: g0.id,
-      deletedGroupFallbackId: g0.id,
+      deletes: [{ groupId: g2.groupId, moveTasksToClientId: "sink" }],
+      defaultTaskGroupId: g0.groupId,
+      deletedGroupFallbackId: g0.groupId,
     })!;
     const sink = saved.taskGroups.find((x) => x.label === "Sink");
     expect(sink).toBeDefined();
     const t = saved.tasks.find((x) => x.title === "sinkme")!;
-    expect(t.groupId).toBe(sink!.id);
+    expect(t.groupId).toBe(sink!.groupId);
   });
 
   test("defaultTaskGroupClientId resolves to a group created in the same save", async () => {
@@ -201,21 +211,21 @@ describe("task groups phase 2 (explicit PATCH /groups)", () => {
       cliBootstrap: "cli_full",
     });
     const [g0, g1, g2] = board.taskGroups;
-    const saved = patchBoardTaskGroupConfig(board.id, {
+    const saved = patchBoardTaskGroupConfig(board.boardId, {
       creates: [
         { clientId: "new1", label: "Fresh", emoji: null, sortOrder: 3 },
       ],
       updates: [
-        { id: g0.id, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
-        { id: g1.id, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
-        { id: g2.id, label: g2.label, emoji: g2.emoji ?? null, sortOrder: 2 },
+        { groupId: g0.groupId, label: g0.label, emoji: g0.emoji ?? null, sortOrder: 0 },
+        { groupId: g1.groupId, label: g1.label, emoji: g1.emoji ?? null, sortOrder: 1 },
+        { groupId: g2.groupId, label: g2.label, emoji: g2.emoji ?? null, sortOrder: 2 },
       ],
       deletes: [],
       defaultTaskGroupClientId: "new1",
-      deletedGroupFallbackId: g0.id,
+      deletedGroupFallbackId: g0.groupId,
     })!;
     const fresh = saved.taskGroups.find((x) => x.label === "Fresh");
     expect(fresh).toBeDefined();
-    expect(saved.defaultTaskGroupId).toBe(fresh!.id);
+    expect(saved.defaultTaskGroupId).toBe(fresh!.groupId);
   });
 });

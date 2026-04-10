@@ -21,6 +21,7 @@ import {
   type TaskMutationResult,
 } from "../../shared/mutationResults";
 import type { Board, TaskPriorityDefinition } from "../../shared/models";
+import { parseListPagination } from "../lib/listPagination";
 import { parsePatchBoardTaskGroupConfigBody } from "../../shared/taskGroupConfig";
 import {
   closedStatusIdsFromStatuses,
@@ -31,6 +32,7 @@ import {
   BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
   BOARD_FETCH_SLIM_TASK_BODY_CHARS,
 } from "../../shared/boardPayload";
+import { paginateInMemory } from "../../shared/pagination";
 import { repeatedSearchParamValues } from "../../shared/repeatedSearchParams";
 import {
   createBoardWithDefaults,
@@ -172,12 +174,17 @@ function listDeleteResponse(c: Context, result: ListDeleteMutationResult) {
 
 boardsRoute.get("/", async (c) => {
   const index = await readBoardIndex();
-  if (getRequestAuthContext(c).principal === "web") {
-    return c.json(index);
+  const rows =
+    getRequestAuthContext(c).principal === "web"
+      ? index
+      : index.filter((entry) => readBoardCliPolicy(entry.boardId)?.readBoard);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
   }
-  return c.json(
-    index.filter((entry) => readBoardCliPolicy(entry.id)?.readBoard),
-  );
+  return c.json(paginateInMemory(rows, page.offset, page.limit));
 });
 
 boardsRoute.post("/", async (c) => {
@@ -230,7 +237,7 @@ boardsRoute.post("/", async (c) => {
     createdBy: provenanceForWrite(c),
     cliBootstrap: auth.principal === "web" ? "web_default" : "cli_full",
   });
-  publishBoardChanged(board.id, board.updatedAt);
+  publishBoardChanged(board.boardId, board.updatedAt);
   recordBoardCreated(c, board);
   return c.json(board, 201);
 });
@@ -240,7 +247,7 @@ boardsRoute.patch("/:id/view-prefs", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliEditBoardMetadataError(c, entry.id);
+  const blocked = cliEditBoardMetadataError(c, entry.boardId);
   if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
@@ -273,9 +280,9 @@ boardsRoute.patch("/:id/view-prefs", async (c) => {
   if (typeof body.muteCelebrationSounds === "boolean") {
     patch.muteCelebrationSounds = body.muteCelebrationSounds;
   }
-  const saved = patchBoardViewPrefs(entry.id, patch);
+  const saved = patchBoardViewPrefs(entry.boardId, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
-  publishBoardChanged(entry.id, saved.updatedAt);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
   // View preference updates do not emit notification rows (Phase 4).
   return c.json(saved);
 });
@@ -285,7 +292,7 @@ boardsRoute.patch("/:id/groups", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageStructureError(c, entry.id);
+  const blocked = cliManageStructureError(c, entry.boardId);
   if (blocked) return blocked;
   let body: unknown;
   try {
@@ -298,9 +305,9 @@ boardsRoute.patch("/:id/groups", async (c) => {
     return c.json({ error: parsed.error }, 400);
   }
   try {
-    const saved = patchBoardTaskGroupConfig(entry.id, parsed.value);
+    const saved = patchBoardTaskGroupConfig(entry.boardId, parsed.value);
     if (!saved) return c.json({ error: "Board not found" }, 404);
-    publishBoardChanged(entry.id, saved.updatedAt);
+    publishBoardChanged(entry.boardId, saved.updatedAt);
     recordBoardTaskGroups(c, entry, saved);
     return c.json(saved);
   } catch (e) {
@@ -314,7 +321,7 @@ boardsRoute.patch("/:id/priorities", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageStructureError(c, entry.id);
+  const blocked = cliManageStructureError(c, entry.boardId);
   if (blocked) return blocked;
   let body: { taskPriorities?: unknown };
   try {
@@ -335,18 +342,21 @@ boardsRoute.patch("/:id/priorities", async (c) => {
       typeof rec.value === "number" && Number.isFinite(rec.value)
         ? rec.value
         : Number.NaN;
-    const id =
-      typeof rec.id === "number" && Number.isFinite(rec.id) ? rec.id : 0;
+    // Client PATCH body uses `priorityId` (aligned with {@link TaskPriorityDefinition}).
+    const priorityId =
+      typeof rec.priorityId === "number" && Number.isFinite(rec.priorityId)
+        ? rec.priorityId
+        : 0;
     const isSystem = Boolean(rec.isSystem);
-    taskPriorities.push({ id, value, label, color, isSystem });
+    taskPriorities.push({ priorityId, value, label, color, isSystem });
   }
   if (taskPriorities.length === 0) {
     return c.json({ error: "At least one task priority required" }, 400);
   }
   try {
-    const saved = patchBoardTaskPriorities(entry.id, taskPriorities);
+    const saved = patchBoardTaskPriorities(entry.boardId, taskPriorities);
     if (!saved) return c.json({ error: "Board not found" }, 404);
-    publishBoardChanged(entry.id, saved.updatedAt);
+    publishBoardChanged(entry.boardId, saved.updatedAt);
     recordBoardTaskPriorities(c, entry, saved);
     return c.json(saved);
   } catch (e) {
@@ -360,9 +370,15 @@ boardsRoute.get("/:id/releases", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const board = loadBoard(entry.id);
+  const board = loadBoard(entry.boardId);
   if (!board) return c.json({ error: "Board not found" }, 404);
-  return c.json(board.releases);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  return c.json(paginateInMemory(board.releases, page.offset, page.limit));
 });
 
 boardsRoute.post("/:id/releases", async (c) => {
@@ -370,7 +386,7 @@ boardsRoute.post("/:id/releases", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageStructureError(c, entry.id);
+  const blocked = cliManageStructureError(c, entry.boardId);
   if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
@@ -394,7 +410,7 @@ boardsRoute.post("/:id/releases", async (c) => {
     else if (typeof body.releaseDate === "string") releaseDate = body.releaseDate.trim();
     else return c.json({ error: "Invalid releaseDate" }, 400);
   }
-  const created = createBoardRelease(entry.id, {
+  const created = createBoardRelease(entry.boardId, {
     name,
     color,
     releaseDate,
@@ -405,12 +421,12 @@ boardsRoute.post("/:id/releases", async (c) => {
       400,
     );
   }
-  const board = loadBoard(entry.id);
+  const board = loadBoard(entry.boardId);
   if (board) {
     // Granular SSE: other tabs merge `releases` without refetching the full board (phase 5 sync).
     publishBoardEvent({
       kind: "release-upserted",
-      boardId: entry.id,
+      boardId: entry.boardId,
       boardUpdatedAt: board.updatedAt,
       release: created,
     });
@@ -423,7 +439,7 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageStructureError(c, entry.id);
+  const blocked = cliManageStructureError(c, entry.boardId);
   if (blocked) return blocked;
   const releaseId = Number(c.req.param("releaseId"));
   if (!Number.isFinite(releaseId)) {
@@ -462,15 +478,15 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
   ) {
     return c.json({ error: "No changes" }, 400);
   }
-  const updated = updateBoardRelease(entry.id, releaseId, input);
+  const updated = updateBoardRelease(entry.boardId, releaseId, input);
   if (!updated) {
     return c.json({ error: "Release not found or duplicate name" }, 400);
   }
-  const board = loadBoard(entry.id);
+  const board = loadBoard(entry.boardId);
   if (board) {
     publishBoardEvent({
       kind: "release-upserted",
-      boardId: entry.id,
+      boardId: entry.boardId,
       boardUpdatedAt: board.updatedAt,
       release: updated,
     });
@@ -483,7 +499,7 @@ boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageStructureError(c, entry.id);
+  const blocked = cliManageStructureError(c, entry.boardId);
   if (blocked) return blocked;
   const releaseId = Number(c.req.param("releaseId"));
   if (!Number.isFinite(releaseId)) {
@@ -499,10 +515,10 @@ boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
     }
     options = { moveTasksToReleaseId: n };
   }
-  const ok = deleteBoardRelease(entry.id, releaseId, options);
+  const ok = deleteBoardRelease(entry.boardId, releaseId, options);
   if (!ok) return c.json({ error: "Release not found or invalid move target" }, 400);
-  const board = loadBoard(entry.id);
-  if (board) publishBoardChanged(entry.id, board.updatedAt);
+  const board = loadBoard(entry.boardId);
+  if (board) publishBoardChanged(entry.boardId, board.updatedAt);
   return c.body(null, 204);
 });
 
@@ -511,7 +527,7 @@ boardsRoute.post("/:id/lists", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliCreateListsError(c, entry.id);
+  const blocked = cliCreateListsError(c, entry.boardId);
   if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
@@ -538,16 +554,16 @@ boardsRoute.post("/:id/lists", async (c) => {
     }
   }
 
-  const result = createListOnBoard(entry.id, { name, emoji }, provenanceForWrite(c));
+  const result = createListOnBoard(entry.boardId, { name, emoji }, provenanceForWrite(c));
   if (!result) return c.json({ error: "Board not found" }, 404);
   publishBoardEvent({
     kind: "list-created",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
-    listId: result.list.id,
+    listId: result.list.listId,
   });
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board) recordListCreated(c, entry, board, result);
   }
   return listMutationResponse(
@@ -567,7 +583,7 @@ boardsRoute.put("/:id/lists/move", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageAnyListsError(c, entry.id);
+  const blocked = cliManageAnyListsError(c, entry.boardId);
   if (blocked) return blocked;
 
   let body: {
@@ -586,7 +602,7 @@ boardsRoute.put("/:id/lists/move", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "listId required" }, 400);
   }
-  if (!readListById(entry.id, listId)) {
+  if (!readListById(entry.boardId, listId)) {
     return c.json({ error: "List not found" }, 404);
   }
 
@@ -610,23 +626,23 @@ boardsRoute.put("/:id/lists/move", async (c) => {
     return c.json({ error: "Invalid position" }, 400);
   }
 
-  const boardBefore = loadBoard(entry.id);
+  const boardBefore = loadBoard(entry.boardId);
   if (!boardBefore) return c.json({ error: "Board not found" }, 404);
   const orderBefore = [...boardBefore.lists]
     .sort((a, b) => a.order - b.order)
-    .map((l) => l.id);
+    .map((l) => l.listId);
 
-  const saved = moveListOnBoard(entry.id, {
+  const saved = moveListOnBoard(entry.boardId, {
     listId,
     beforeListId,
     afterListId,
     position,
   });
   if (!saved) return c.json({ error: "Invalid move" }, 400);
-  publishBoardChanged(entry.id, saved.updatedAt);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
   const orderAfter = [...saved.lists]
     .sort((a, b) => a.order - b.order)
-    .map((l) => l.id);
+    .map((l) => l.listId);
   // Skip notification when the list order is unchanged (no-op move / same slot).
   if (JSON.stringify(orderBefore) !== JSON.stringify(orderAfter)) {
     recordListMoved(c, entry, saved, listId);
@@ -643,7 +659,7 @@ boardsRoute.get("/:id/lists/:listId", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const list = readListById(entry.id, listId);
+  const list = readListById(entry.boardId, listId);
   if (!list) return c.json({ error: "List not found" }, 404);
   return c.json(list);
 });
@@ -657,9 +673,9 @@ boardsRoute.patch("/:id/lists/:listId", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const listBefore = readListById(entry.id, listId);
+  const listBefore = readListById(entry.boardId, listId);
   if (!listBefore) return c.json({ error: "List not found" }, 404);
-  const blockedList = cliManageListError(c, entry.id, listBefore);
+  const blockedList = cliManageListError(c, entry.boardId, listBefore);
   if (blockedList) return blockedList;
   let body: Record<string, unknown>;
   try {
@@ -690,16 +706,16 @@ boardsRoute.patch("/:id/lists/:listId", async (c) => {
       return c.json({ error: "Invalid emoji" }, 400);
     }
   }
-  const result = patchListOnBoard(entry.id, listId, updates);
+  const result = patchListOnBoard(entry.boardId, listId, updates);
   if (!result) return c.json({ error: "List not found" }, 404);
   publishBoardEvent({
     kind: "list-updated",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
-    listId: result.list.id,
+    listId: result.list.listId,
   });
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board) recordListUpdated(c, entry, board, result);
   }
   return listMutationResponse(c, {
@@ -719,11 +735,11 @@ boardsRoute.delete("/:id/lists/:listId", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const listSnapshot = readListById(entry.id, listId);
+  const listSnapshot = readListById(entry.boardId, listId);
   if (!listSnapshot) return c.json({ error: "List not found" }, 404);
-  const blockedList = cliManageListError(c, entry.id, listSnapshot);
+  const blockedList = cliManageListError(c, entry.boardId, listSnapshot);
   if (blockedList) return blockedList;
-  const result = deleteListOnBoard(entry.id, listId);
+  const result = deleteListOnBoard(entry.boardId, listId);
   if (!result) return c.json({ error: "List not found" }, 404);
   publishBoardEvent({
     kind: "list-trashed",
@@ -733,7 +749,7 @@ boardsRoute.delete("/:id/lists/:listId", async (c) => {
   });
   publishBoardChanged(result.boardId, result.boardUpdatedAt);
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board && listSnapshot) recordListTrashed(c, entry, board, listSnapshot, result);
   }
   return listDeleteResponse(c, {
@@ -749,7 +765,7 @@ boardsRoute.put("/:id/lists/order", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageAnyListsError(c, entry.id);
+  const blocked = cliManageAnyListsError(c, entry.boardId);
   if (blocked) return blocked;
   let body: { orderedListIds?: unknown };
   try {
@@ -764,9 +780,9 @@ boardsRoute.put("/:id/lists/order", async (c) => {
   if (!orderedListIds.every((n) => Number.isFinite(n))) {
     return c.json({ error: "Invalid orderedListIds" }, 400);
   }
-  const saved = reorderListsOnBoard(entry.id, orderedListIds);
+  const saved = reorderListsOnBoard(entry.boardId, orderedListIds);
   if (!saved) return c.json({ error: "Invalid reorder" }, 400);
-  publishBoardChanged(entry.id, saved.updatedAt);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
   recordListsReordered(c, entry, saved);
   return c.json(saved);
 });
@@ -776,7 +792,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliCreateTasksError(c, entry.id);
+  const blocked = cliCreateTasksError(c, entry.boardId);
   if (blocked) return blocked;
   let body: Record<string, unknown>;
   try {
@@ -836,7 +852,7 @@ boardsRoute.post("/:id/tasks", async (c) => {
   }
 
   const result = createTaskOnBoard(
-    entry.id,
+    entry.boardId,
     {
       listId,
       groupId,
@@ -854,10 +870,10 @@ boardsRoute.post("/:id/tasks", async (c) => {
     kind: "task-created",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
-    taskId: result.task.id,
+    taskId: result.task.taskId,
   });
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board) recordTaskCreated(c, entry, board, result);
   }
   return taskMutationResponse(
@@ -878,7 +894,7 @@ boardsRoute.get("/:id/tasks", async (c) => {
   const blocked = cliBoardReadError(c, entry);
   if (blocked) return blocked;
 
-  const board = loadBoard(entry.id);
+  const board = loadBoard(entry.boardId);
   if (!board) return c.json({ error: "Board not found" }, 404);
 
   const searchParams = new URL(c.req.url).searchParams;
@@ -922,7 +938,7 @@ boardsRoute.get("/:id/tasks", async (c) => {
     activeReleaseIds = releaseFilterRaw;
   }
 
-  const workflowOrder = listStatuses().map((status) => status.id);
+  const workflowOrder = listStatuses().map((status) => status.statusId);
   const allowedStatuses = new Set(workflowOrder);
   if (statusRaw.some((status) => !allowedStatuses.has(status))) {
     return c.json({ error: "Invalid status" }, 400);
@@ -949,7 +965,7 @@ boardsRoute.get("/:id/tasks", async (c) => {
   const visibleStatuses =
     statusRaw.length > 0 ? statusRaw : visibleStatusesForBoard(board, workflowOrder);
   const visibleSet = new Set(visibleStatuses);
-  const orderByList = new Map(board.lists.map((list) => [list.id, list.order] as const));
+  const orderByList = new Map(board.lists.map((list) => [list.listId, list.order] as const));
   const statusOrder = new Map(workflowOrder.map((status, index) => [status, index] as const));
   const activePriorityIds =
     priorityIds.length > 0 ? priorityIds.map((id) => String(id)) : null;
@@ -974,10 +990,16 @@ boardsRoute.get("/:id/tasks", async (c) => {
       const statusDelta =
         (statusOrder.get(a.status) ?? 0) - (statusOrder.get(b.status) ?? 0);
       if (statusDelta !== 0) return statusDelta;
-      return a.order - b.order || a.id - b.id;
+      return a.order - b.order || a.taskId - b.taskId;
     });
 
-  return c.json(tasks);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  return c.json(paginateInMemory(tasks, page.offset, page.limit));
 });
 
 boardsRoute.put("/:id/tasks/move", async (c) => {
@@ -1005,11 +1027,11 @@ boardsRoute.put("/:id/tasks/move", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "taskId required" }, 400);
   }
-  const taskForPolicy = readTaskById(entry.id, taskId);
+  const taskForPolicy = readTaskById(entry.boardId, taskId);
   if (!taskForPolicy) {
     return c.json({ error: "Task not found" }, 404);
   }
-  const blockedTask = cliManageTaskError(c, entry.id, taskForPolicy);
+  const blockedTask = cliManageTaskError(c, entry.boardId, taskForPolicy);
   if (blockedTask) return blockedTask;
 
   const toListId =
@@ -1050,7 +1072,7 @@ boardsRoute.put("/:id/tasks/move", async (c) => {
 
   const taskBeforeMove = taskForPolicy;
 
-  const saved = moveTaskOnBoard(entry.id, {
+  const saved = moveTaskOnBoard(entry.boardId, {
     taskId,
     toListId,
     toStatus: typeof body.toStatus === "string" ? body.toStatus : undefined,
@@ -1060,8 +1082,8 @@ boardsRoute.put("/:id/tasks/move", async (c) => {
     visibleOrderedTaskIds,
   });
   if (!saved) return c.json({ error: "Invalid move" }, 400);
-  publishBoardChanged(entry.id, saved.updatedAt);
-  const taskAfterMove = saved.tasks.find((t) => t.id === taskId);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
+  const taskAfterMove = saved.tasks.find((t) => t.taskId === taskId);
   if (
     taskBeforeMove &&
     taskAfterMove &&
@@ -1082,7 +1104,7 @@ boardsRoute.get("/:id/tasks/:taskId", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const task = readTaskById(entry.id, taskId);
+  const task = readTaskById(entry.boardId, taskId);
   if (!task) return c.json({ error: "Task not found" }, 404);
   return c.json(task);
 });
@@ -1096,9 +1118,9 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const taskForPolicy = readTaskById(entry.id, taskId);
+  const taskForPolicy = readTaskById(entry.boardId, taskId);
   if (!taskForPolicy) return c.json({ error: "Task not found" }, 404);
-  const blockedTask = cliManageTaskError(c, entry.id, taskForPolicy);
+  const blockedTask = cliManageTaskError(c, entry.boardId, taskForPolicy);
   if (blockedTask) return blockedTask;
   let body: Record<string, unknown>;
   try {
@@ -1152,16 +1174,16 @@ boardsRoute.patch("/:id/tasks/:taskId", async (c) => {
     }
   }
   const taskBeforePatch = taskForPolicy;
-  const result = patchTaskOnBoard(entry.id, taskId, patch);
+  const result = patchTaskOnBoard(entry.boardId, taskId, patch);
   if (!result) return c.json({ error: "Task not found" }, 404);
   publishBoardEvent({
     kind: "task-updated",
     boardId: result.boardId,
     boardUpdatedAt: result.boardUpdatedAt,
-    taskId: result.task.id,
+    taskId: result.task.taskId,
   });
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board && taskBeforePatch) {
       recordTaskUpdated(c, entry, board, taskBeforePatch, result);
     }
@@ -1183,11 +1205,11 @@ boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const taskSnapshot = readTaskById(entry.id, taskId);
+  const taskSnapshot = readTaskById(entry.boardId, taskId);
   if (!taskSnapshot) return c.json({ error: "Task not found" }, 404);
-  const blockedTask = cliManageTaskError(c, entry.id, taskSnapshot);
+  const blockedTask = cliManageTaskError(c, entry.boardId, taskSnapshot);
   if (blockedTask) return blockedTask;
-  const result = deleteTaskOnBoard(entry.id, taskId);
+  const result = deleteTaskOnBoard(entry.boardId, taskId);
   if (!result) return c.json({ error: "Task not found" }, 404);
   publishBoardEvent({
     kind: "task-trashed",
@@ -1197,7 +1219,7 @@ boardsRoute.delete("/:id/tasks/:taskId", async (c) => {
   });
   publishBoardChanged(result.boardId, result.boardUpdatedAt);
   {
-    const board = loadBoard(entry.id);
+    const board = loadBoard(entry.boardId);
     if (board && taskSnapshot) recordTaskTrashed(c, entry, board, taskSnapshot, result);
   }
   return taskDeleteResponse(c, {
@@ -1213,7 +1235,7 @@ boardsRoute.put("/:id/tasks/reorder", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliManageAnyTasksError(c, entry.id);
+  const blocked = cliManageAnyTasksError(c, entry.boardId);
   if (blocked) return blocked;
   let body: {
     listId?: unknown;
@@ -1237,9 +1259,9 @@ boardsRoute.put("/:id/tasks/reorder", async (c) => {
   if (!orderedTaskIds.every((n) => Number.isFinite(n))) {
     return c.json({ error: "Invalid orderedTaskIds" }, 400);
   }
-  const saved = reorderTasksInBand(entry.id, listId, status, orderedTaskIds);
+  const saved = reorderTasksInBand(entry.boardId, listId, status, orderedTaskIds);
   if (!saved) return c.json({ error: "Invalid reorder" }, 400);
-  publishBoardChanged(entry.id, saved.updatedAt);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
   recordTasksReordered(c, entry, saved, listId, status);
   return c.json(saved);
 });
@@ -1279,7 +1301,7 @@ boardsRoute.patch("/:id", async (c) => {
       "autoAssignReleaseOnCreateUi" in body ||
       "autoAssignReleaseOnCreateCli" in body;
     if (hasReleasePatch) {
-      const blockedRel = cliManageStructureError(c, entry.id);
+      const blockedRel = cliManageStructureError(c, entry.boardId);
       if (blockedRel) return blockedRel;
     }
     const hasMetadataPatch =
@@ -1288,7 +1310,7 @@ boardsRoute.patch("/:id", async (c) => {
       "description" in body ||
       "boardColor" in body;
     if (hasMetadataPatch) {
-      const blockedMeta = cliEditBoardMetadataError(c, entry.id);
+      const blockedMeta = cliEditBoardMetadataError(c, entry.boardId);
       if (blockedMeta) return blockedMeta;
     }
   }
@@ -1373,9 +1395,9 @@ boardsRoute.patch("/:id", async (c) => {
     }
     patch.autoAssignReleaseOnCreateCli = body.autoAssignReleaseOnCreateCli;
   }
-  const saved = await patchBoard(entry.id, patch);
+  const saved = await patchBoard(entry.boardId, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
-  publishBoardChanged(entry.id, saved.updatedAt);
+  publishBoardChanged(entry.boardId, saved.updatedAt);
   recordBoardPatched(c, entry, saved);
   return c.json(saved);
 });
@@ -1387,7 +1409,7 @@ boardsRoute.get("/:id/stats", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blocked = cliBoardReadError(c, entry);
   if (blocked) return blocked;
-  const board = loadBoard(entry.id);
+  const board = loadBoard(entry.boardId);
   if (!board) return c.json({ error: "Board not found" }, 404);
   const statuses = listStatuses();
   const filter = parseBoardStatsFilter(new URL(c.req.url).searchParams);
@@ -1420,7 +1442,7 @@ boardsRoute.get("/:id", async (c) => {
   if (blocked) return blocked;
   const bodyPreview = parseBoardFetchBodyPreview(c);
   const board = loadBoard(
-    entry.id,
+    entry.boardId,
     bodyPreview !== undefined ? { taskBodyMaxChars: bodyPreview } : undefined,
   );
   if (!board) return c.json({ error: "Board not found" }, 404);
@@ -1433,13 +1455,13 @@ boardsRoute.delete("/:id", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  const blocked = cliDeleteBoardError(c, entry.id);
+  const blocked = cliDeleteBoardError(c, entry.boardId);
   if (blocked) return blocked;
-  const snapshot = loadBoard(entry.id);
+  const snapshot = loadBoard(entry.boardId);
   if (!snapshot) return c.json({ error: "Board not found" }, 404);
-  const trashed = trashBoardById(entry.id);
+  const trashed = trashBoardById(entry.boardId);
   if (!trashed) return c.json({ error: "Board not found" }, 404);
-  publishBoardChanged(entry.id, trashed.boardUpdatedAt);
+  publishBoardChanged(entry.boardId, trashed.boardUpdatedAt);
   recordBoardTrashed(c, entry, snapshot);
   return c.body(null, 204);
 });

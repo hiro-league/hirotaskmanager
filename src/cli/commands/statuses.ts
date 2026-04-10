@@ -1,7 +1,11 @@
 import { Command } from "commander";
 import type { CliContext } from "../handlers/context";
 import { handleStatusesList } from "../handlers/statuses";
-import { addPortOption, withCliErrors } from "../lib/command-helpers";
+import {
+  addPortOption,
+  CLI_FIELDS_OPTION_DESC,
+  withCliErrors,
+} from "../lib/command-helpers";
 
 export function registerStatusCommands(
   program: Command,
@@ -12,8 +16,11 @@ export function registerStatusCommands(
     .description("Inspect workflow statuses");
 
   addPortOption(
-    statusesCommand.command("list").description("List all statuses"),
-  ).action(async (options: { port?: string }) => {
+    statusesCommand
+      .command("list")
+      .description("List all statuses")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(async (options: { port?: string; fields?: string }) => {
     await withCliErrors(() => handleStatusesList(ctx, options));
   });
 }

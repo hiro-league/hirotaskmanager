@@ -3,7 +3,7 @@ import type { Board, List, Task } from "../../shared/models";
 /** Compact shapes for Phase 3 write command stdout (see docs/ai-cli.md). */
 export type WriteBoardEntity = {
   type: "board";
-  id: number;
+  boardId: number;
   slug: string;
   name: string;
   emoji: string | null;
@@ -13,7 +13,7 @@ export type WriteBoardEntity = {
 
 export type WriteListEntity = {
   type: "list";
-  id: number;
+  listId: number;
   name: string;
   order: number;
   color?: string;
@@ -22,7 +22,7 @@ export type WriteListEntity = {
 
 export type WriteTaskEntity = {
   type: "task";
-  id: number;
+  taskId: number;
   listId: number;
   groupId: number;
   priorityId: number;
@@ -37,12 +37,10 @@ export type WriteTaskEntity = {
 };
 
 /** Board/list/task was moved to Trash (soft delete), not permanently removed. */
-export type WriteTrashedEntity = {
-  type: "board" | "list" | "task";
-  id: number;
-  slug?: string;
-  trashed: true;
-};
+export type WriteTrashedEntity =
+  | { type: "board"; boardId: number; slug?: string; trashed: true }
+  | { type: "list"; listId: number; trashed: true }
+  | { type: "task"; taskId: number; trashed: true };
 
 export type WriteEntity =
   | WriteBoardEntity
@@ -69,7 +67,7 @@ export type WriteTrashMoveEnvelope = {
 export function compactBoardEntity(board: Board): WriteBoardEntity {
   return {
     type: "board",
-    id: board.id,
+    boardId: board.boardId,
     slug: board.slug ?? "",
     name: board.name,
     emoji: board.emoji ?? null,
@@ -81,7 +79,7 @@ export function compactBoardEntity(board: Board): WriteBoardEntity {
 export function compactListEntity(list: List): WriteListEntity {
   return {
     type: "list",
-    id: list.id,
+    listId: list.listId,
     name: list.name,
     order: list.order,
     color: list.color,
@@ -92,7 +90,7 @@ export function compactListEntity(list: List): WriteListEntity {
 export function compactTaskEntity(task: Task): WriteTaskEntity {
   return {
     type: "task",
-    id: task.id,
+    taskId: task.taskId,
     listId: task.listId,
     groupId: task.groupId,
     priorityId: task.priorityId,
@@ -108,12 +106,12 @@ export function compactTaskEntity(task: Task): WriteTaskEntity {
 }
 
 export function writeSuccess(
-  board: Pick<Board, "id" | "updatedAt"> & { slug?: string },
+  board: Pick<Board, "boardId" | "updatedAt"> & { slug?: string },
   entity: WriteEntity,
 ): WriteSuccessEnvelope {
   return {
     ok: true,
-    boardId: board.id,
+    boardId: board.boardId,
     boardSlug: board.slug ?? "",
     boardUpdatedAt: board.updatedAt,
     entity,
@@ -121,25 +119,33 @@ export function writeSuccess(
 }
 
 export function trashedEntity(
+  type: "board",
+  id: number,
+  slug?: string,
+): WriteTrashedEntity;
+export function trashedEntity(type: "list", id: number): WriteTrashedEntity;
+export function trashedEntity(type: "task", id: number): WriteTrashedEntity;
+export function trashedEntity(
   type: WriteTrashedEntity["type"],
   id: number,
   slug?: string,
 ): WriteTrashedEntity {
-  return {
-    type,
-    id,
-    slug,
-    trashed: true,
-  };
+  if (type === "board") {
+    return { type: "board", boardId: id, slug, trashed: true };
+  }
+  if (type === "list") {
+    return { type: "list", listId: id, trashed: true };
+  }
+  return { type: "task", taskId: id, trashed: true };
 }
 
 export function writeTrashMove(
-  board: Pick<Board, "id"> & { slug?: string; updatedAt?: string },
+  board: Pick<Board, "boardId"> & { slug?: string; updatedAt?: string },
   trashed: WriteTrashedEntity,
 ): WriteTrashMoveEnvelope {
   return {
     ok: true,
-    boardId: board.id,
+    boardId: board.boardId,
     boardSlug: board.slug ?? "",
     boardUpdatedAt: board.updatedAt,
     trashed,

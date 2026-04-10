@@ -37,7 +37,7 @@ function buildStackedTaskContainerMap(
       listId,
       filter,
     );
-    out[key] = tasks.map((t) => sortableTaskId(t.id));
+    out[key] = tasks.map((t) => sortableTaskId(t.taskId));
   }
   return out;
 }
@@ -49,7 +49,7 @@ async function persistStackedChanges(
   next: Record<string, string[]>,
   moveTask: ReturnType<typeof useMoveTask>,
 ): Promise<void> {
-  const movedTask = board.tasks.find((task) => task.id === taskId);
+  const movedTask = board.tasks.find((task) => task.taskId === taskId);
   if (!movedTask) return;
 
   const activeSortableId = sortableTaskId(taskId);
@@ -65,12 +65,12 @@ async function persistStackedChanges(
     .filter((tid): tid is number => tid != null)
     .filter((tid) => {
       if (tid === taskId) return true;
-      const task = board.tasks.find((entry) => entry.id === tid);
+      const task = board.tasks.find((entry) => entry.taskId === tid);
       return task?.status === movedTask.status;
     });
 
   await moveTask.mutateAsync({
-    boardId: board.id,
+    boardId: board.boardId,
     taskId,
     toListId,
     visibleOrderedTaskIds,
@@ -84,14 +84,14 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
+    board.boardId,
     board.taskPriorities,
   );
-  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
+  const dateFilterResolved = useResolvedTaskDateFilter(board.boardId);
   // Must resolve store ids + untagged sentinel so releaseSig/taskFilter match the visible board (hook was missing → ReferenceError at runtime).
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
 
   const listIds = listIdsOverride ?? list.localListIds;
 
@@ -110,7 +110,7 @@ export function useStackedBoardDnd(board: Board, listIdsOverride?: number[]) {
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
   const releaseSig =
     activeReleaseIds === null ? "__all__" : activeReleaseIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+  const containerMapDeps = `${board.boardId}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
 
   const tasksByListStatus = useMemo(
     () => buildTasksByListStatusIndex(board.tasks),

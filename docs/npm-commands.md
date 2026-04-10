@@ -28,13 +28,13 @@ npm install /absolute/path/to/hiroleague-taskmanager-<version>.tgz
 Prefer `npx` so you use this project’s install, not a global shim:
 
 ```bash
-npx hirotm status
+npx hirotm server status
 ```
 
 Or:
 
 ```bash
-./node_modules/.bin/hirotm status
+./node_modules/.bin/hirotm server status
 ```
 
 ## Global install (no registry upload)

@@ -335,7 +335,7 @@ If path resolution breaks after packaging, adjust server path resolution to use 
 
 Current useful behavior already present:
 
-- `hirotm start` starts the server in production mode internally
+- `hirotm server start` starts the server in production mode internally
 - config file lookup already exists
 - port and data-dir resolution already exists
 

@@ -16,6 +16,7 @@ import {
   type ConfigOverrides,
 } from "./config";
 import { fetchHealth } from "./api-client";
+import { CLI_ERR } from "./cli-error-codes";
 import { CliError } from "./output";
 
 interface ManagedServerRecord {
@@ -146,7 +147,7 @@ export async function startServer(
 ): Promise<ServerStatus> {
   const port = overrides.port;
   if (!port) {
-    throw new CliError("Port is required", 2);
+    throw new CliError("Port is required", 2, { code: CLI_ERR.missingRequired });
   }
 
   const currentStatus = await readServerStatus({ ...overrides, port });
@@ -170,8 +171,10 @@ export async function startServer(
 
     const healthy = await waitForHealth(port, 8000);
     if (!healthy) {
-      throw new CliError("Server failed to start", 1, {
-        hint: "Try running `hirotm start` without --background to inspect logs.",
+      throw new CliError("Server failed to start", 7, {
+        code: CLI_ERR.serverStartTimeout,
+        retryable: true,
+        hint: "Try running `hirotm server start` without --background to inspect logs.",
         url: `http://127.0.0.1:${port}`,
       });
     }
@@ -205,8 +208,10 @@ export async function startServer(
   const healthy = await waitForHealth(port, 8000);
   if (!healthy) {
     child.kill("SIGTERM");
-    throw new CliError("Server failed to start", 1, {
-      hint: "Try running `hirotm start` to inspect startup logs directly.",
+    throw new CliError("Server failed to start", 7, {
+      code: CLI_ERR.serverStartTimeout,
+      retryable: true,
+      hint: "Try running `hirotm server start` to inspect startup logs directly.",
       url: `http://127.0.0.1:${port}`,
     });
   }
@@ -232,11 +237,87 @@ export async function startServer(
   process.off("SIGTERM", forwardSignal);
 
   if (exitCode !== 0) {
-    throw new CliError("Server exited unexpectedly", exitCode || 1);
+    throw new CliError("Server exited unexpectedly", 1, {
+      code: CLI_ERR.serverExited,
+      childExitCode: exitCode,
+    });
   }
 
   return {
     port,
+    running: false,
+  };
+}
+
+/**
+ * Stop a background server previously started by this CLI (pid file). Foreground
+ * servers and non-CLI processes are not tracked here.
+ */
+export async function stopServer(
+  overrides: ConfigOverrides = {},
+): Promise<ServerStatus> {
+  const port = resolvePort(overrides);
+  const record = readManagedServerRecord(overrides);
+
+  if (!record) {
+    throw new CliError(
+      "No CLI-managed background server for this profile (missing pid file)",
+      1,
+      {
+        code: CLI_ERR.noManagedServer,
+        hint:
+          "Use Ctrl+C if the server is running in the foreground, or stop the process listening on the API port.",
+        port,
+      },
+    );
+  }
+
+  if (!isProcessAlive(record.pid)) {
+    removeManagedServerRecord(overrides);
+    throw new CliError(
+      "Recorded server process is not running (removed stale pid file)",
+      1,
+      {
+        code: CLI_ERR.stalePid,
+        port: record.port,
+      },
+    );
+  }
+
+  try {
+    process.kill(record.pid, "SIGTERM");
+  } catch {
+    removeManagedServerRecord(overrides);
+    throw new CliError("Failed to signal server process", 1, {
+      code: CLI_ERR.signalFailed,
+      pid: record.pid,
+      port: record.port,
+    });
+  }
+
+  const waitPort = record.port;
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (!(await fetchHealth({ ...overrides, port: waitPort }))) {
+      break;
+    }
+    await Bun.sleep(200);
+  }
+
+  if (await fetchHealth({ ...overrides, port: waitPort })) {
+    try {
+      process.kill(record.pid, "SIGKILL");
+    } catch {
+      /* ignore */
+    }
+    await Bun.sleep(300);
+  }
+
+  removeManagedServerRecord(overrides);
+
+  return {
+    pid: record.pid,
+    port: waitPort,
     running: false,
   };
 }

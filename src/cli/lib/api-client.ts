@@ -19,7 +19,28 @@ import {
   resolveRuntimeKind,
   type ConfigOverrides,
 } from "./config";
+import { CLI_ERR } from "./cli-error-codes";
+import { mapHttpStatusToCliFailure } from "./cli-http-errors";
 import { CliError } from "./output";
+
+/** Default API request timeout for hirotm fetch calls (health polling uses its own short waits). */
+// Aligns with docs/cli-error-handling.md: timeouts surface as exit 7 + code request_timeout.
+const DEFAULT_CLI_FETCH_TIMEOUT_MS = 120_000;
+
+function apiFetchSignal(): AbortSignal {
+  return AbortSignal.timeout(DEFAULT_CLI_FETCH_TIMEOUT_MS);
+}
+
+function isFetchTimedOut(cause: unknown): boolean {
+  if (!(cause instanceof Error)) return false;
+  if (cause.name === "AbortError" || cause.name === "TimeoutError") {
+    return true;
+  }
+  return (
+    cause.message.includes("timed out") ||
+    cause.message === "The operation was aborted."
+  );
+}
 
 function taskManagerClientHeaders(): Record<string, string> {
   return {
@@ -34,7 +55,7 @@ function buildBaseUrl(overrides: ConfigOverrides = {}): string {
 }
 
 function buildStartCommand(overrides: ConfigOverrides = {}): string {
-  const command = ["hirotm", "start", "--background"];
+  const command = ["hirotm", "server", "start", "--background"];
   const port = resolvePort(overrides);
   const profile = resolveProfileName(overrides);
   const runtime = resolveRuntimeKind(overrides);
@@ -92,21 +113,32 @@ export async function fetchApi<T>(
   try {
     response = await fetch(`${baseUrl}/api${endpoint}`, {
       headers,
+      signal: apiFetchSignal(),
     });
-  } catch {
-    throw new CliError("Server not reachable", 1, {
+  } catch (cause: unknown) {
+    if (isFetchTimedOut(cause)) {
+      throw new CliError("Request timed out", 7, {
+        code: CLI_ERR.requestTimeout,
+        retryable: true,
+        url: baseUrl,
+      });
+    }
+    throw new CliError("Server not reachable", 6, {
+      code: CLI_ERR.serverUnreachable,
       hint: `Run: ${buildStartCommand(overrides)}`,
       url: baseUrl,
+      retryable: true,
     });
   }
 
   if (!response.ok) {
     const { message, extra } = await parseErrorResponse(response);
-    throw new CliError(message, 1, {
+    const { exitCode, details } = mapHttpStatusToCliFailure(response.status, {
+      ...extra,
       status: response.status,
       url: `${baseUrl}/api${endpoint}`,
-      ...extra,
     });
+    throw new CliError(message, exitCode, details);
   }
 
   return (await response.json()) as T;
@@ -135,21 +167,32 @@ export async function fetchApiMutate<T>(
       method: init.method,
       headers,
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      signal: apiFetchSignal(),
     });
-  } catch {
-    throw new CliError("Server not reachable", 1, {
+  } catch (cause: unknown) {
+    if (isFetchTimedOut(cause)) {
+      throw new CliError("Request timed out", 7, {
+        code: CLI_ERR.requestTimeout,
+        retryable: true,
+        url: baseUrl,
+      });
+    }
+    throw new CliError("Server not reachable", 6, {
+      code: CLI_ERR.serverUnreachable,
       hint: `Run: ${buildStartCommand(overrides)}`,
       url: baseUrl,
+      retryable: true,
     });
   }
 
   if (!response.ok) {
     const { message, extra } = await parseErrorResponse(response);
-    throw new CliError(message, 1, {
+    const { exitCode, details } = mapHttpStatusToCliFailure(response.status, {
+      ...extra,
       status: response.status,
       url: `${baseUrl}/api${endpoint}`,
-      ...extra,
     });
+    throw new CliError(message, exitCode, details);
   }
 
   if (response.status === 204) {
@@ -183,21 +226,32 @@ export async function fetchApiTrashMutate<T>(
     response = await fetch(`${baseUrl}/api${endpoint}`, {
       method: init.method,
       headers,
+      signal: apiFetchSignal(),
     });
-  } catch {
-    throw new CliError("Server not reachable", 1, {
+  } catch (cause: unknown) {
+    if (isFetchTimedOut(cause)) {
+      throw new CliError("Request timed out", 7, {
+        code: CLI_ERR.requestTimeout,
+        retryable: true,
+        url: baseUrl,
+      });
+    }
+    throw new CliError("Server not reachable", 6, {
+      code: CLI_ERR.serverUnreachable,
       hint: `Run: ${buildStartCommand(overrides)}`,
       url: baseUrl,
+      retryable: true,
     });
   }
 
   if (!response.ok) {
     const { message, extra } = await parseErrorResponse(response);
-    throw new CliError(message, 1, {
+    const { exitCode, details } = mapHttpStatusToCliFailure(response.status, {
+      ...extra,
       status: response.status,
       url: `${baseUrl}/api${endpoint}`,
-      ...extra,
     });
+    throw new CliError(message, exitCode, details);
   }
 
   if (response.status === 204) {

@@ -2,13 +2,17 @@ import { Command } from "commander";
 import { registerBoardCommands } from "../commands/boards";
 import { registerListCommands } from "../commands/lists";
 import { registerReleaseCommands } from "../commands/releases";
-import { registerSearchCommand } from "../commands/search";
+import { registerQueryCommands } from "../commands/query";
 import { registerServerCommands } from "../commands/server";
 import { registerStatusCommands } from "../commands/statuses";
 import { registerTaskCommands } from "../commands/tasks";
 import { registerTrashCommands } from "../commands/trash";
 import { createDefaultCliContext } from "../handlers/context";
-import { exitWithError } from "../lib/output";
+import {
+  exitWithError,
+  resetCliJsonFormatForRun,
+  syncCliJsonFormatFromGlobals,
+} from "../lib/output";
 
 /**
  * Build the hirotm Commander program.
@@ -23,7 +27,16 @@ export function createHirotmProgram(): Command {
     .option(
       "--client-name <name>",
       "Human-friendly client label sent with API requests (for notifications)",
+    )
+    .option(
+      "--pretty",
+      "Pretty-print JSON with indentation (default is compact single-line on stdout and stderr)",
     );
+
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    const opts = actionCommand.optsWithGlobals() as { pretty?: boolean };
+    syncCliJsonFormatFromGlobals(opts);
+  });
 
   const ctx = createDefaultCliContext();
 
@@ -34,12 +47,13 @@ export function createHirotmProgram(): Command {
   registerTaskCommands(program, ctx);
   registerStatusCommands(program, ctx);
   registerTrashCommands(program, ctx);
-  registerSearchCommand(program, ctx);
+  registerQueryCommands(program, ctx);
 
   return program;
 }
 
 export async function runHirotmCli(argv: string[]): Promise<void> {
+  resetCliJsonFormatForRun();
   const program = createHirotmProgram();
   try {
     await program.parseAsync(argv);

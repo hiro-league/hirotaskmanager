@@ -23,9 +23,9 @@ export function TaskGroupSwitcher({
 }: TaskGroupSwitcherProps) {
   const setActive = usePreferencesStore((s) => s.setActiveTaskGroupIdsForBoard);
   const groupsOrdered = sortTaskGroupsForDisplay(board.taskGroups);
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
   const options = groupsOrdered.map((group) => ({
-    id: String(group.id),
+    id: String(group.groupId),
     label: formatGroupDisplayLabel(group),
   }));
 
@@ -40,7 +40,7 @@ export function TaskGroupSwitcher({
       selectedIds={activeGroupIds ?? []}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.id, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
       }
       onOpenEditor={onOpenGroupsEditor}
       editButtonAriaLabel="Edit task groups"

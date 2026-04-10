@@ -1,3 +1,4 @@
+import { CLI_ERR } from "./cli-error-codes";
 import { CliError } from "./output";
 
 export type BodySource = "flag" | "file" | "stdin";
@@ -12,7 +13,9 @@ export function resolveExclusiveBody(options: {
   const hasStdin = Boolean(options.bodyStdin);
   const n = (hasBody ? 1 : 0) + (hasFile ? 1 : 0) + (hasStdin ? 1 : 0);
   if (n > 1) {
-    throw new CliError("Exactly one body input source is allowed", 2);
+    throw new CliError("Exactly one body input source is allowed", 2, {
+      code: CLI_ERR.conflictingInputSources,
+    });
   }
   if (hasBody) {
     return { source: "flag", text: options.body ?? "" };
@@ -39,7 +42,10 @@ export async function loadBodyText(
   const path = resolved.text;
   const file = Bun.file(path);
   if (!(await file.exists())) {
-    throw new CliError("Body file not found", 1, { path });
+    throw new CliError("Body file not found", 3, {
+      code: CLI_ERR.fileNotFound,
+      path,
+    });
   }
   return await file.text();
 }

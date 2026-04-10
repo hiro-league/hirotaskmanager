@@ -112,7 +112,7 @@ function DateField({
 
 export function BoardTaskDateFilter({ board }: BoardTaskDateFilterProps) {
   const raw = usePreferencesStore(
-    (s) => s.taskDateFilterByBoardId[String(board.id)],
+    (s) => s.taskDateFilterByBoardId[String(board.boardId)],
   );
   const setFilter = usePreferencesStore((s) => s.setTaskDateFilterForBoard);
 
@@ -125,7 +125,7 @@ export function BoardTaskDateFilter({ board }: BoardTaskDateFilterProps) {
   const endDate = raw?.endDate ?? todayDateKeyLocal();
 
   const persist = (next: TaskDateFilterPersisted) => {
-    setFilter(board.id, next);
+    setFilter(board.boardId, next);
   };
 
   const toggleFilter = () => {

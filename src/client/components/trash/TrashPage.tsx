@@ -264,7 +264,7 @@ export function TrashPage() {
           onRequestPurge={(row: TrashedBoardItem) =>
             setPurgeTarget({
               kind: "board",
-              id: row.id,
+              id: row.boardId,
               label: boardDisplayName(row),
             })
           }
@@ -278,10 +278,10 @@ export function TrashPage() {
           onRequestPurge={(row: TrashedListItem) =>
             setPurgeTarget({
               kind: "list",
-              id: row.id,
+              id: row.listId,
               boardId: row.boardId,
               label: listDisplayName({
-                id: row.id,
+                listId: row.listId,
                 name: row.name,
                 emoji: row.emoji,
                 order: 0,
@@ -298,10 +298,10 @@ export function TrashPage() {
           onRequestPurge={(row: TrashedTaskItem) =>
             setPurgeTarget({
               kind: "task",
-              id: row.id,
+              id: row.taskId,
               boardId: row.boardId,
               label: taskDisplayTitle({
-                id: row.id,
+                taskId: row.taskId,
                 listId: row.listId,
                 title: row.title,
                 body: "",
@@ -364,10 +364,11 @@ function TrashBoardsTable({
           {rows.map((row) => {
             const label = boardDisplayName(row);
             const restoring =
-              restoreBoard.isPending && restoreBoard.variables === row.id;
-            const purging = purgeBoard.isPending && purgeBoard.variables === row.id;
+              restoreBoard.isPending && restoreBoard.variables === row.boardId;
+            const purging =
+              purgeBoard.isPending && purgeBoard.variables === row.boardId;
             return (
-              <tr key={row.id} className="bg-card">
+              <tr key={row.boardId} className="bg-card">
                 <td className="px-3 py-2 font-medium text-foreground">{label}</td>
                 <td className="px-3 py-2 text-muted-foreground">
                   {formatDeletedAt(row.deletedAt)}
@@ -379,7 +380,7 @@ function TrashBoardsTable({
                       className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       disabled={busy}
                       title="Return this board to the active board list"
-                      onClick={() => restoreBoard.mutate(row.id)}
+                      onClick={() => restoreBoard.mutate(row.boardId)}
                     >
                       {restoring ? "…" : "Restore"}
                     </button>
@@ -432,19 +433,19 @@ function TrashListsTable({
         <tbody className="divide-y divide-border">
           {rows.map((row) => {
             const listLabel = listDisplayName({
-              id: row.id,
+              listId: row.listId,
               name: row.name,
               emoji: row.emoji,
               order: 0,
             });
             const restoring =
-              restoreList.isPending && restoreList.variables === row.id;
+              restoreList.isPending && restoreList.variables === row.listId;
             const purging =
               purgeList.isPending &&
-              purgeList.variables?.listId === row.id;
+              purgeList.variables?.listId === row.listId;
             const restoreTitle = listRestoreTitle(row);
             return (
-              <tr key={row.id} className="bg-card">
+              <tr key={row.listId} className="bg-card">
                 <td className="px-3 py-2 font-medium text-foreground">
                   {listLabel}
                 </td>
@@ -459,7 +460,7 @@ function TrashListsTable({
                       className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       disabled={busy || !row.canRestore}
                       title={restoreTitle}
-                      onClick={() => restoreList.mutate(row.id)}
+                      onClick={() => restoreList.mutate(row.listId)}
                     >
                       {restoring ? "…" : "Restore"}
                     </button>
@@ -512,7 +513,7 @@ function TrashTasksTable({
         <tbody className="divide-y divide-border">
           {rows.map((row) => {
             const taskLabel = taskDisplayTitle({
-              id: row.id,
+              taskId: row.taskId,
               listId: row.listId,
               title: row.title,
               body: "",
@@ -525,12 +526,12 @@ function TrashTasksTable({
               updatedAt: "",
             });
             const restoring =
-              restoreTask.isPending && restoreTask.variables === row.id;
+              restoreTask.isPending && restoreTask.variables === row.taskId;
             const purging =
-              purgeTask.isPending && purgeTask.variables?.taskId === row.id;
+              purgeTask.isPending && purgeTask.variables?.taskId === row.taskId;
             const restoreTitle = taskRestoreTitle(row);
             return (
-              <tr key={row.id} className="bg-card">
+              <tr key={row.taskId} className="bg-card">
                 <td className="px-3 py-2 font-medium text-foreground">
                   {taskLabel}
                 </td>
@@ -549,7 +550,7 @@ function TrashTasksTable({
                       className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       disabled={busy || !row.canRestore}
                       title={restoreTitle}
-                      onClick={() => restoreTask.mutate(row.id)}
+                      onClick={() => restoreTask.mutate(row.taskId)}
                     >
                       {restoring ? "…" : "Restore"}
                     </button>

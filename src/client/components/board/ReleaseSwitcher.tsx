@@ -18,11 +18,11 @@ export function ReleaseSwitcher({
   onOpenReleasesEditor,
 }: ReleaseSwitcherProps) {
   const setActive = usePreferencesStore((s) => s.setActiveReleaseIdsForBoard);
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
   const options = [
     { id: RELEASE_FILTER_UNTAGGED, label: "Untagged" },
     ...board.releases.map((r) => ({
-      id: String(r.id),
+      id: String(r.releaseId),
       label: r.name,
       color: r.color ?? undefined,
     })),
@@ -39,7 +39,7 @@ export function ReleaseSwitcher({
       selectedIds={activeReleaseIds ?? []}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.id, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
       }
       onOpenEditor={onOpenReleasesEditor}
       editButtonAriaLabel="Edit releases"

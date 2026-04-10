@@ -235,24 +235,24 @@ function BoardShortcutBindings({
         const current = resolvedBoardLayout(b);
         const next = current === "lanes" ? "stacked" : "lanes";
         // Same PATCH as BoardLayoutToggle — keeps server and React Query cache in sync.
-        patchViewPrefs.mutate({ boardId: b.id, patch: { boardLayout: next } });
+        patchViewPrefs.mutate({ boardId: b.boardId, patch: { boardLayout: next } });
       },
       cycleTaskGroup: (b) =>
         cycleTaskGroupForBoard(b, setActiveTaskGroupForBoard),
       allTaskGroups: (b) =>
-        setActiveTaskGroupForBoard(b.id, undefined),
+        setActiveTaskGroupForBoard(b.boardId, undefined),
       cycleTaskPriority: (b) =>
         cycleTaskPriorityForBoard(b, setActiveTaskPriorityIdsForBoard),
       cycleHighlightedTaskGroup: (b) => {
         const highlightedTaskId = nav?.highlightedTaskId;
         if (highlightedTaskId == null) return;
         const currentBoard =
-          queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
-        const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
+          queryClient.getQueryData<Board>(boardKeys.detail(b.boardId)) ?? b;
+        const task = currentBoard.tasks.find((entry) => entry.taskId === highlightedTaskId);
         if (!task || currentBoard.taskGroups.length === 0) return;
         const groupOrder = sortTaskGroupsForDisplay(
           currentBoard.taskGroups,
-        ).map((group) => group.id);
+        ).map((group) => group.groupId);
         const currentIndex = Math.max(0, groupOrder.indexOf(task.groupId));
         const nextGroupId = groupOrder[(currentIndex + 1) % groupOrder.length];
         if (nextGroupId == null || nextGroupId === task.groupId) return;
@@ -261,31 +261,31 @@ function BoardShortcutBindings({
           groupId: nextGroupId,
           updatedAt: new Date().toISOString(),
         };
-        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.id), {
+        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.boardId), {
           ...currentBoard,
           tasks: currentBoard.tasks.map((entry) =>
-            entry.id === nextTask.id ? nextTask : entry,
+            entry.taskId === nextTask.taskId ? nextTask : entry,
           ),
           updatedAt: nextTask.updatedAt,
         });
-        pendingGroupTasksRef.current.set(nextTask.id, nextTask);
-        const existingTimeout = pendingGroupSavesRef.current.get(nextTask.id);
+        pendingGroupTasksRef.current.set(nextTask.taskId, nextTask);
+        const existingTimeout = pendingGroupSavesRef.current.get(nextTask.taskId);
         if (existingTimeout !== undefined) {
           clearTimeout(existingTimeout);
         }
         // Delay the PATCH so rapid G presses only persist the final group choice.
         const timeoutId = setTimeout(() => {
-          const pendingTask = pendingGroupTasksRef.current.get(nextTask.id);
-          pendingGroupTasksRef.current.delete(nextTask.id);
-          pendingGroupSavesRef.current.delete(nextTask.id);
+          const pendingTask = pendingGroupTasksRef.current.get(nextTask.taskId);
+          pendingGroupTasksRef.current.delete(nextTask.taskId);
+          pendingGroupSavesRef.current.delete(nextTask.taskId);
           if (!pendingTask) return;
           const latestBoard =
-            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.id)) ??
+            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.boardId)) ??
             currentBoard;
           const latestTask =
-            latestBoard.tasks.find((entry) => entry.id === pendingTask.id) ?? pendingTask;
+            latestBoard.tasks.find((entry) => entry.taskId === pendingTask.taskId) ?? pendingTask;
           updateTask.mutate({
-            boardId: latestBoard.id,
+            boardId: latestBoard.boardId,
             task: {
               ...latestTask,
               groupId: pendingTask.groupId,
@@ -293,18 +293,18 @@ function BoardShortcutBindings({
             },
           });
         }, 1000);
-        pendingGroupSavesRef.current.set(nextTask.id, timeoutId);
+        pendingGroupSavesRef.current.set(nextTask.taskId, timeoutId);
       },
       cycleHighlightedTaskPriority: (b) => {
         const highlightedTaskId = nav?.highlightedTaskId;
         if (highlightedTaskId == null) return;
         const currentBoard =
-          queryClient.getQueryData<Board>(boardKeys.detail(b.id)) ?? b;
-        const task = currentBoard.tasks.find((entry) => entry.id === highlightedTaskId);
+          queryClient.getQueryData<Board>(boardKeys.detail(b.boardId)) ?? b;
+        const task = currentBoard.tasks.find((entry) => entry.taskId === highlightedTaskId);
         if (!task) return;
         const priorityOrder = sortPrioritiesByValue(
           currentBoard.taskPriorities,
-        ).map((priority) => priority.id);
+        ).map((priority) => priority.priorityId);
         const currentPriorityId = task.priorityId;
         const found = priorityOrder.findIndex(
           (priorityId) => priorityId === currentPriorityId,
@@ -317,31 +317,31 @@ function BoardShortcutBindings({
           priorityId: nextPriorityId,
           updatedAt: new Date().toISOString(),
         };
-        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.id), {
+        queryClient.setQueryData<Board>(boardKeys.detail(currentBoard.boardId), {
           ...currentBoard,
           tasks: currentBoard.tasks.map((entry) =>
-            entry.id === nextTask.id ? nextTask : entry,
+            entry.taskId === nextTask.taskId ? nextTask : entry,
           ),
           updatedAt: nextTask.updatedAt,
         });
-        pendingPriorityTasksRef.current.set(nextTask.id, nextTask);
-        const existingTimeout = pendingPrioritySavesRef.current.get(nextTask.id);
+        pendingPriorityTasksRef.current.set(nextTask.taskId, nextTask);
+        const existingTimeout = pendingPrioritySavesRef.current.get(nextTask.taskId);
         if (existingTimeout !== undefined) {
           clearTimeout(existingTimeout);
         }
         // Delay the PATCH so rapid P presses only persist the final choice.
         const timeoutId = setTimeout(() => {
-          const pendingTask = pendingPriorityTasksRef.current.get(nextTask.id);
-          pendingPriorityTasksRef.current.delete(nextTask.id);
-          pendingPrioritySavesRef.current.delete(nextTask.id);
+          const pendingTask = pendingPriorityTasksRef.current.get(nextTask.taskId);
+          pendingPriorityTasksRef.current.delete(nextTask.taskId);
+          pendingPrioritySavesRef.current.delete(nextTask.taskId);
           if (!pendingTask) return;
           const latestBoard =
-            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.id)) ??
+            queryClient.getQueryData<Board>(boardKeys.detail(currentBoard.boardId)) ??
             currentBoard;
           const latestTask =
-            latestBoard.tasks.find((entry) => entry.id === pendingTask.id) ?? pendingTask;
+            latestBoard.tasks.find((entry) => entry.taskId === pendingTask.taskId) ?? pendingTask;
           updateTask.mutate({
-            boardId: latestBoard.id,
+            boardId: latestBoard.boardId,
             task: {
               ...latestTask,
               priorityId: pendingTask.priorityId,
@@ -349,7 +349,7 @@ function BoardShortcutBindings({
             },
           });
         }, 1000);
-        pendingPrioritySavesRef.current.set(nextTask.id, timeoutId);
+        pendingPrioritySavesRef.current.set(nextTask.taskId, timeoutId);
       },
       focusOrScrollHighlight: () => nav?.focusOrScrollHighlight(),
       moveHighlight: (dir) => nav?.moveHighlight(dir),
@@ -381,7 +381,7 @@ function BoardShortcutBindings({
         const listId =
           nav?.highlightedListId ??
           (nav?.highlightedTaskId != null
-            ? board.tasks.find((t) => t.id === nav.highlightedTaskId)?.listId
+            ? board.tasks.find((t) => t.taskId === nav.highlightedTaskId)?.listId
             : null);
         if (listId == null) return;
         nav?.openAddTaskForList(listId);
@@ -390,7 +390,7 @@ function BoardShortcutBindings({
         const anchorListId =
           nav?.highlightedListId ??
           (nav?.highlightedTaskId != null
-            ? b.tasks.find((t) => t.id === nav.highlightedTaskId)?.listId
+            ? b.tasks.find((t) => t.taskId === nav.highlightedTaskId)?.listId
             : null);
         if (anchorListId == null) return;
         // Opens the same inline “Add list” composer as the dashed control; user types the name first.
@@ -399,15 +399,15 @@ function BoardShortcutBindings({
       completeHighlightedTask: (b) => {
         const id = nav?.highlightedTaskId;
         if (id == null) return;
-        const task = b.tasks.find((t) => t.id === id);
+        const task = b.tasks.find((t) => t.taskId === id);
         if (!task) return;
-        const meta = statuses?.find((s) => s.id === task.status);
+        const meta = statuses?.find((s) => s.statusId === task.status);
         if (meta?.isClosed) return;
-        const closedId = statuses?.find((s) => s.isClosed)?.id ?? "closed";
+        const closedId = statuses?.find((s) => s.isClosed)?.statusId ?? "closed";
         const now = new Date().toISOString();
         completion?.celebrateTaskCompletion({ taskId: id });
         updateTask.mutate({
-          boardId: b.id,
+          boardId: b.boardId,
           task: {
             ...task,
             status: closedId,
@@ -418,22 +418,22 @@ function BoardShortcutBindings({
       },
       toggleBoardStats: (b) => {
         patchViewPrefs.mutate({
-          boardId: b.id,
+          boardId: b.boardId,
           patch: { showStats: !b.showStats },
         });
       },
       reopenHighlightedTask: (b) => {
         const id = nav?.highlightedTaskId;
         if (id == null) return;
-        const task = b.tasks.find((t) => t.id === id);
+        const task = b.tasks.find((t) => t.taskId === id);
         if (!task) return;
-        const meta = statuses?.find((s) => s.id === task.status);
+        const meta = statuses?.find((s) => s.statusId === task.status);
         if (!meta?.isClosed) return;
         const openId =
           workflowOrder.find((x) => x === "open") ?? workflowOrder[0] ?? "open";
         const now = new Date().toISOString();
         updateTask.mutate({
-          boardId: b.id,
+          boardId: b.boardId,
           task: {
             ...task,
             status: openId,
@@ -447,12 +447,12 @@ function BoardShortcutBindings({
         if (def == null) return;
         const id = nav?.highlightedTaskId;
         if (id == null) return;
-        const task = b.tasks.find((t) => t.id === id);
+        const task = b.tasks.find((t) => t.taskId === id);
         if (!task) return;
-        if (!b.releases.some((r) => r.id === def)) return;
+        if (!b.releases.some((r) => r.releaseId === def)) return;
         const now = new Date().toISOString();
         updateTask.mutate({
-          boardId: b.id,
+          boardId: b.boardId,
           task: {
             ...task,
             releaseId: def,
@@ -491,7 +491,7 @@ function BoardShortcutBindings({
 
 export function BoardView({ boardId }: BoardViewProps) {
   const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
-  useBoardChangeStream(boardId, data?.id ?? null);
+  useBoardChangeStream(boardId, data?.boardId ?? null);
   const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
   const patchBoard = usePatchBoard();
   const themePreference = usePreferencesStore((s) => s.themePreference);
@@ -600,7 +600,7 @@ export function BoardView({ boardId }: BoardViewProps) {
       resizeObserver?.disconnect();
       window.removeEventListener("resize", syncBoardScrollMetrics);
     };
-  }, [data?.id, scrollRef, syncBoardScrollMetrics, stackedLayout]);
+  }, [data?.boardId, scrollRef, syncBoardScrollMetrics, stackedLayout]);
 
   // Vertical wheel over list bodies keeps native scroll; elsewhere (gaps, list chrome,
   // status rail) translate wheel to horizontal board scroll. Board header uses the same
@@ -748,12 +748,12 @@ export function BoardView({ boardId }: BoardViewProps) {
     if (boardShortcutHelpDismissed) return;
     setHelpOpenReason("auto");
     setShortcutHelpOpen(true);
-  }, [boardId, data?.id, boardShortcutHelpDismissed]);
+  }, [boardId, data?.boardId, boardShortcutHelpDismissed]);
 
   useEffect(() => {
     setEditingBoardName(false);
     setBoardNameDraft(data?.name ?? "");
-  }, [data?.id]);
+  }, [data?.boardId]);
 
   useEffect(() => {
     if (!editingBoardName) {
@@ -783,19 +783,19 @@ export function BoardView({ boardId }: BoardViewProps) {
     null,
   );
   const activeTaskGroupIds = useResolvedActiveTaskGroupIds(
-    data?.id ?? boardId ?? "",
+    data?.boardId ?? boardId ?? "",
     data?.taskGroups ?? [],
   );
   const activeTaskPriorityIds = useResolvedActiveTaskPriorityIds(
-    data?.id ?? boardId ?? "",
+    data?.boardId ?? boardId ?? "",
     data?.taskPriorities ?? [],
   );
   const activeReleaseIds = useResolvedActiveReleaseIds(
-    data?.id ?? boardId ?? "",
+    data?.boardId ?? boardId ?? "",
     data?.releases ?? [],
   );
   const dateFilterResolved = useResolvedTaskDateFilter(
-    data?.id ?? boardId ?? "",
+    data?.boardId ?? boardId ?? "",
   );
   const prevStatsVisibleRef = useRef<boolean | null>(null);
 
@@ -829,7 +829,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     dateFilterResolved,
   ]);
 
-  const boardStatsQuery = useBoardStats(data?.id ?? null, statsFilter, {
+  const boardStatsQuery = useBoardStats(data?.boardId ?? null, statsFilter, {
     enabled: Boolean(data?.showStats),
   });
 
@@ -884,7 +884,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     }
     try {
       await patchBoard.mutateAsync({
-        boardId: data.id,
+        boardId: data.boardId,
         name: trimmed,
       });
     } catch {
@@ -898,7 +898,7 @@ export function BoardView({ boardId }: BoardViewProps) {
       setBoardEmojiFieldError(null);
       try {
         await patchBoard.mutateAsync({
-          boardId: data.id,
+          boardId: data.boardId,
           emoji: next,
         });
       } catch {
@@ -914,7 +914,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     ...getBoardThemeStyle(resolvedBoardColor(data ?? {}), dark),
     background: "var(--board-canvas-image)",
   };
-  const boardSurfaceId = data ? `board-surface-${data.id}` : null;
+  const boardSurfaceId = data ? `board-surface-${data.boardId}` : null;
 
   if (!boardId) {
     return (
@@ -980,13 +980,13 @@ export function BoardView({ boardId }: BoardViewProps) {
   const activePriorityColor =
     activeTaskPriorityIds && activeTaskPriorityIds.length === 1
       ? sortPrioritiesByValue(data.taskPriorities).find(
-          (priority) => String(priority.id) === activeTaskPriorityIds[0],
+          (priority) => String(priority.priorityId) === activeTaskPriorityIds[0],
         )?.color
       : undefined;
   const activeReleaseLabels =
     activeReleaseIds?.map((releaseId) => {
       if (releaseId === RELEASE_FILTER_UNTAGGED) return "Untagged";
-      const r = data.releases.find((x) => String(x.id) === releaseId);
+      const r = data.releases.find((x) => String(x.releaseId) === releaseId);
       return r?.name ?? "";
     }).filter(Boolean) ?? null;
   const activeReleaseSummary =
@@ -1003,12 +1003,12 @@ export function BoardView({ boardId }: BoardViewProps) {
     activeReleaseIds &&
     activeReleaseIds.length === 1 &&
     activeReleaseIds[0] !== RELEASE_FILTER_UNTAGGED
-      ? data.releases.find((r) => String(r.id) === activeReleaseIds[0])?.color ??
+      ? data.releases.find((r) => String(r.releaseId) === activeReleaseIds[0])?.color ??
         undefined
       : undefined;
   const defaultReleaseForHeaderChip =
     data.defaultReleaseId != null
-      ? data.releases.find((r) => r.id === data.defaultReleaseId) ?? null
+      ? data.releases.find((r) => r.releaseId === data.defaultReleaseId) ?? null
       : null;
   const activeDateSummary = dateFilterResolved
     ? formatTaskDateFilterBadge(

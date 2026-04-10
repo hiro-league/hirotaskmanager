@@ -1,6 +1,10 @@
 import { Command } from "commander";
 import type { CliContext } from "../handlers/context";
-import { handleServerStart, handleServerStatus } from "../handlers/server";
+import {
+  handleServerStart,
+  handleServerStatus,
+  handleServerStop,
+} from "../handlers/server";
 import {
   addPortOption,
   addProfileOption,
@@ -11,8 +15,12 @@ export function registerServerCommands(
   program: Command,
   ctx: CliContext,
 ): void {
+  const server = program
+    .command("server")
+    .description("Start, stop, or inspect the local TaskManager server");
+
   addProfileOption(
-    program
+    server
       .command("start")
       .description("Start the local TaskManager server")
       .option("-b, --background", "Run the server in the background")
@@ -30,11 +38,23 @@ export function registerServerCommands(
 
   addProfileOption(
     addPortOption(
-      program
+      server
         .command("status")
         .description("Show whether the local TaskManager server is running"),
     ),
   ).action(async (options: { port?: string }) => {
     await withCliErrors(() => handleServerStatus(ctx, options));
+  });
+
+  addProfileOption(
+    addPortOption(
+      server
+        .command("stop")
+        .description(
+          "Stop a background server started by hirotm (uses CLI pid file)",
+        ),
+    ),
+  ).action(async (options: { port?: string }) => {
+    await withCliErrors(() => handleServerStop(ctx, options));
   });
 }

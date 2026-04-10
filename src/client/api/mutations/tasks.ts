@@ -71,10 +71,10 @@ export function useCreateTask() {
       const now = new Date().toISOString();
       const defaultNone =
         noneTaskPriorityId(prev.taskPriorities) ??
-        sortPrioritiesByValue(prev.taskPriorities)[0]?.id;
+        sortPrioritiesByValue(prev.taskPriorities)[0]?.priorityId;
       if (defaultNone == null) return { prev, optimisticTaskId: undefined };
       const task: Task = {
-        id: tempNumericId(),
+        taskId: tempNumericId(),
         listId: input.listId,
         title: input.title,
         body: input.body,
@@ -93,7 +93,7 @@ export function useCreateTask() {
         updatedAt: now,
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
-      return { prev, optimisticTaskId: task.id };
+      return { prev, optimisticTaskId: task.taskId };
     },
     onError: (_err, input, ctx) => {
       if (ctx?.prev) {
@@ -105,12 +105,12 @@ export function useCreateTask() {
         if (!current) return current;
         const optimisticId = ctx?.optimisticTaskId;
         const hasOptimistic =
-          optimisticId != null && current.tasks.some((task) => task.id === optimisticId);
+          optimisticId != null && current.tasks.some((task) => task.taskId === optimisticId);
         return {
           ...current,
           tasks: hasOptimistic
             ? current.tasks.map((task) =>
-                task.id === optimisticId ? data.entity : task,
+                task.taskId === optimisticId ? data.entity : task,
               )
             : [...current.tasks, data.entity],
           updatedAt: data.boardUpdatedAt,
@@ -128,7 +128,7 @@ export function useUpdateTask() {
     mutationFn: async (input: { boardId: number; task: Task }) => {
       const t = input.task;
       return fetchJson<TaskMutationResult>(
-        `/api/boards/${input.boardId}/tasks/${t.id}`,
+        `/api/boards/${input.boardId}/tasks/${t.taskId}`,
         {
           method: "PATCH",
           headers: jsonHeaders,
@@ -150,7 +150,7 @@ export function useUpdateTask() {
     onMutate: async (input) => {
       const prev = qc.getQueryData<Board>(boardKeys.detail(input.boardId));
       if (!prev) return { prev: undefined as Board | undefined };
-      const p = prev.tasks.find((t) => t.id === input.task.id);
+      const p = prev.tasks.find((t) => t.taskId === input.task.taskId);
       if (!p) return { prev };
       const statusChanged = p.status !== input.task.status;
       const listChanged = p.listId !== input.task.listId;
@@ -158,7 +158,7 @@ export function useUpdateTask() {
       if (statusChanged || listChanged) {
         const inBand = prev.tasks.filter(
           (t) =>
-            t.id !== input.task.id &&
+            t.taskId !== input.task.taskId &&
             t.listId === input.task.listId &&
             t.status === input.task.status,
         );
@@ -172,7 +172,7 @@ export function useUpdateTask() {
       };
       const next: Board = {
         ...prev,
-        tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)),
+        tasks: prev.tasks.map((t) => (t.taskId === task.taskId ? task : t)),
         updatedAt: task.updatedAt,
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
@@ -189,12 +189,15 @@ export function useUpdateTask() {
         return {
           ...current,
           tasks: current.tasks.map((task) =>
-            task.id === data.entity.id ? data.entity : task,
+            task.taskId === data.entity.taskId ? data.entity : task,
           ),
           updatedAt: data.boardUpdatedAt,
         };
       });
-      qc.setQueryData(boardTaskDetailKey(data.boardId, data.entity.id), data.entity);
+      qc.setQueryData(
+        boardTaskDetailKey(data.boardId, data.entity.taskId),
+        data.entity,
+      );
       invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
@@ -229,8 +232,8 @@ export function useMoveTask() {
       });
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
+      invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
   });
@@ -262,7 +265,7 @@ export function useReorderTasksInBand() {
         (t) => t.listId === input.listId && t.status === input.status,
       );
       if (inBand.length !== input.orderedTaskIds.length) return { prev };
-      const bandIds = new Set(inBand.map((t) => t.id));
+      const bandIds = new Set(inBand.map((t) => t.taskId));
       for (const id of input.orderedTaskIds) {
         if (!bandIds.has(id)) return { prev };
       }
@@ -272,7 +275,7 @@ export function useReorderTasksInBand() {
       const now = new Date().toISOString();
       const tasks = prev.tasks.map((t) => {
         if (t.listId !== input.listId || t.status !== input.status) return t;
-        const o = orderById.get(t.id);
+        const o = orderById.get(t.taskId);
         if (o === undefined) return t;
         return { ...t, order: o, updatedAt: now };
       });
@@ -286,8 +289,8 @@ export function useReorderTasksInBand() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
+      invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
   });
@@ -308,7 +311,7 @@ export function useDeleteTask() {
       const now = new Date().toISOString();
       const next: Board = {
         ...prev,
-        tasks: prev.tasks.filter((t) => t.id !== input.taskId),
+        tasks: prev.tasks.filter((t) => t.taskId !== input.taskId),
         updatedAt: now,
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
@@ -324,7 +327,7 @@ export function useDeleteTask() {
         if (!current) return current;
         return {
           ...current,
-          tasks: current.tasks.filter((task) => task.id !== data.deletedTaskId),
+          tasks: current.tasks.filter((task) => task.taskId !== data.deletedTaskId),
           updatedAt: data.boardUpdatedAt,
         };
       });

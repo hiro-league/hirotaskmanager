@@ -57,11 +57,11 @@ Hiro Task Manager exposes `hirotm` cli for command line and ai agent friendly co
 Try hirotm help for a list of commands.
 
 ```bash
-hirotm status
-hirotm boards 
-hirotm tasks 
+hirotm server status
+hirotm boards
+hirotm tasks
 hirotm lists
-hirotm search
+hirotm query search
 ```
 
 ## Multiple Profiles
@@ -71,7 +71,7 @@ Hiro Task Manager supports multiple profiles if you are a developer and need to 
 `hirotm` can also start the local server explicitly, including by profile:
 
 ```bash
-hirotm start --profile default --background
+hirotm server start --profile default --background
 ```
 
 ## Development

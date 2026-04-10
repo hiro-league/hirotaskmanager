@@ -16,7 +16,7 @@ function fnv1aAddUint32(h: number, n: number): number {
 export function hashTasksForDndLayoutDeps(tasks: readonly Task[]): number {
   let h = FNV_OFFSET;
   for (const t of tasks) {
-    h = fnv1aAddUint32(h, t.id);
+    h = fnv1aAddUint32(h, t.taskId);
     h = fnv1aAddUint32(h, t.listId);
     for (let i = 0; i < t.status.length; i++) {
       h = fnv1aAddUint32(h, t.status.charCodeAt(i));

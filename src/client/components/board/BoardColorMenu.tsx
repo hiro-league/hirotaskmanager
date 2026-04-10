@@ -35,7 +35,7 @@ export function BoardColorMenu({
 
   const pick = (preset: BoardColorPreset) => {
     patchViewPrefs.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       patch: { boardColor: preset },
     });
   };

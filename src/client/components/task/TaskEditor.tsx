@@ -68,8 +68,8 @@ export function TaskEditor({
 
   // Board list uses `GET /api/boards/:id?slim=1` (truncated bodies). Load full task when editing.
   const taskDetailQuery = useQuery({
-    queryKey: boardTaskDetailKey(board.id, task?.id ?? 0),
-    queryFn: () => fetchBoardTask(board.id, task!.id),
+    queryKey: boardTaskDetailKey(board.boardId, task?.taskId ?? 0),
+    queryFn: () => fetchBoardTask(board.boardId, task!.taskId),
     enabled: open && mode === "edit" && task != null,
   });
 
@@ -77,9 +77,9 @@ export function TaskEditor({
   const [body, setBody] = useState("");
   /** Task icon; null clears. */
   const [emoji, setEmoji] = useState<string | null>(null);
-  /** Select value — matches `String(taskGroup.id)`. */
+  /** Select value — matches `String(taskGroup.groupId)`. */
   const [group, setGroup] = useState("");
-  /** Select value — matches `String(taskPriority.id)` (default builtin `none`). */
+  /** Select value — matches `String(taskPriority.priorityId)` (default builtin `none`). */
   const [priority, setPriority] = useState("");
   /** `RELEASE_SELECT_*` or `String(releaseId)` for edit/create. */
   const [release, setRelease] = useState(RELEASE_SELECT_AUTO);
@@ -146,7 +146,7 @@ export function TaskEditor({
       setGroup(defaultGroup);
       const defaultPri = String(
         noneTaskPriorityId(board.taskPriorities) ??
-          sortPrioritiesByValue(board.taskPriorities)[0]!.id,
+          sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId,
       );
       setPriority(defaultPri);
       setRelease(RELEASE_SELECT_AUTO);
@@ -240,7 +240,7 @@ export function TaskEditor({
     const priorityId = Number.isFinite(priorityNum)
       ? priorityNum
       : (noneTaskPriorityId(board.taskPriorities) ??
-        sortPrioritiesByValue(board.taskPriorities)[0]!.id);
+        sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId);
     if (mode === "create" && createContext) {
       const gid =
         Number(group) || effectiveDefaultTaskGroupId(board);
@@ -250,7 +250,7 @@ export function TaskEditor({
       else if (release !== RELEASE_SELECT_AUTO) releasePayload = Number(release);
       else releasePayload = undefined;
       await createTask.mutateAsync({
-        boardId: board.id,
+        boardId: board.boardId,
         listId: createContext.listId,
         status: createContext.status,
         title: trimmedTitle,
@@ -265,7 +265,7 @@ export function TaskEditor({
       const nextReleaseId =
         release === RELEASE_SELECT_NONE ? null : Number(release);
       await updateTask.mutateAsync({
-        boardId: board.id,
+        boardId: board.boardId,
         task: {
           ...task,
           title: trimmedTitle,
@@ -283,7 +283,7 @@ export function TaskEditor({
     mode,
     createContext,
     task,
-    board.id,
+    board.boardId,
     board.taskPriorities,
     board.taskGroups,
     board.defaultTaskGroupId,
@@ -299,7 +299,7 @@ export function TaskEditor({
   ]);
 
   const closedStatusId =
-    statuses?.find((s) => s.isClosed)?.id ?? "closed";
+    statuses?.find((s) => s.isClosed)?.statusId ?? "closed";
   const sortedPriorities = useMemo(
     () => sortPrioritiesByValue(board.taskPriorities),
     [board.taskPriorities],
@@ -308,13 +308,13 @@ export function TaskEditor({
   const applyWorkflowStatus = useCallback(
     async (nextStatusId: string) => {
       if (mode !== "edit" || !task) return;
-      const target = statuses?.find((s) => s.id === nextStatusId);
+      const target = statuses?.find((s) => s.statusId === nextStatusId);
       const now = new Date().toISOString();
       const isClosing =
         target?.isClosed === true ||
         (target === undefined && nextStatusId === closedStatusId);
       const wasClosed =
-        statuses?.find((s) => s.id === task.status)?.isClosed === true;
+        statuses?.find((s) => s.statusId === task.status)?.isClosed === true;
       if (isClosing && !wasClosed) {
         completion?.celebrateTaskCompletion({
           anchorEl: dialogRef.current ?? undefined,
@@ -322,7 +322,7 @@ export function TaskEditor({
       }
       const nextClosedAt = isClosing ? (task.closedAt ?? now) : null;
       await updateTask.mutateAsync({
-        boardId: board.id,
+        boardId: board.boardId,
         task: {
           ...task,
           status: nextStatusId,
@@ -331,14 +331,14 @@ export function TaskEditor({
         },
       });
     },
-    [mode, task, statuses, board.id, updateTask, closedStatusId, completion],
+    [mode, task, statuses, board.boardId, updateTask, closedStatusId, completion],
   );
 
   const runDelete = useCallback(async () => {
     if (mode !== "edit" || !task) return;
-    await deleteTask.mutateAsync({ boardId: board.id, taskId: task.id });
+    await deleteTask.mutateAsync({ boardId: board.boardId, taskId: task.taskId });
     onClose();
-  }, [mode, task, board.id, deleteTask, onClose]);
+  }, [mode, task, board.boardId, deleteTask, onClose]);
 
   if (!open) return null;
 
@@ -348,7 +348,7 @@ export function TaskEditor({
     workflowOrder.find((id) => id === "in-progress") ?? "in-progress";
 
   const currentMeta = task
-    ? statuses?.find((s) => s.id === task.status)
+    ? statuses?.find((s) => s.statusId === task.status)
     : undefined;
   const isDone =
     currentMeta?.isClosed ?? (task?.status === closedStatusId);
@@ -432,7 +432,7 @@ export function TaskEditor({
                 onChange={(e) => setGroup(e.target.value)}
               >
                 {sortTaskGroupsForDisplay(board.taskGroups).map((g) => (
-                  <option key={g.id} value={String(g.id)}>
+                  <option key={g.groupId} value={String(g.groupId)}>
                     {formatGroupDisplayLabel(g)}
                   </option>
                 ))}
@@ -450,7 +450,10 @@ export function TaskEditor({
                 onChange={(e) => setPriority(e.target.value)}
               >
                 {sortedPriorities.map((taskPriority) => (
-                  <option key={taskPriority.id} value={String(taskPriority.id)}>
+                  <option
+                    key={taskPriority.priorityId}
+                    value={String(taskPriority.priorityId)}
+                  >
                     {taskPriority.value} - {priorityDisplayLabel(taskPriority.label)}
                   </option>
                 ))}
@@ -474,7 +477,7 @@ export function TaskEditor({
                 ) : null}
                 <option value={RELEASE_SELECT_NONE}>Untagged</option>
                 {board.releases.map((r) => (
-                  <option key={r.id} value={String(r.id)}>
+                  <option key={r.releaseId} value={String(r.releaseId)}>
                     {r.name}
                   </option>
                 ))}

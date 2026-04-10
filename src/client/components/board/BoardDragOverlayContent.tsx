@@ -17,7 +17,7 @@ export function BoardTaskDragOverlay({
   board: Board;
   task: Task;
 }) {
-  const taskCardViewMode = useResolvedTaskCardViewMode(board.id);
+  const taskCardViewMode = useResolvedTaskCardViewMode(board.boardId);
   return (
     <div className={boardTaskDragOverlayClass}>
       <TaskCard
@@ -59,7 +59,7 @@ export function BoardDragOverlayContent(props: BoardDragOverlayContentProps) {
   if (props.activeListId == null) return null;
   if (props.layout === "lanes") {
     const list = props.board.lists.find(
-      (l) => l.id === props.activeListId,
+      (l) => l.listId === props.activeListId,
     );
     if (!list) return null;
     return (
@@ -73,7 +73,7 @@ export function BoardDragOverlayContent(props: BoardDragOverlayContentProps) {
       />
     );
   }
-  const list = props.board.lists.find((l) => l.id === props.activeListId);
+  const list = props.board.lists.find((l) => l.listId === props.activeListId);
   if (!list) return null;
   return (
     <BoardListStackedColumnOverlay

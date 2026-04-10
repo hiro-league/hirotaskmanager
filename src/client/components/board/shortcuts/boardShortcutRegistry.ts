@@ -454,7 +454,11 @@ export const boardShortcutRegistry: BoardShortcutDefinition[] = [
     preventDefault: true,
     matchKey: letterKey("e"),
     enabled: (b) =>
-      Boolean(b && b.defaultReleaseId != null && b.releases.some((r) => r.id === b.defaultReleaseId)),
+      Boolean(
+        b &&
+          b.defaultReleaseId != null &&
+          b.releases.some((r) => r.releaseId === b.defaultReleaseId),
+      ),
     run: (board, actions) => {
       actions.assignDefaultReleaseToHighlightedTask(board);
     },
@@ -470,9 +474,9 @@ export function cycleTaskGroupForBoard(
 ): void {
   if (board.taskGroups.length === 0) return;
   const groupsOrdered = sortTaskGroupsForDisplay(board.taskGroups);
-  const orderedIds = groupsOrdered.map((group) => String(group.id));
+  const orderedIds = groupsOrdered.map((group) => String(group.groupId));
   const raw =
-    usePreferencesStore.getState().activeTaskGroupIdsByBoardId[String(board.id)];
+    usePreferencesStore.getState().activeTaskGroupIdsByBoardId[String(board.boardId)];
   const resolved =
     Array.isArray(raw) && raw.length === 1 && orderedIds.includes(raw[0]!)
       ? raw[0]!
@@ -481,10 +485,10 @@ export function cycleTaskGroupForBoard(
   const idx = Math.max(0, order.indexOf(resolved));
   const next = order[(idx + 1) % order.length] ?? ALL_TASK_GROUPS;
   if (next === ALL_TASK_GROUPS) {
-    setActive(board.id, undefined);
+    setActive(board.boardId, undefined);
     return;
   }
-  setActive(board.id, [next]);
+  setActive(board.boardId, [next]);
 }
 
 export function cycleTaskCardViewModeForBoard(
@@ -492,8 +496,8 @@ export function cycleTaskCardViewModeForBoard(
   setViewMode: (boardId: string | number, mode: "small" | "normal" | "large" | "larger") => void,
 ): void {
   const current =
-    usePreferencesStore.getState().taskCardViewModeByBoardId[String(board.id)] ?? "normal";
-  setViewMode(board.id, getNextTaskCardViewMode(current));
+    usePreferencesStore.getState().taskCardViewModeByBoardId[String(board.boardId)] ?? "normal";
+  setViewMode(board.boardId, getNextTaskCardViewMode(current));
 }
 
 export function cycleTaskPriorityForBoard(
@@ -504,26 +508,26 @@ export function cycleTaskPriorityForBoard(
   ) => void,
 ): void {
   const orderedIds = sortPrioritiesByValue(board.taskPriorities).map((priority) =>
-    String(priority.id),
+    String(priority.priorityId),
   );
   if (orderedIds.length === 0) return;
   const raw =
     usePreferencesStore.getState().activeTaskPriorityIdsByBoardId[
-      String(board.id)
+      String(board.boardId)
     ];
   if (raw === undefined) {
-    setActive(board.id, [orderedIds[0]!]);
+    setActive(board.boardId, [orderedIds[0]!]);
     return;
   }
   if (raw.length !== 1 || !orderedIds.includes(raw[0]!)) {
-    setActive(board.id, undefined);
+    setActive(board.boardId, undefined);
     return;
   }
   const resolved = raw[0]!;
   const idx = orderedIds.indexOf(resolved);
   if (idx < 0 || idx >= orderedIds.length - 1) {
-    setActive(board.id, undefined);
+    setActive(board.boardId, undefined);
     return;
   }
-  setActive(board.id, [orderedIds[idx + 1]!]);
+  setActive(board.boardId, [orderedIds[idx + 1]!]);
 }

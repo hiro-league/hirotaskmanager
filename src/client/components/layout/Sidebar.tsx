@@ -230,20 +230,20 @@ export function Sidebar() {
   const patchBoard = usePatchBoard();
   const deleteBoard = useDeleteBoard();
 
-  const [editingId, setEditingId] = useState<string | null>(null); // String(board.id)
+  const [editingId, setEditingId] = useState<string | null>(null); // String(board.boardId)
   const [editValue, setEditValue] = useState("");
   const [addingBoard, setAddingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [boardDeleteCandidate, setBoardDeleteCandidate] = useState<{
-    id: number;
+    boardId: number;
     name: string;
   } | null>(null);
   const [deleteTaskCountInput, setDeleteTaskCountInput] = useState("");
   const {
     data: deleteBoardDetails,
     isLoading: deleteBoardDetailsLoading,
-  } = useBoard(boardDeleteCandidate?.id ?? null);
+  } = useBoard(boardDeleteCandidate?.boardId ?? null);
 
   useEffect(() => {
     setAddingBoard(false);
@@ -254,7 +254,7 @@ export function Sidebar() {
     if (isLoading || isError) return;
     // Keep persisted board-local UI prefs aligned with the real board list so deleted boards
     // cannot leak their filter state onto a later board that reuses the same SQLite id.
-    pruneBoardScopedPreferences(boards.map((board) => board.id));
+    pruneBoardScopedPreferences(boards.map((board) => board.boardId));
   }, [boards, isError, isLoading, pruneBoardScopedPreferences]);
 
   const startRename = useCallback((id: number, name: string) => {
@@ -273,7 +273,7 @@ export function Sidebar() {
     const trimmed = editValue.trim();
     cancelRename();
     if (!trimmed) return;
-    const row = boards.find((b) => String(b.id) === id);
+    const row = boards.find((b) => String(b.boardId) === id);
     if (!row || row.name === trimmed) return;
     try {
       await patchBoard.mutateAsync({
@@ -288,12 +288,12 @@ export function Sidebar() {
   const requestDelete = useCallback((id: number, name: string) => {
     setOpenMenuId(null);
     setDeleteTaskCountInput("");
-    setBoardDeleteCandidate({ id, name });
+    setBoardDeleteCandidate({ boardId: id, name });
   }, []);
 
   const confirmDelete = useCallback(() => {
     if (!boardDeleteCandidate) return;
-    deleteBoard.mutate(boardDeleteCandidate.id, {
+    deleteBoard.mutate(boardDeleteCandidate.boardId, {
       onSuccess: () => {
         setBoardDeleteCandidate(null);
         setDeleteTaskCountInput("");
@@ -357,12 +357,12 @@ export function Sidebar() {
           {!isLoading &&
             !isError &&
             boards.map((b) => {
-              const active = String(b.id) === selectedBoardId;
+              const active = String(b.boardId) === selectedBoardId;
               const label = boardCollapsedLabel(b.name, b.emoji);
               const display = boardDisplayName(b);
               return (
                 <button
-                  key={b.id}
+                  key={b.boardId}
                   type="button"
                   title={display}
                   aria-label={display}
@@ -373,7 +373,7 @@ export function Sidebar() {
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
-                  onClick={() => navigate(boardPath(String(b.id)))}
+                  onClick={() => navigate(boardPath(String(b.boardId)))}
                 >
                   {label}
                 </button>
@@ -428,11 +428,11 @@ export function Sidebar() {
         )}
         <ul className="space-y-0.5">
           {boards.map((b) => {
-            const active = String(b.id) === selectedBoardId;
-            const editing = String(b.id) === editingId;
-            const menuOpen = String(b.id) === openMenuId;
+            const active = String(b.boardId) === selectedBoardId;
+            const editing = String(b.boardId) === editingId;
+            const menuOpen = String(b.boardId) === openMenuId;
             return (
-              <li key={b.id}>
+              <li key={b.boardId}>
                 <div
                   className={cn(
                     "group flex items-center gap-1 rounded-md transition-colors",
@@ -462,8 +462,8 @@ export function Sidebar() {
                         "min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm",
                         !active && "hover:bg-sidebar-accent/50",
                       )}
-                      onClick={() => navigate(boardPath(String(b.id)))}
-                      onDoubleClick={() => startRename(b.id, b.name)}
+                      onClick={() => navigate(boardPath(String(b.boardId)))}
+                      onDoubleClick={() => startRename(b.boardId, b.name)}
                     >
                       {boardDisplayName(b)}
                     </button>
@@ -472,7 +472,7 @@ export function Sidebar() {
                     <DropdownMenu.Root
                       open={menuOpen}
                       onOpenChange={(open) =>
-                        setOpenMenuId(open ? String(b.id) : null)
+                        setOpenMenuId(open ? String(b.boardId) : null)
                       }
                     >
                       <DropdownMenu.Trigger asChild>
@@ -494,7 +494,7 @@ export function Sidebar() {
                             className="flex cursor-default rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                             onSelect={() => {
                               setOpenMenuId(null);
-                              startRename(b.id, b.name);
+                              startRename(b.boardId, b.name);
                             }}
                           >
                             Edit
@@ -502,7 +502,7 @@ export function Sidebar() {
                           <DropdownMenu.Item
                             className="flex cursor-default rounded px-2 py-1.5 text-destructive outline-none hover:bg-destructive/10 focus:bg-destructive/10"
                             onSelect={() => {
-                              requestDelete(b.id, b.name);
+                              requestDelete(b.boardId, b.name);
                             }}
                           >
                             Move to Trash

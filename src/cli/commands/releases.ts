@@ -7,7 +7,11 @@ import {
   handleReleasesShow,
   handleReleasesUpdate,
 } from "../handlers/releases";
-import { addPortOption, withCliErrors } from "../lib/command-helpers";
+import {
+  addPortOption,
+  CLI_FIELDS_OPTION_DESC,
+  withCliErrors,
+} from "../lib/command-helpers";
 
 export function registerReleaseCommands(
   program: Command,
@@ -23,19 +27,36 @@ export function registerReleaseCommands(
     releasesCommand
       .command("list")
       .description("List releases for a board")
-      .requiredOption("--board <id-or-slug>", "Board id or slug"),
-  ).action(async (options: { port?: string; board: string }) => {
-    await withCliErrors(() => handleReleasesList(ctx, options));
-  });
+      .requiredOption("--board <id-or-slug>", "Board id or slug")
+      .option("--limit <n>", "Page size (omit for one full response)")
+      .option("--offset <n>", "Skip this many releases (default 0)")
+      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      board: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() => handleReleasesList(ctx, options));
+    },
+  );
 
   addPortOption(
     releasesCommand
       .command("show")
       .description("Show one release by id")
       .requiredOption("--board <id-or-slug>", "Board id or slug")
-      .argument("<release-id>", "Numeric release id"),
+      .argument("<release-id>", "Numeric release id")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (releaseId: string, options: { port?: string; board: string }) => {
+    async (
+      releaseId: string,
+      options: { port?: string; board: string; fields?: string },
+    ) => {
       await withCliErrors(() => handleReleasesShow(ctx, releaseId, options));
     },
   );

@@ -59,9 +59,9 @@ export function computeBoardStats(
 ): BoardStatsResponse {
   const boardStat = emptyStat();
   const listStats = new Map<number, TaskCountStat>();
-  const listIds = new Set(board.lists.map((l) => l.id));
+  const listIds = new Set(board.lists.map((l) => l.listId));
   for (const list of board.lists) {
-    listStats.set(list.id, emptyStat());
+    listStats.set(list.listId, emptyStat());
   }
 
   for (const task of board.tasks) {
@@ -82,12 +82,12 @@ export function computeBoardStats(
   }
 
   const lists = board.lists.map((list) => ({
-    listId: list.id,
-    stats: listStats.get(list.id) ?? emptyStat(),
+    listId: list.listId,
+    stats: listStats.get(list.listId) ?? emptyStat(),
   }));
 
   return {
-    boardId: board.id,
+    boardId: board.boardId,
     board: boardStat,
     lists,
   };
@@ -95,7 +95,7 @@ export function computeBoardStats(
 
 /** Build closed-status id set from workflow rows (canonical `isClosed` semantics). */
 export function closedStatusIdsFromStatuses(statuses: Status[]): Set<string> {
-  return new Set(statuses.filter((s) => s.isClosed).map((s) => s.id));
+  return new Set(statuses.filter((s) => s.isClosed).map((s) => s.statusId));
 }
 
 /**

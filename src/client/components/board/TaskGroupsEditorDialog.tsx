@@ -81,7 +81,7 @@ export function TaskGroupsEditorDialog({
   rowsRef.current = rows;
 
   const baselineIds = useMemo(
-    () => new Set(board.taskGroups.map((g) => g.id)),
+    () => new Set(board.taskGroups.map((g) => g.groupId)),
     [board.taskGroups],
   );
 
@@ -102,12 +102,12 @@ export function TaskGroupsEditorDialog({
       board.taskGroups.length > 0
         ? sortTaskGroupsForDisplay(board.taskGroups).map((g) => ({
             ...g,
-            clientId: `existing-${g.id}`,
+            clientId: `existing-${g.groupId}`,
             deleteChoice: "",
           }))
         : [
             {
-              id: 0,
+              groupId: 0,
               label: "",
               emoji: null,
               sortOrder: 0,
@@ -119,7 +119,7 @@ export function TaskGroupsEditorDialog({
     const b = baselineIds;
     if (trimmedInit.length > 0) {
       const def =
-        initial.find((r) => r.id === board.defaultTaskGroupId) ??
+        initial.find((r) => r.groupId === board.defaultTaskGroupId) ??
         trimmedInit[0]!;
       const dr = encodeTaskGroupRowRef(def, b);
       setRows(initial);
@@ -370,9 +370,9 @@ export function TaskGroupsEditorDialog({
       for (const row of rows) {
         if (!isDeletingDraftRow(row, baselineIds)) continue;
         if (row.deleteChoice === DELETE_WITHOUT_MOVE) {
-          deleteMoves.set(row.id, null);
+          deleteMoves.set(row.groupId, null);
         } else {
-          deleteMoves.set(row.id, decodeTaskGroupRowRef(row.deleteChoice));
+          deleteMoves.set(row.groupId, decodeTaskGroupRowRef(row.deleteChoice));
         }
       }
       config = buildPatchBoardTaskGroupConfigFromEditor(board, activeRows, {
@@ -385,7 +385,7 @@ export function TaskGroupsEditorDialog({
     }
     patchGroups.mutate(
       {
-        boardId: board.id,
+        boardId: board.boardId,
         config,
       },
       {
@@ -452,8 +452,8 @@ export function TaskGroupsEditorDialog({
                 const moveOpts = moveToOptionsForRow(row, rows, baselineIds);
                 const isNewRow = !isPersistedDraftRow(row, baselineIds);
                 const isDeleting = isDeletingDraftRow(row, baselineIds);
-                const tasks = baselineIds.has(row.id)
-                  ? (taskCountByGroupId.get(row.id) ?? 0)
+                const tasks = baselineIds.has(row.groupId)
+                  ? (taskCountByGroupId.get(row.groupId) ?? 0)
                   : 0;
                 const isStarredDefault =
                   encodeTaskGroupRowRef(row, baselineIds) === defaultRef;
@@ -531,7 +531,7 @@ export function TaskGroupsEditorDialog({
               setRows((prev) => [
                 ...pruneBlankNewRows(prev, baselineIds),
                 {
-                  id: nextGroupId(prev),
+                  groupId: nextGroupId(prev),
                   label: "",
                   emoji: null,
                   sortOrder: prev.length,
@@ -604,7 +604,7 @@ function validDeleteChoicesForRow(
 ): Set<string> {
   const out = new Set<string>([""]);
   if (!isPersistedDraftRow(row, baselineIds)) return out;
-  const taskCount = taskCountByGroupId.get(row.id) ?? 0;
+  const taskCount = taskCountByGroupId.get(row.groupId) ?? 0;
   if (taskCount === 0) out.add(DELETE_WITHOUT_MOVE);
   for (const option of moveToOptionsForRow(row, allRows, baselineIds)) {
     out.add(option.ref);
@@ -616,7 +616,7 @@ function isPersistedDraftRow(
   row: TaskGroupDraftRow,
   baselineIds: Set<number>,
 ): boolean {
-  return baselineIds.has(row.id);
+  return baselineIds.has(row.groupId);
 }
 
 function isDeletingDraftRow(
@@ -646,7 +646,7 @@ function buildDraftSignature(
   baselineIds: Set<number>,
 ): string {
   const normalized = pruneBlankNewRows(rows, baselineIds).map((row) => ({
-    id: row.id,
+    groupId: row.groupId,
     clientId: row.clientId,
     label: row.label.trim(),
     emoji: row.emoji ?? null,

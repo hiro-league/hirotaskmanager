@@ -125,11 +125,13 @@ export function useBoardChangeStream(
         const task = await fetchBoardTask(event.boardId, event.taskId);
         qc.setQueryData(boardTaskDetailKey(event.boardId, event.taskId), task);
         setBoardCaches((current) => {
-          const exists = current.tasks.some((item) => item.id === task.id);
+          const exists = current.tasks.some((item) => item.taskId === task.taskId);
           return {
             ...current,
             tasks: exists
-              ? current.tasks.map((item) => (item.id === task.id ? task : item))
+              ? current.tasks.map((item) =>
+                  item.taskId === task.taskId ? task : item,
+                )
               : [...current.tasks, task],
             updatedAt: event.boardUpdatedAt,
           };
@@ -154,7 +156,7 @@ export function useBoardChangeStream(
       }
       setBoardCaches((current) => ({
         ...current,
-        tasks: current.tasks.filter((task) => task.id !== event.taskId),
+        tasks: current.tasks.filter((task) => task.taskId !== event.taskId),
         updatedAt: event.boardUpdatedAt,
       }));
       invalidateBoard();
@@ -171,11 +173,13 @@ export function useBoardChangeStream(
       try {
         const list = await fetchBoardList(event.boardId, event.listId);
         setBoardCaches((current) => {
-          const exists = current.lists.some((item) => item.id === list.id);
+          const exists = current.lists.some((item) => item.listId === list.listId);
           return {
             ...current,
             lists: exists
-              ? current.lists.map((item) => (item.id === list.id ? list : item))
+              ? current.lists.map((item) =>
+                  item.listId === list.listId ? list : item,
+                )
               : [...current.lists, list],
             updatedAt: event.boardUpdatedAt,
           };
@@ -200,7 +204,7 @@ export function useBoardChangeStream(
       }
       setBoardCaches((current) => ({
         ...current,
-        lists: current.lists.filter((list) => list.id !== event.listId),
+        lists: current.lists.filter((list) => list.listId !== event.listId),
         tasks: current.tasks.filter((task) => task.listId !== event.listId),
         updatedAt: event.boardUpdatedAt,
       }));

@@ -179,7 +179,7 @@ export function taskReleasePill(
 ): { label: string; color?: string | null } | null {
   const rid = task.releaseId;
   if (rid == null) return null;
-  const r = board.releases.find((x) => x.id === rid);
+  const r = board.releases.find((x) => x.releaseId === rid);
   if (!r) return null;
   return { label: r.name, color: r.color };
 }
@@ -263,7 +263,7 @@ function TaskCardContent({
   titleEditBusy?: boolean;
 }) {
   const viewSpec = getTaskCardViewSpec(viewMode);
-  const priorityRow = taskPriorities.find((p) => p.id === task.priorityId);
+  const priorityRow = taskPriorities.find((p) => p.priorityId === task.priorityId);
   // Default builtin `none` is not surfaced as a chip (same UX as “no priority”).
   const showPriorityPill =
     priorityRow != null && priorityRow.value !== NONE_TASK_PRIORITY_VALUE;
@@ -277,7 +277,7 @@ function TaskCardContent({
     titleInputRef.current?.focus();
     titleInputRef.current?.select();
     titleBlurModeRef.current = "commit";
-  }, [editingTitle, task.id]);
+  }, [editingTitle, task.taskId]);
 
   useLayoutEffect(() => {
     if (!editingTitle) return;
@@ -440,11 +440,11 @@ export const TaskCard = memo(function TaskCard({
   useLayoutEffect(() => {
     if (skipNavRegistration || !nav) return;
     const el = rootRef.current;
-    if (el) nav.registerTaskElement(task.id, el);
+    if (el) nav.registerTaskElement(task.taskId, el);
     return () => {
-      nav.registerTaskElement(task.id, null);
+      nav.registerTaskElement(task.taskId, null);
     };
-  }, [nav, skipNavRegistration, task.id]);
+  }, [nav, skipNavRegistration, task.taskId]);
 
   const preview = viewSpec.showDescriptionPreview
     ? previewBody(task.body, viewSpec.previewMaxLength)
@@ -459,10 +459,10 @@ export const TaskCard = memo(function TaskCard({
     <div
       ref={rootRef}
       data-task-card-root
-      data-task-id={task.id}
+      data-task-id={task.taskId}
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
-        nav.setHoveredTaskId(task.id);
+        nav.setHoveredTaskId(task.taskId);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType !== "mouse" || skipNavRegistration || !nav) return;
@@ -471,7 +471,7 @@ export const TaskCard = memo(function TaskCard({
       onPointerDown={() => {
         if (editingTitle) return;
         // Clicking into a task should make it current before any editor/dialog opens.
-        nav?.selectTask(task.id);
+        nav?.selectTask(task.taskId);
       }}
       className={cn(
         "group/task-card relative w-full overflow-hidden rounded-md border border-border bg-task-card text-sm text-task-card-foreground shadow-sm transition-colors select-none",
@@ -500,7 +500,7 @@ export const TaskCard = memo(function TaskCard({
                 e.stopPropagation();
                 // Completing from the card is still a task interaction, so keep
                 // this task current before applying the status change.
-                nav?.selectTask(task.id);
+                nav?.selectTask(task.taskId);
                 onCompleteFromCircle(e.currentTarget);
               }}
             >

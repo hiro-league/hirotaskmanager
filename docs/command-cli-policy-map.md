@@ -6,7 +6,7 @@ This doc maps **`hirotm`** commands to **`BoardCliPolicy`** checks on the server
 
 For every command below, the board in question must allow **`readBoard`** for the CLI. If `readBoard` is off, the CLI gets **403** on board-scoped and trash routes that touch that board. This document does **not** repeat `readBoard` in each row.
 
-Trash **GET** listings (`hirotm trash …`) only apply this rule: each returned row is for a board the CLI is allowed to read; there is no separate `deleteBoard` / manage flag for listing.
+Trash **GET** listings (`hirotm trash list …`) only apply this rule: each returned row is for a board the CLI is allowed to read; there is no separate `deleteBoard` / manage flag for listing.
 
 ---
 
@@ -19,13 +19,19 @@ Board-level actions use **`deleteBoard`**. There is no separate “created by CL
 | `boards delete` | `deleteBoard` | Moves the board to Trash |
 | `boards restore` | `deleteBoard` | Restores a trashed board |
 | `boards purge` | `deleteBoard` | Permanently deletes a board from Trash |
-| `trash boards` | *(none beyond `readBoard`)* | JSON list of trashed boards the CLI may read |
+| `trash list boards` | *(none beyond `readBoard`)* | JSON list of trashed boards the CLI may read |
 
 ---
 
 ## Lists
 
-List mutations use **`cliManageListError`**: **either** `manageAnyLists` **or** (`manageCliCreatedLists` **and** the list is CLI-created). Rows spell out both branches.
+**Create:** `lists add` uses **`cliCreateListsError`**. The board must allow **`createLists`** for the CLI (still subject to **`readBoard`** for board-scoped routes). This is separate from list *management* flags below.
+
+**Trash / delete / restore / purge** on existing lists use **`cliManageListError`**: **either** `manageAnyLists` **or** (`manageCliCreatedLists` **and** the list is CLI-created). Rows spell out both branches.
+
+| hirotm command | Extra board CLI policy (beyond `readBoard`) | Notes |
+|----------------|-----------------------------------------------|-------|
+| `lists add` | `createLists` | `POST /boards/:id/lists` |
 
 | hirotm command | Extra board CLI policy (beyond `readBoard`) | Which list this row applies to |
 |----------------|-----------------------------------------------|--------------------------------|
@@ -35,13 +41,19 @@ List mutations use **`cliManageListError`**: **either** `manageAnyLists` **or** 
 | `lists restore` | `manageAnyLists` | Trashed list **not** CLI-created |
 | `lists purge` | `manageCliCreatedLists` | Trashed list **CLI-created** |
 | `lists purge` | `manageAnyLists` | Trashed list **not** CLI-created |
-| `trash lists` | *(none beyond `readBoard`)* | Each row’s `boardId` must be readable |
+| `trash list lists` | *(none beyond `readBoard`)* | Each row’s `boardId` must be readable |
 
 ---
 
 ## Tasks
 
-Task mutations use **`cliManageTaskError`**: **either** `manageAnyTasks` **or** (`manageCliCreatedTasks` **and** the task is CLI-created).
+**Create:** `tasks add` uses **`cliCreateTasksError`**. The board must allow **`createTasks`** for the CLI (still subject to **`readBoard`**). Separate from task *management* flags below.
+
+**Trash / delete / restore / purge** on existing tasks use **`cliManageTaskError`**: **either** `manageAnyTasks` **or** (`manageCliCreatedTasks` **and** the task is CLI-created).
+
+| hirotm command | Extra board CLI policy (beyond `readBoard`) | Notes |
+|----------------|-----------------------------------------------|-------|
+| `tasks add` | `createTasks` | `POST /boards/:id/tasks` |
 
 | hirotm command | Extra board CLI policy (beyond `readBoard`) | Which task this row applies to |
 |----------------|-----------------------------------------------|--------------------------------|
@@ -51,7 +63,7 @@ Task mutations use **`cliManageTaskError`**: **either** `manageAnyTasks` **or** 
 | `tasks restore` | `manageAnyTasks` | Trashed task **not** CLI-created |
 | `tasks purge` | `manageCliCreatedTasks` | Trashed task **CLI-created** |
 | `tasks purge` | `manageAnyTasks` | Trashed task **not** CLI-created |
-| `trash tasks` | *(none beyond `readBoard`)* | Each row’s `boardId` must be readable |
+| `trash list tasks` | *(none beyond `readBoard`)* | Each row’s `boardId` must be readable |
 
 ---
 
@@ -67,10 +79,10 @@ Release routes use **`manageStructure`** for writes (create / update / delete), 
 | `releases update` | `manageStructure` | `PATCH /boards/:id/releases/:releaseId` |
 | `releases delete` | `manageStructure` | `DELETE …` — optional `moveTasksTo` query |
 
-Filtered task listing **`boards tasks`** only requires **`readBoard`** (same as other board read/query routes that accept filter query params).
+Filtered task listing **`tasks list --board`** only requires **`readBoard`** (same as other board read/query routes that accept filter query params).
 
 ---
 
 ## Implementation reference
 
-Guards live in `src/server/cliPolicyGuard.ts`. Trash routes apply them in `src/server/routes/trash.ts`; live deletes in `src/server/routes/boards.ts`.
+Guards live in `src/server/cliPolicyGuard.ts`. **`cliCreateListsError`** / **`cliCreateTasksError`** and list/task/trash checks are applied from `src/server/routes/boards.ts`; trash-only flows also use `src/server/routes/trash.ts`.

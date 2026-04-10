@@ -77,7 +77,7 @@ export const ListStatusBand = memo(function ListStatusBand({
   // O(1) task lookup map — avoids O(n) board.tasks.find() in render loops
   const taskMap = useMemo(() => {
     const m = new Map<number, Task>();
-    for (const t of boardTasks) m.set(t.id, t);
+    for (const t of boardTasks) m.set(t.taskId, t);
     return m;
   }, [boardTasks]);
 
@@ -102,11 +102,11 @@ export const ListStatusBand = memo(function ListStatusBand({
   const tasks = useMemo(() => {
     return listStatusTasksSortedFromIndex(
       tasksByListStatus,
-      list.id,
+      list.listId,
       status,
       taskFilter,
     );
-  }, [tasksByListStatus, list.id, status, taskFilter]);
+  }, [tasksByListStatus, list.listId, status, taskFilter]);
 
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -122,7 +122,7 @@ export const ListStatusBand = memo(function ListStatusBand({
 
   const resolvedEditTask =
     editingTask !== null
-      ? (taskMap.get(editingTask.id) ?? editingTask)
+      ? (taskMap.get(editingTask.taskId) ?? editingTask)
       : null;
 
   // Stable callback: takes task id, resolves from ref to avoid stale closures
@@ -133,10 +133,10 @@ export const ListStatusBand = memo(function ListStatusBand({
 
   const handleComplete = useCallback(
     (taskId: number, anchorEl?: HTMLElement) => {
-      const t = surfaceRef.current.boardTasks.find((x) => x.id === taskId);
+      const t = surfaceRef.current.boardTasks.find((x) => x.taskId === taskId);
       if (!t) return;
       const closedId =
-        statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
+        statusesRef.current?.find((s) => s.isClosed)?.statusId ?? "closed";
       const now = new Date().toISOString();
       completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
@@ -168,9 +168,9 @@ export const ListStatusBand = memo(function ListStatusBand({
   const startInlineTitleEdit = useCallback(
     (taskId: number) => {
       const taskToEdit = surfaceRef.current.boardTasks.find(
-        (entry) => entry.id === taskId,
+        (entry) => entry.taskId === taskId,
       );
-      if (!taskToEdit || taskToEdit.listId !== list.id) return false;
+      if (!taskToEdit || taskToEdit.listId !== list.listId) return false;
       // F2 should only swap the title text into edit mode and keep the rest of the task card in place.
       setEditingTask(null);
       setEditingTaskId(null);
@@ -178,14 +178,14 @@ export const ListStatusBand = memo(function ListStatusBand({
       setEditingTitleDraft(taskToEdit.title);
       return true;
     },
-    [list.id],
+    [list.listId],
   );
 
   const commitInlineTitleEdit = useCallback(async () => {
     const taskId = editingTitleTaskId;
     if (taskId == null) return;
     const taskToEdit = surfaceRef.current.boardTasks.find(
-      (entry) => entry.id === taskId,
+      (entry) => entry.taskId === taskId,
     );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
@@ -205,14 +205,14 @@ export const ListStatusBand = memo(function ListStatusBand({
   // Enter on highlighted task: open editor in this list column if the task belongs here.
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
-      const t = boardTasks.find((x) => x.id === taskId);
-      if (!t || t.listId !== list.id) return false;
+      const t = boardTasks.find((x) => x.taskId === taskId);
+      if (!t || t.listId !== list.listId) return false;
       cancelInlineTitleEdit();
       boardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [boardTasks, boardNav, cancelInlineTitleEdit, list.id, registerOpenTaskEditor]);
+  }, [boardTasks, boardNav, cancelInlineTitleEdit, list.listId, registerOpenTaskEditor]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -223,7 +223,7 @@ export const ListStatusBand = memo(function ListStatusBand({
 
   // Legacy completeFromList for static (non-sortable) task cards
   const completeFromList = (t: Task, anchorEl?: HTMLElement) => {
-    handleComplete(t.id, anchorEl);
+    handleComplete(t.taskId, anchorEl);
   };
 
   useEffect(() => {
@@ -267,16 +267,16 @@ export const ListStatusBand = memo(function ListStatusBand({
     // Register the open-band add-task flow so board shortcut "t" can open the composer.
     if (status !== "open") return;
     if (!boardNav) return;
-    return boardNav.registerAddTaskComposer(list.id, () => {
+    return boardNav.registerAddTaskComposer(list.listId, () => {
       openComposerAtBottomRef.current();
     });
-  }, [status, list.id, boardNav]);
+  }, [status, list.listId, boardNav]);
 
   const submitCard = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
     const existingTaskIds = new Set(
-      surfaceRef.current.boardTasks.map((task) => task.id),
+      surfaceRef.current.boardTasks.map((task) => task.taskId),
     );
     // New tasks always start in the board default group, even when the filter narrows visible groups.
     const defaultGroupId = effectiveDefaultTaskGroupId({
@@ -286,7 +286,7 @@ export const ListStatusBand = memo(function ListStatusBand({
     createTask.mutate(
       {
         boardId,
-        listId: list.id,
+        listId: list.listId,
         status,
         title: trimmed,
         body: "",
@@ -296,14 +296,14 @@ export const ListStatusBand = memo(function ListStatusBand({
         onSuccess: (data) => {
           setTitle("");
           const createdTask =
-            !existingTaskIds.has(data.entity.id) &&
-            data.entity.listId === list.id &&
+            !existingTaskIds.has(data.entity.taskId) &&
+            data.entity.listId === list.listId &&
             data.entity.status === status
               ? data.entity
               : null;
           // After creating a task, move selection to the new task instead of
           // leaving the highlight behind on an older interaction.
-          if (createdTask) boardNav?.selectTask(createdTask.id);
+          if (createdTask) boardNav?.selectTask(createdTask.taskId);
           focusComposerAtBottom();
         },
       },
@@ -339,7 +339,7 @@ export const ListStatusBand = memo(function ListStatusBand({
           ref={scrollRef}
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2"
           data-board-id={boardId}
-          data-list-id={list.id}
+          data-list-id={list.listId}
           data-status={status}
           aria-label={`${list.name} — ${status}`}
         >
@@ -351,7 +351,7 @@ export const ListStatusBand = memo(function ListStatusBand({
                 taskPriorities={taskPriorities}
                 releases={releases}
                 viewMode={taskCardViewMode}
-                listId={list.id}
+                listId={list.listId}
                 status={status}
                 containerId={containerId}
                 sortableIds={sortableIds}
@@ -369,15 +369,15 @@ export const ListStatusBand = memo(function ListStatusBand({
               <div className="flex flex-col gap-2">
                 {tasks.map((task) => (
                   <TaskCard
-                    key={task.id}
+                    key={task.taskId}
                     task={task}
                     taskPriorities={taskPriorities}
                     viewMode={taskCardViewMode}
                     groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
                     releasePill={taskReleasePill({ releases }, task)}
                     onOpen={() => setEditingTask(task)}
-                    editingTitle={editingTitleTaskId === task.id}
-                    titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                    editingTitle={editingTitleTaskId === task.taskId}
+                    titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                     onTitleDraftChange={setEditingTitleDraft}
                     onTitleCommit={() => void commitInlineTitleEdit()}
                     onTitleCancel={cancelInlineTitleEdit}
@@ -465,7 +465,7 @@ export const ListStatusBand = memo(function ListStatusBand({
 
         <TaskEditor
           board={{
-            id: boardId,
+            boardId,
             taskGroups,
             taskPriorities,
             releases,
@@ -487,7 +487,7 @@ export const ListStatusBand = memo(function ListStatusBand({
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2"
         data-board-id={boardId}
-        data-list-id={list.id}
+        data-list-id={list.listId}
         data-status={status}
         aria-label={`${list.name} — ${status}`}
       >
@@ -499,7 +499,7 @@ export const ListStatusBand = memo(function ListStatusBand({
               taskPriorities={taskPriorities}
               releases={releases}
               viewMode={taskCardViewMode}
-              listId={list.id}
+              listId={list.listId}
               status={status}
               containerId={containerId}
               sortableIds={sortableIds}
@@ -517,15 +517,15 @@ export const ListStatusBand = memo(function ListStatusBand({
             <div className="flex flex-col gap-2">
               {tasks.map((task) => (
                 <TaskCard
-                  key={task.id}
+                  key={task.taskId}
                   task={task}
                   taskPriorities={taskPriorities}
                   viewMode={taskCardViewMode}
                   groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
                   releasePill={taskReleasePill({ releases }, task)}
                   onOpen={() => setEditingTask(task)}
-                  editingTitle={editingTitleTaskId === task.id}
-                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  editingTitle={editingTitleTaskId === task.taskId}
+                  titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                   onTitleDraftChange={setEditingTitleDraft}
                   onTitleCommit={() => void commitInlineTitleEdit()}
                   onTitleCancel={cancelInlineTitleEdit}
@@ -539,7 +539,7 @@ export const ListStatusBand = memo(function ListStatusBand({
 
       <TaskEditor
         board={{
-          id: boardId,
+          boardId,
           taskGroups,
           taskPriorities,
           releases,
@@ -590,10 +590,10 @@ const SortableTaskRowById = memo(function SortableTaskRowById({
   onTitleCancel: () => void;
   titleEditBusy: boolean;
 }) {
-  const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
+  const handleOpen = useCallback(() => onEdit(task.taskId), [onEdit, task.taskId]);
   const handleCompleteFromCircle = useCallback(
-    (anchorEl: HTMLElement) => onComplete(task.id, anchorEl),
-    [onComplete, task.id],
+    (anchorEl: HTMLElement) => onComplete(task.taskId, anchorEl),
+    [onComplete, task.taskId],
   );
   return (
     <SortableTaskRow
@@ -731,8 +731,8 @@ const SortableBandContent = memo(function SortableBandContent({
                   viewMode={viewMode}
                   onComplete={onComplete}
                   onEdit={onEdit}
-                  editingTitle={editingTitleTaskId === task.id}
-                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  editingTitle={editingTitleTaskId === task.taskId}
+                  titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                   onTitleDraftChange={onTitleDraftChange}
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
@@ -760,8 +760,8 @@ const SortableBandContent = memo(function SortableBandContent({
               viewMode={viewMode}
               onComplete={onComplete}
               onEdit={onEdit}
-              editingTitle={editingTitleTaskId === task.id}
-              titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+              editingTitle={editingTitleTaskId === task.taskId}
+              titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
               onTitleDraftChange={onTitleDraftChange}
               onTitleCommit={onTitleCommit}
               onTitleCancel={onTitleCancel}

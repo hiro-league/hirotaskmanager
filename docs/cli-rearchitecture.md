@@ -30,7 +30,7 @@ Split the work in **three** passes. Each phase should leave **`hirotm` / `hirota
 
 - **`bootstrap/runtime.ts`** — early argv → profile / client name (`applyCliRuntimeFromArgv`).
 - **`bootstrap/program.ts`** — `createHirotmProgram()`, `runHirotmCli(argv)`.
-- **`commands/*.ts`** — `registerBoardCommands`, `registerListCommands`, `registerTaskCommands`, `registerReleaseCommands`, `registerServerCommands`, `registerStatusCommands`, `registerTrashCommands`, `registerSearchCommand`.
+- **`commands/*.ts`** — `registerBoardCommands`, `registerListCommands`, `registerTaskCommands`, `registerReleaseCommands`, `registerServerCommands`, `registerStatusCommands`, `registerTrashCommands`, `registerQueryCommands`.
 - **`lib/command-helpers.ts`** — `addPortOption`, `addProfileOption`, `parsePortOption`, `collectMultiValue`, `parseLimitOption`.
 - **Still import** existing **`lib/api-client`**, **`lib/output`**, **`lib/writeCommands`**, **`lib/trashCommands`** from handlers — no ports layer yet.
 
@@ -38,10 +38,10 @@ Split the work in **three** passes. Each phase should leave **`hirotm` / `hirota
 
 **Outcome:** Read/query and mutation orchestration is callable without Commander; optional formal ports in Phase 3.
 
-- **`handlers/context.ts`** — `CliContext`, `createDefaultCliContext()` (wires **`resolvePort`**, **`resolveDataDir`**, **`fetchApi`**, **`printJson`**, **`printSearchTable`**, **`startServer`**, **`readServerStatus`**).
+- **`handlers/context.ts`** — `CliContext`, `createDefaultCliContext()` (wires **`resolvePort`**, **`resolveDataDir`**, **`fetchApi`**, **`printJson`**, **`printSearchTable`**, **`startServer`**, **`stopServer`**, **`readServerStatus`**).
 - **`handlers/*.ts`** — `handleServerStart`, `handleBoardsList`, …; mutation paths delegate to **`writeCommands`** / **`trashCommands`** with `port` from context.
 - **`lib/command-helpers.ts`** — **`withCliErrors`** wraps handler calls so actions stay one-liners.
-- **`writeCommands.ts` / `trashCommands.ts`** — not split in this step; handlers import them by domain.
+- **`writeCommands.ts`** — barrel over **`lib/write/*.ts`**; **`trashCommands.ts`** unchanged.
 - **Optional follow-up:** introduce **`ports/*`** + **`adapters/*`** behind **`CliContext`** (today use fake **`CliContext`** — see **`handlers/boards.test.ts`**).
 
 ### Phase 3 — Bin entrypoints and cleanup (implemented)
@@ -92,10 +92,11 @@ src/cli/
     node-process.ts           # implements ProcessPort (today’s process.ts)
 
   lib/                        # small shared CLI helpers (parsePort, body flags, release flags, …)
-    command-helpers.ts          # Phase 1: Commander option helpers shared by commands/*
-    parse.ts
-    body-input.ts
-    release-flags.ts
+    writeCommands.ts            # re-exports lib/write/* (stable import path)
+    write/
+      helpers.ts                # parsePositiveInt, JSON stdin/file, release flags
+      boards.ts lists.ts tasks.ts releases.ts
+    command-helpers.ts          # Commander option helpers shared by commands/*
     …
 ```
 
@@ -249,7 +250,7 @@ Today, useful pieces map roughly as follows:
 | `lib/config.ts` | stays thin or inlined into adapters using **shared/runtimeConfig** |
 | `lib/output.ts` | `adapters/node-output.ts` |
 | `lib/process.ts` | `adapters/node-process.ts` |
-| `lib/writeCommands.ts` | `handlers/*` (split by domain) |
+| `lib/writeCommands.ts` | Barrel re-export; implementations in **`lib/write/*.ts`** + **`lib/write/helpers.ts`** |
 | `lib/trashCommands.ts` | `handlers/trash/*` or `handlers/trash.ts` |
 | `lib/write-result.ts`, `task-body.ts`, `emoji-cli.ts` | `lib/` or co-located with handlers |
 
@@ -266,4 +267,4 @@ Update this doc when you add **`ports/`** / **`adapters/`** or change **`bin`** 
 
 ## Status
 
-**Phases 1–3: complete.** Further work is optional (split **`writeCommands`**, formal ports, more handler tests).
+**Phases 1–3: complete.** **`writeCommands`** is split into **`lib/write/{boards,lists,tasks,releases}.ts`** with shared **`lib/write/helpers.ts`**; **`writeCommands.ts`** remains the stable import path. Further work is optional (formal **`ports/`** / **`adapters/`**, more handler tests).

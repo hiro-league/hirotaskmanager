@@ -1,6 +1,18 @@
 import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
+import type { PaginatedListBody } from "../../shared/pagination";
 import type { Board, BoardIndexEntry, Task } from "../../shared/models";
-import { parsePortOption } from "../lib/command-helpers";
+import {
+  parseOptionalListLimit,
+  parseOptionalOffset,
+  parsePortOption,
+} from "../lib/command-helpers";
+import { fetchAllPages } from "../lib/paginatedFetch";
+import {
+  FIELDS_BOARD_INDEX,
+  FIELDS_TASK,
+  parseAndValidateFields,
+  projectPaginatedItems,
+} from "../lib/jsonFieldProjection";
 import {
   runBoardsAdd,
   runBoardsDelete,
@@ -16,11 +28,53 @@ import type { CliContext } from "./context";
 
 export async function handleBoardsList(
   ctx: CliContext,
-  options: { port?: string },
+  options: {
+    port?: string;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  const boards = await ctx.fetchApi<BoardIndexEntry[]>("/boards", { port });
-  ctx.printJson(boards);
+  const fieldKeys = parseAndValidateFields(options.fields, FIELDS_BOARD_INDEX);
+  const limitOpt = parseOptionalListLimit(options.limit);
+  const offsetOpt = parseOptionalOffset(options.offset);
+  const pageAll = options.pageAll === true;
+  const base = "/boards";
+
+  if (!pageAll) {
+    const q = new URLSearchParams();
+    if (limitOpt != null) {
+      q.set("limit", String(limitOpt));
+    }
+    if (offsetOpt > 0) {
+      q.set("offset", String(offsetOpt));
+    }
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    const body = await ctx.fetchApi<PaginatedListBody<BoardIndexEntry>>(
+      `${base}${suffix}`,
+      { port },
+    );
+    ctx.printJson(
+      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
+    );
+    return;
+  }
+
+  const pageSize = limitOpt ?? 500;
+  const merged = await fetchAllPages(async (offset) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(pageSize));
+    if (offset > 0) {
+      q.set("offset", String(offset));
+    }
+    return ctx.fetchApi<PaginatedListBody<BoardIndexEntry>>(
+      `${base}?${q.toString()}`,
+      { port },
+    );
+  }, pageSize);
+  ctx.printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
 }
 
 export async function handleBoardsShow(
@@ -50,9 +104,14 @@ export async function handleBoardsTasks(
     dateMode?: string;
     from?: string;
     to?: string;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const fieldKeys = parseAndValidateFields(options.fields, FIELDS_TASK);
   const params = new URLSearchParams();
   if (options.list?.trim()) params.set("listId", options.list.trim());
   for (const group of options.group ?? []) {
@@ -75,12 +134,42 @@ export async function handleBoardsTasks(
   }
   if (options.from?.trim()) params.set("from", options.from.trim());
   if (options.to?.trim()) params.set("to", options.to.trim());
-  const query = params.toString();
-  const tasks = await ctx.fetchApi<Task[]>(
-    `/boards/${encodeURIComponent(idOrSlug)}/tasks${query ? `?${query}` : ""}`,
-    { port },
-  );
-  ctx.printJson(tasks);
+  const limitOpt = parseOptionalListLimit(options.limit);
+  const offsetOpt = parseOptionalOffset(options.offset);
+  const pageAll = options.pageAll === true;
+  const base = `/boards/${encodeURIComponent(idOrSlug)}/tasks`;
+
+  if (!pageAll) {
+    const q = new URLSearchParams(params);
+    if (limitOpt != null) {
+      q.set("limit", String(limitOpt));
+    }
+    if (offsetOpt > 0) {
+      q.set("offset", String(offsetOpt));
+    }
+    const body = await ctx.fetchApi<PaginatedListBody<Task>>(
+      `${base}?${q.toString()}`,
+      { port },
+    );
+    ctx.printJson(
+      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
+    );
+    return;
+  }
+
+  const pageSize = limitOpt ?? 500;
+  const merged = await fetchAllPages(async (offset) => {
+    const q = new URLSearchParams(params);
+    q.set("limit", String(pageSize));
+    if (offset > 0) {
+      q.set("offset", String(offset));
+    }
+    return ctx.fetchApi<PaginatedListBody<Task>>(
+      `${base}?${q.toString()}`,
+      { port },
+    );
+  }, pageSize);
+  ctx.printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
 }
 
 export async function handleBoardsAdd(

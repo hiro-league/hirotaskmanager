@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+
+when adding functionality in a module that may exist in another module or package, consider moving that common functionality to common module instead of duplication.
+Same for data, if same data is used across multiple code files, consider moving common data to a common file.

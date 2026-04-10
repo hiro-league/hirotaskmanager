@@ -23,7 +23,7 @@ export type BoardColumnSpreadProps = BoardBandSpreadProps & {
 
 export function boardColumnSpreadProps(board: Board): BoardColumnSpreadProps {
   return {
-    boardId: board.id,
+    boardId: board.boardId,
     showStats: board.showStats,
     taskGroups: board.taskGroups,
     taskPriorities: board.taskPriorities,
@@ -37,12 +37,16 @@ export function boardColumnSpreadProps(board: Board): BoardColumnSpreadProps {
 /** Subset passed into `TaskEditor` from column components (same stability goals as above). */
 export type TaskEditorBoardData = Pick<
   Board,
-  "id" | "taskGroups" | "taskPriorities" | "releases" | "defaultTaskGroupId"
+  | "boardId"
+  | "taskGroups"
+  | "taskPriorities"
+  | "releases"
+  | "defaultTaskGroupId"
 >;
 
 export function taskEditorBoardData(board: Board): TaskEditorBoardData {
   return {
-    id: board.id,
+    boardId: board.boardId,
     taskGroups: board.taskGroups,
     taskPriorities: board.taskPriorities,
     releases: board.releases,

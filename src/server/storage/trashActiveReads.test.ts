@@ -28,26 +28,28 @@ describe("trash active reads (phase 1)", () => {
     const board = await createBoardWithDefaults("TrashBoard", "trash-board", null, "", {
       cliBootstrap: "cli_full",
     });
-    expect((await readBoardIndex()).some((e) => e.id === board.id)).toBe(true);
+    expect(
+      (await readBoardIndex()).some((e) => e.boardId === board.boardId),
+    ).toBe(true);
 
     const ts = new Date().toISOString();
-    getDb().run("UPDATE board SET deleted_at = ? WHERE id = ?", [ts, board.id]);
+    getDb().run("UPDATE board SET deleted_at = ? WHERE id = ?", [ts, board.boardId]);
 
     expect(await readBoardIndex()).toEqual([]);
-    expect(await entryByIdOrSlug(String(board.id))).toBeNull();
+    expect(await entryByIdOrSlug(String(board.boardId))).toBeNull();
     expect(await entryByIdOrSlug("trash-board")).toBeNull();
-    expect(loadBoard(board.id)).toBeNull();
+    expect(loadBoard(board.boardId)).toBeNull();
   });
 
   test("trashed list and its tasks are hidden from loadBoard; readListById is null", async () => {
     const board = await createBoardWithDefaults("LBoard", "l-board", null, "", {
       cliBootstrap: "cli_full",
     });
-    const lr = createListOnBoard(board.id, { name: "L1" });
+    const lr = createListOnBoard(board.boardId, { name: "L1" });
     expect(lr).not.toBeNull();
-    const listId = lr!.list.id;
-    const groupId = board.taskGroups[0]!.id;
-    const tr = createTaskOnBoard(board.id, {
+    const listId = lr!.list.listId;
+    const groupId = board.taskGroups[0]!.groupId;
+    const tr = createTaskOnBoard(board.boardId, {
       listId,
       status: "open",
       title: "t1",
@@ -55,47 +57,51 @@ describe("trash active reads (phase 1)", () => {
       groupId,
     });
     expect(tr).not.toBeNull();
-    const taskId = tr!.task.id;
+    const taskId = tr!.task.taskId;
 
-    expect(loadBoard(board.id)!.lists.some((l) => l.id === listId)).toBe(true);
-    expect(loadBoard(board.id)!.tasks.some((t) => t.id === taskId)).toBe(true);
+    expect(
+      loadBoard(board.boardId)!.lists.some((l) => l.listId === listId),
+    ).toBe(true);
+    expect(
+      loadBoard(board.boardId)!.tasks.some((t) => t.taskId === taskId),
+    ).toBe(true);
 
     getDb().run("UPDATE list SET deleted_at = ? WHERE id = ?", [
       new Date().toISOString(),
       listId,
     ]);
 
-    const loaded = loadBoard(board.id)!;
-    expect(loaded.lists.some((l) => l.id === listId)).toBe(false);
-    expect(loaded.tasks.some((t) => t.id === taskId)).toBe(false);
-    expect(readListById(board.id, listId)).toBeNull();
-    expect(readTaskById(board.id, taskId)).toBeNull();
+    const loaded = loadBoard(board.boardId)!;
+    expect(loaded.lists.some((l) => l.listId === listId)).toBe(false);
+    expect(loaded.tasks.some((t) => t.taskId === taskId)).toBe(false);
+    expect(readListById(board.boardId, listId)).toBeNull();
+    expect(readTaskById(board.boardId, taskId)).toBeNull();
   });
 
   test("trashed task is hidden from readTaskById and FTS", async () => {
     const board = await createBoardWithDefaults("SBoard", "s-board", null, "", {
       cliBootstrap: "cli_full",
     });
-    const lr = createListOnBoard(board.id, { name: "L1" });
-    const listId = lr!.list.id;
-    const groupId = board.taskGroups[0]!.id;
-    const tr = createTaskOnBoard(board.id, {
+    const lr = createListOnBoard(board.boardId, { name: "L1" });
+    const listId = lr!.list.listId;
+    const groupId = board.taskGroups[0]!.groupId;
+    const tr = createTaskOnBoard(board.boardId, {
       listId,
       status: "open",
       title: "uniqueftstoken",
       body: "",
       groupId,
     });
-    const taskId = tr!.task.id;
+    const taskId = tr!.task.taskId;
 
-    expect(searchTasks({ q: "uniqueftstoken", boardId: board.id }).length).toBeGreaterThan(0);
+    expect(searchTasks({ q: "uniqueftstoken", boardId: board.boardId }).length).toBeGreaterThan(0);
 
     getDb().run("UPDATE task SET deleted_at = ? WHERE id = ?", [
       new Date().toISOString(),
       taskId,
     ]);
 
-    expect(readTaskById(board.id, taskId)).toBeNull();
-    expect(searchTasks({ q: "uniqueftstoken", boardId: board.id })).toEqual([]);
+    expect(readTaskById(board.boardId, taskId)).toBeNull();
+    expect(searchTasks({ q: "uniqueftstoken", boardId: board.boardId })).toEqual([]);
   });
 });

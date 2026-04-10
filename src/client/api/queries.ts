@@ -7,6 +7,7 @@ import {
   type BoardStatsFilter,
   type BoardStatsResponse,
 } from "../../shared/boardStats";
+import type { PaginatedListBody } from "../../shared/pagination";
 import {
   DEFAULT_STATUS_IDS,
   statusIdsInWorkflowOrder,
@@ -77,16 +78,39 @@ export const trashKeys = {
   tasks: () => [...trashKeys.all, "tasks"] as const,
 };
 
+const API_PAGE_SIZE = 500;
+
+async function fetchAllPaginated<T>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const p = new URLSearchParams();
+    p.set("limit", String(API_PAGE_SIZE));
+    if (offset > 0) {
+      p.set("offset", String(offset));
+    }
+    const body = await fetchJson<PaginatedListBody<T>>(
+      `${path}?${p.toString()}`,
+    );
+    out.push(...body.items);
+    if (body.items.length === 0 || out.length >= body.total) {
+      break;
+    }
+    offset += API_PAGE_SIZE;
+  }
+  return out;
+}
+
 export async function fetchTrashedBoards(): Promise<TrashedBoardItem[]> {
-  return fetchJson<TrashedBoardItem[]>("/api/trash/boards");
+  return fetchAllPaginated<TrashedBoardItem>("/api/trash/boards");
 }
 
 export async function fetchTrashedLists(): Promise<TrashedListItem[]> {
-  return fetchJson<TrashedListItem[]>("/api/trash/lists");
+  return fetchAllPaginated<TrashedListItem>("/api/trash/lists");
 }
 
 export async function fetchTrashedTasks(): Promise<TrashedTaskItem[]> {
-  return fetchJson<TrashedTaskItem[]>("/api/trash/tasks");
+  return fetchAllPaginated<TrashedTaskItem>("/api/trash/tasks");
 }
 
 export function useTrashedBoards() {
@@ -111,7 +135,7 @@ export function useTrashedTasks() {
 }
 
 /**
- * React Query detail key must match board mutation cache writes (`board.id` is always a number).
+ * React Query detail key must match board mutation cache writes (`board.boardId` is always a number).
  * URL params from `useParams` are numeric strings, which would otherwise key as `["boards","1"]`
  * while mutations use `["boards",1]` — updates never hit the subscribed query.
  */
@@ -131,7 +155,7 @@ export async function fetchStatuses(): Promise<Status[]> {
 export function useBoards() {
   return useQuery({
     queryKey: boardKeys.all,
-    queryFn: () => fetchJson<BoardIndexEntry[]>("/api/boards"),
+    queryFn: () => fetchAllPaginated<BoardIndexEntry>("/api/boards"),
   });
 }
 

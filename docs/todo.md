@@ -1,70 +1,19 @@
-1. lets say there are different settinsg for the board
-- default release: x
-- when there is a default, auto assign can be enabled for ui and cli.
-- auto assign default release on task creation in ui
-- auto assign default release on task creation in cli
+i guess first step is define the contract, and you didnt help put a recommendation, so i will give you mine, and you can also check...
+1. server is not running. or tried to run it but not working.
+2. not authorized, cli policy problem.
+3. not authenticated, future req.
+4. cli flags issue, as you mentioned. captured in cli
+5. parameter issues, detected by api, like bad format, missing. trying to change an id(any value) that doesnt exist in db.
+6. unsupported version, future req. when api doesnt work with that cli version...
+7. api not responding timely? timeout
+8. db issue - db file not found, any db error. thats also a system error i guess. not necessarily useful for cli to take action.
 
-default release: x and regardless of auto assign:
-if user selects a task, clicks e, the default released is added to the task.
-
-default release: x and auto assign is on for ui
-if user creates a task, types title, enters, the default release x is added to the task.
-
-default release: x and auto assign is on for cli
-if cli creates a task without a release param, the default release x is added to the task.
-
-2. does 1 answer 2 now?
-3. i dont know, do what makes sense.
-4. ok
-5. whatever works
-6. you mean multiple realeses filter? yes its OR.
+so i think most of the above, the cli can take concrete action, so they make sense to be returned as error codes. what do youthink?
 
 
-
-1. yes overwrite
-2. nothing.
-auto assign toggles are disabled until a default is set.
-3. need nothing.
-4. ok
-5. makes sense to have untagged now, and it composes with or i guess? maybe we should treat it like priority none?? that makes untagged a default option for tasks without tags, etc...
-
-
-# data model and semantics.
-
-Naming: Release. it's not a generic tag, thats a different feature later.
-uniqueness, sure, unique, per board.
-ordering: by created at.
-immutability: yes, renamed, yes deleted and tasks become none. or we can optionally move tasks to another release, like task groups do.
-color: yes. same
-
-# task cardinality
-no multi release per task
-
-# board setting: autoo assign.
-
-scope: we can have the option to assign it to ui tasks only or to cli tasks as well.
-in that option we can also pick which release to use (one for both). maybe we don't need to pick latest release automatically, and its better to pick it by hand, so i take that latest auto assign back...
-override: sure, none or pick a different release.
-
-Filters
-- OR, like all the rest of filters.
-- empty = all, like priority/group.
-
-keyboard
-conflict: use e for release
-behavior: when a task is selected, clicking e will assign default release (the one in auto assign) , that is if it was not assigned yet when task is created...
-
-# cli
-
-- identifiers: maybe use name to just assign id of that name to task. in the end, u store the id, not the name. so, we can do --release name.
-- list command: if ur talking about listing releases, that would be its own command, like hirotm releases list or hirotm releases show id/name
-if you mean showing release with task, u may show both id and name of relase..
-filter: for filtering, add release to the list of fitlers.., but not in fts search yet.
-- i think we should have releases list, show, and new cli policy for managing releases like task groups.
-
-
-# migration
-
-existing tasks: null
-backfill, out of scope.
-
+0 = success
+1 = general failure
+2 = usage error (bad arguments)
+3 = resource not found
+4 = permission denied
+5 = conflict (resource already exists)

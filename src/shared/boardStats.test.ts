@@ -13,7 +13,9 @@ import {
 
 const iso = (d: string) => new Date(d).toISOString();
 
-function task(p: Partial<Task> & Pick<Task, "id" | "listId" | "status">): Task {
+function task(
+  p: Partial<Task> & Pick<Task, "taskId" | "listId" | "status">,
+): Task {
   return {
     title: "",
     body: "",
@@ -26,22 +28,34 @@ function task(p: Partial<Task> & Pick<Task, "id" | "listId" | "status">): Task {
   };
 }
 
-function listRow(id: number): List {
-  return { id, name: `L${id}`, order: id };
+function listRow(listId: number): List {
+  return { listId, name: `L${listId}`, order: listId };
 }
 
 function minimalBoard(overrides: Partial<Board> = {}): Board {
   return {
-    id: 1,
+    boardId: 1,
     name: "B",
     description: "",
     cliPolicy: EMPTY_BOARD_CLI_POLICY,
-    taskGroups: [{ id: 0, label: "g", sortOrder: 0 }],
+    taskGroups: [{ groupId: 0, label: "g", sortOrder: 0 }],
     defaultTaskGroupId: 0,
     deletedGroupFallbackId: 0,
     taskPriorities: [
-      { id: 1, value: 0, label: "none", color: "#ffffff", isSystem: true },
-      { id: 10, value: 10, label: "low", color: "#94a3b8", isSystem: true },
+      {
+        priorityId: 1,
+        value: 0,
+        label: "none",
+        color: "#ffffff",
+        isSystem: true,
+      },
+      {
+        priorityId: 10,
+        value: 10,
+        label: "low",
+        color: "#94a3b8",
+        isSystem: true,
+      },
     ],
     releases: [],
     defaultReleaseId: null,
@@ -59,9 +73,14 @@ function minimalBoard(overrides: Partial<Board> = {}): Board {
 }
 
 const workflowThree: Status[] = [
-  { id: "open", label: "Open", sortOrder: 0, isClosed: false },
-  { id: "in-progress", label: "In progress", sortOrder: 1, isClosed: false },
-  { id: "closed", label: "Closed", sortOrder: 2, isClosed: true },
+  { statusId: "open", label: "Open", sortOrder: 0, isClosed: false },
+  {
+    statusId: "in-progress",
+    label: "In progress",
+    sortOrder: 1,
+    isClosed: false,
+  },
+  { statusId: "closed", label: "Closed", sortOrder: 2, isClosed: true },
 ];
 
 describe("computeBoardStats", () => {
@@ -84,8 +103,8 @@ describe("computeBoardStats", () => {
   test("counts all task statuses when board hides some in the UI (stats ignore status visibility)", () => {
     const board = minimalBoard({
       tasks: [
-        task({ id: 1, listId: 1, status: "open" }),
-        task({ id: 2, listId: 1, status: "closed", closedAt: iso("2025-06-02T12:00:00Z") }),
+        task({ taskId: 1, listId: 1, status: "open" }),
+        task({ taskId: 2, listId: 1, status: "closed", closedAt: iso("2025-06-02T12:00:00Z") }),
       ],
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
@@ -105,7 +124,7 @@ describe("computeBoardStats", () => {
     const board = minimalBoard({
       tasks: [
         task({
-          id: 1,
+          taskId: 1,
           listId: 1,
           status: "closed",
           closedAt: iso("2025-06-02T12:00:00Z"),
@@ -128,7 +147,7 @@ describe("computeBoardStats", () => {
     const board = minimalBoard({
       tasks: [
         task({
-          id: 1,
+          taskId: 1,
           listId: 1,
           status: "open",
           createdAt: iso("2025-07-01T12:00:00Z"),
@@ -154,7 +173,7 @@ describe("computeBoardStats", () => {
     const board = minimalBoard({
       tasks: [
         task({
-          id: 1,
+          taskId: 1,
           listId: 1,
           status: "open",
           createdAt: iso("2025-06-10T12:00:00Z"),
@@ -178,7 +197,7 @@ describe("computeBoardStats", () => {
 
   test("priority filter empty array matches nothing", () => {
     const board = minimalBoard({
-      tasks: [task({ id: 1, listId: 1, status: "open", priorityId: 10 })],
+      tasks: [task({ taskId: 1, listId: 1, status: "open", priorityId: 10 })],
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
@@ -194,14 +213,14 @@ describe("computeBoardStats", () => {
   test("multiple group ids match as OR", () => {
     const board = minimalBoard({
       taskGroups: [
-        { id: 0, label: "a", sortOrder: 0 },
-        { id: 1, label: "b", sortOrder: 1 },
-        { id: 2, label: "c", sortOrder: 2 },
+        { groupId: 0, label: "a", sortOrder: 0 },
+        { groupId: 1, label: "b", sortOrder: 1 },
+        { groupId: 2, label: "c", sortOrder: 2 },
       ],
       tasks: [
-        task({ id: 1, listId: 1, status: "open", groupId: 0 }),
-        task({ id: 2, listId: 1, status: "open", groupId: 1 }),
-        task({ id: 3, listId: 1, status: "open", groupId: 2 }),
+        task({ taskId: 1, listId: 1, status: "open", groupId: 0 }),
+        task({ taskId: 2, listId: 1, status: "open", groupId: 1 }),
+        task({ taskId: 3, listId: 1, status: "open", groupId: 2 }),
       ],
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
@@ -217,7 +236,7 @@ describe("computeBoardStats", () => {
 
   test("explicit empty group filter matches nothing", () => {
     const board = minimalBoard({
-      tasks: [task({ id: 1, listId: 1, status: "open", groupId: 0 })],
+      tasks: [task({ taskId: 1, listId: 1, status: "open", groupId: 0 })],
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);
     const filter: BoardStatsFilter = {
@@ -234,7 +253,7 @@ describe("computeBoardStats", () => {
     const board = minimalBoard({
       releases: [
         {
-          id: 5,
+          releaseId: 5,
           name: "v1",
           color: "#ff0000",
           releaseDate: null,
@@ -242,9 +261,9 @@ describe("computeBoardStats", () => {
         },
       ],
       tasks: [
-        task({ id: 1, listId: 1, status: "open", releaseId: 5 }),
-        task({ id: 2, listId: 1, status: "open", releaseId: null }),
-        task({ id: 3, listId: 1, status: "open", releaseId: 5 }),
+        task({ taskId: 1, listId: 1, status: "open", releaseId: 5 }),
+        task({ taskId: 2, listId: 1, status: "open", releaseId: null }),
+        task({ taskId: 3, listId: 1, status: "open", releaseId: 5 }),
       ],
     });
     const closed = closedStatusIdsFromStatuses(workflowThree);

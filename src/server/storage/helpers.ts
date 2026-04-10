@@ -60,7 +60,7 @@ export function boardExists(db: Database, boardId: number): boolean {
   return row != null;
 }
 
-/** True when `status.id` has `is_closed` set in the `status` table. */
+/** True when `status.statusId` has `is_closed` set in the `status` table. */
 export function statusIsClosed(db: Database, statusId: string): boolean {
   const row = db
     .query("SELECT is_closed FROM status WHERE id = ?")

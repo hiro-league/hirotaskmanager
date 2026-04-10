@@ -22,7 +22,7 @@ export function readTrashedBoards(): TrashedBoardItem[] {
   }[];
   return rows.map((r) => ({
     type: "board" as const,
-    id: r.id,
+    boardId: r.id,
     name: r.name,
     slug: r.slug,
     emoji:
@@ -56,7 +56,7 @@ export function readTrashedLists(): TrashedListItem[] {
   }[];
   return rows.map((r) => ({
     type: "list" as const,
-    id: r.id,
+    listId: r.id,
     name: r.name,
     emoji:
       r.emoji != null && String(r.emoji).trim() !== ""
@@ -97,7 +97,7 @@ export function readTrashedTasks(): TrashedTaskItem[] {
   }[];
   return rows.map((r) => ({
     type: "task" as const,
-    id: r.id,
+    taskId: r.id,
     title: r.title,
     emoji:
       r.emoji != null && String(r.emoji).trim() !== ""

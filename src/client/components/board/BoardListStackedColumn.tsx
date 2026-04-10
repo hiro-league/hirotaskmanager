@@ -107,10 +107,10 @@ const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
   onTitleCancel: () => void;
   titleEditBusy: boolean;
 }) {
-  const handleOpen = useCallback(() => onEdit(task.id), [onEdit, task.id]);
+  const handleOpen = useCallback(() => onEdit(task.taskId), [onEdit, task.taskId]);
   const handleCompleteFromCircle = useCallback(
-    (anchorEl: HTMLElement) => onComplete(task.id, anchorEl),
-    [onComplete, task.id],
+    (anchorEl: HTMLElement) => onComplete(task.taskId, anchorEl),
+    [onComplete, task.taskId],
   );
   return (
     <SortableTaskRow
@@ -252,8 +252,8 @@ const StackedSortableList = memo(function StackedSortableList({
                   viewMode={viewMode}
                   onComplete={onComplete}
                   onEdit={onEdit}
-                  editingTitle={editingTitleTaskId === task.id}
-                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  editingTitle={editingTitleTaskId === task.taskId}
+                  titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                   onTitleDraftChange={onTitleDraftChange}
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
@@ -283,8 +283,8 @@ const StackedSortableList = memo(function StackedSortableList({
                   viewMode={viewMode}
                   onComplete={onComplete}
                   onEdit={onEdit}
-                  editingTitle={editingTitleTaskId === task.id}
-                  titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                  editingTitle={editingTitleTaskId === task.taskId}
+                  titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                   onTitleDraftChange={onTitleDraftChange}
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
@@ -339,7 +339,7 @@ function ListStackedBody({
   // O(1) task lookup map
   const taskMap = useMemo(() => {
     const m = new Map<number, Task>();
-    for (const t of boardTasks) m.set(t.id, t);
+    for (const t of boardTasks) m.set(t.taskId, t);
     return m;
   }, [boardTasks]);
 
@@ -360,7 +360,7 @@ function ListStackedBody({
 
   const resolvedEditTask =
     editingTask !== null
-      ? (taskMap.get(editingTask.id) ?? editingTask)
+      ? (taskMap.get(editingTask.taskId) ?? editingTask)
       : null;
   const editTaskResolved = editingTaskId != null ? (taskMap.get(editingTaskId) ?? null) : null;
 
@@ -372,10 +372,10 @@ function ListStackedBody({
 
   const handleComplete = useCallback(
     (taskId: number, anchorEl?: HTMLElement) => {
-      const t = surfaceRef.current.boardTasks.find((x) => x.id === taskId);
+      const t = surfaceRef.current.boardTasks.find((x) => x.taskId === taskId);
       if (!t) return;
       const closedId =
-        statusesRef.current?.find((s) => s.isClosed)?.id ?? "closed";
+        statusesRef.current?.find((s) => s.isClosed)?.statusId ?? "closed";
       const now = new Date().toISOString();
       completion?.celebrateTaskCompletion({ taskId, anchorEl });
       updateTask.mutate({
@@ -406,9 +406,9 @@ function ListStackedBody({
   const startInlineTitleEdit = useCallback(
     (taskId: number) => {
       const taskToEdit = surfaceRef.current.boardTasks.find(
-        (entry) => entry.id === taskId,
+        (entry) => entry.taskId === taskId,
       );
-      if (!taskToEdit || taskToEdit.listId !== list.id) return false;
+      if (!taskToEdit || taskToEdit.listId !== list.listId) return false;
       // F2 keeps the task card in place and only swaps its title into edit mode.
       setEditingTask(null);
       setEditingTaskId(null);
@@ -416,14 +416,14 @@ function ListStackedBody({
       setEditingTitleDraft(taskToEdit.title);
       return true;
     },
-    [list.id],
+    [list.listId],
   );
 
   const commitInlineTitleEdit = useCallback(async () => {
     const taskId = editingTitleTaskId;
     if (taskId == null) return;
     const taskToEdit = surfaceRef.current.boardTasks.find(
-      (entry) => entry.id === taskId,
+      (entry) => entry.taskId === taskId,
     );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
@@ -442,14 +442,14 @@ function ListStackedBody({
   const { registerOpenTaskEditor, registerEditTaskTitle } = useBoardTaskKeyboardBridge();
   useEffect(() => {
     return registerOpenTaskEditor((taskId) => {
-      const t = boardTasks.find((x) => x.id === taskId);
-      if (!t || t.listId !== list.id) return false;
+      const t = boardTasks.find((x) => x.taskId === taskId);
+      if (!t || t.listId !== list.listId) return false;
       cancelInlineTitleEdit();
       stackedBoardNav?.selectTask(taskId);
       setEditingTaskId(taskId);
       return true;
     });
-  }, [boardTasks, cancelInlineTitleEdit, list.id, registerOpenTaskEditor, stackedBoardNav]);
+  }, [boardTasks, cancelInlineTitleEdit, list.listId, registerOpenTaskEditor, stackedBoardNav]);
 
   useEffect(() => {
     return registerEditTaskTitle((taskId) => startInlineTitleEdit(taskId));
@@ -508,7 +508,7 @@ function ListStackedBody({
     const trimmed = title.trim();
     if (!trimmed) return;
     const existingTaskIds = new Set(
-      surfaceRef.current.boardTasks.map((task) => task.id),
+      surfaceRef.current.boardTasks.map((task) => task.taskId),
     );
     // New tasks always start in the board default group, even when filters are narrowed.
     const defaultGroupId = effectiveDefaultTaskGroupId({
@@ -518,7 +518,7 @@ function ListStackedBody({
     createTask.mutate(
       {
         boardId,
-        listId: list.id,
+        listId: list.listId,
         status: quickAddStatus,
         title: trimmed,
         body: "",
@@ -528,14 +528,14 @@ function ListStackedBody({
         onSuccess: (data) => {
           setTitle("");
           const createdTask =
-            !existingTaskIds.has(data.entity.id) &&
-            data.entity.listId === list.id &&
+            !existingTaskIds.has(data.entity.taskId) &&
+            data.entity.listId === list.listId &&
             data.entity.status === quickAddStatus
               ? data.entity
               : null;
           // After creating a task, move selection to the new task instead of
           // leaving the highlight behind on an older interaction.
-          if (createdTask) stackedBoardNav?.selectTask(createdTask.id);
+          if (createdTask) stackedBoardNav?.selectTask(createdTask.taskId);
           focusComposerAtQuickAddPosition();
         },
       },
@@ -587,10 +587,10 @@ function ListStackedBody({
     // Stacked layout: register add-task composer for keyboard "t" (lanes use ListStatusBand).
     if (!canAddOpen) return;
     if (!stackedBoardNav) return;
-    return stackedBoardNav.registerAddTaskComposer(list.id, () => {
+    return stackedBoardNav.registerAddTaskComposer(list.listId, () => {
       openComposerAtQuickAddPositionRef.current();
     });
-  }, [canAddOpen, list.id, stackedBoardNav]);
+  }, [canAddOpen, list.listId, stackedBoardNav]);
 
   const staticTasks = useMemo(
     () =>
@@ -771,7 +771,7 @@ function ListStackedBody({
               <>
                 {staticQuickAddInsertIndex === 0 ? quickAddComposer : null}
                 {staticTasks?.map((task, index) => (
-                  <div key={task.id} className="contents">
+                  <div key={task.taskId} className="contents">
                     <TaskCard
                       task={task}
                       taskPriorities={taskPriorities}
@@ -779,8 +779,8 @@ function ListStackedBody({
                       groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
                       releasePill={taskReleasePill({ releases }, task)}
                       onOpen={() => setEditingTask(task)}
-                      editingTitle={editingTitleTaskId === task.id}
-                      titleDraft={editingTitleTaskId === task.id ? editingTitleDraft : undefined}
+                      editingTitle={editingTitleTaskId === task.taskId}
+                      titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
                       onTitleDraftChange={setEditingTitleDraft}
                       onTitleCommit={() => void commitInlineTitleEdit()}
                       onTitleCancel={cancelInlineTitleEdit}
@@ -834,7 +834,7 @@ function ListStackedBody({
       {main}
       <TaskEditor
         board={{
-          id: boardId,
+          boardId,
           taskGroups,
           taskPriorities,
           releases,
@@ -928,8 +928,8 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   useLayoutEffect(() => {
     if (!boardNav) return;
     const el = listColumnShellRef.current;
-    boardNav.registerListElement(list.id, el);
-    return () => boardNav.registerListElement(list.id, null);
+    boardNav.registerListElement(list.listId, el);
+    return () => boardNav.registerListElement(list.listId, null);
   }, [boardNav, list]);
 
   const mergedOuterRef = useCallback(
@@ -947,11 +947,11 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
         "relative flex w-72 shrink-0 flex-col self-start",
         isDragging && stackedListColumnMinHeightClass,
       )}
-      data-list-column={list.id}
+      data-list-column={list.listId}
       data-board-no-pan
       onPointerEnter={(e) => {
         if (e.pointerType !== "mouse" || isDragging || !boardNav) return;
-        boardNav.setHoveredListId(list.id);
+        boardNav.setHoveredListId(list.listId);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType !== "mouse" || !boardNav) return;
@@ -973,7 +973,7 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
           if (target.closest("[data-task-card-root],button,input,textarea,[role=menu],[role=menuitem]")) {
             return;
           }
-          boardNav.selectList(list.id);
+          boardNav.selectList(list.listId);
         }}
       >
         {!isDragging && inViewport && (

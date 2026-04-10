@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { paginateInMemory } from "../../shared/pagination";
 import { getRequestAuthContext, type AppBindings } from "../auth";
+import { parseListPagination } from "../lib/listPagination";
 import { getDb } from "../db";
 import {
   cliBoardReadError,
@@ -47,31 +49,49 @@ function filterForCli<T extends { boardId: number }>(
   return items.filter((item) => readBoardCliPolicy(item.boardId)?.readBoard);
 }
 
-/** Trashed boards have `id` as board id. */
+/** Trashed boards expose {@link TrashedBoardItem.boardId}. */
 function filterTrashedBoardsForCli(
   principal: string,
   items: ReturnType<typeof readTrashedBoards>,
 ): ReturnType<typeof readTrashedBoards> {
   if (principal !== "cli") return items;
-  return items.filter((b) => readBoardCliPolicy(b.id)?.readBoard);
+  return items.filter((b) => readBoardCliPolicy(b.boardId)?.readBoard);
 }
 
 trashRoute.get("/boards", async (c) => {
   const auth = getRequestAuthContext(c);
   const rows = filterTrashedBoardsForCli(auth.principal, readTrashedBoards());
-  return c.json(rows);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  return c.json(paginateInMemory(rows, page.offset, page.limit));
 });
 
 trashRoute.get("/lists", async (c) => {
   const auth = getRequestAuthContext(c);
   const rows = filterForCli(auth.principal, readTrashedLists());
-  return c.json(rows);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  return c.json(paginateInMemory(rows, page.offset, page.limit));
 });
 
 trashRoute.get("/tasks", async (c) => {
   const auth = getRequestAuthContext(c);
   const rows = filterForCli(auth.principal, readTrashedTasks());
-  return c.json(rows);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  return c.json(paginateInMemory(rows, page.offset, page.limit));
 });
 
 trashRoute.post("/boards/:id/restore", async (c) => {
@@ -115,7 +135,7 @@ trashRoute.post("/lists/:id/restore", async (c) => {
 
   const listSnap = readListSnapshotById(loc.board_id, listId);
   if (!listSnap) return c.json({ error: "List not found" }, 404);
-  const blockedList = cliManageListError(c, entry.id, listSnap);
+  const blockedList = cliManageListError(c, entry.boardId, listSnap);
   if (blockedList) return blockedList;
 
   const outcome = restoreListOnBoard(loc.board_id, listId);
@@ -166,7 +186,7 @@ trashRoute.post("/tasks/:id/restore", async (c) => {
 
   const taskSnap = readTaskSnapshotById(loc.board_id, taskId);
   if (!taskSnap) return c.json({ error: "Task not found" }, 404);
-  const blockedTask = cliManageTaskError(c, entry.id, taskSnap);
+  const blockedTask = cliManageTaskError(c, entry.boardId, taskSnap);
   if (blockedTask) return blockedTask;
 
   const outcome = restoreTaskOnBoard(loc.board_id, taskId);
@@ -235,7 +255,7 @@ trashRoute.delete("/lists/:id", async (c) => {
 
   const listSnap = readListSnapshotById(loc.board_id, listId);
   if (!listSnap) return c.json({ error: "List not found" }, 404);
-  const blockedList = cliManageListError(c, entry.id, listSnap);
+  const blockedList = cliManageListError(c, entry.boardId, listSnap);
   if (blockedList) return blockedList;
 
   const result = purgeListOnBoard(loc.board_id, listId);
@@ -272,7 +292,7 @@ trashRoute.delete("/tasks/:id", async (c) => {
 
   const taskSnap = readTaskSnapshotById(loc.board_id, taskId);
   if (!taskSnap) return c.json({ error: "Task not found" }, 404);
-  const blockedTask = cliManageTaskError(c, entry.id, taskSnap);
+  const blockedTask = cliManageTaskError(c, entry.boardId, taskSnap);
   if (blockedTask) return blockedTask;
 
   const result = purgeTaskOnBoard(loc.board_id, taskId);

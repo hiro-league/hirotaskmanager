@@ -46,7 +46,7 @@ function buildLanesTaskContainerMap(
         status,
         filter,
       );
-      out[key] = tasks.map((t) => sortableTaskId(t.id));
+      out[key] = tasks.map((t) => sortableTaskId(t.taskId));
     }
   }
   return out;
@@ -79,7 +79,7 @@ async function persistLanesChanges(
   const meta = parseLaneBandContainerId(destinationKey);
   if (!meta) return;
 
-  const movedTask = board.tasks.find((task) => task.id === taskId);
+  const movedTask = board.tasks.find((task) => task.taskId === taskId);
   if (!movedTask) return;
   if (opts?.closedStatusIds.size && opts.onTaskClosed) {
     const wasClosed = opts.closedStatusIds.has(movedTask.status);
@@ -92,7 +92,7 @@ async function persistLanesChanges(
     .filter((tid): tid is number => tid != null);
 
   await moveTask.mutateAsync({
-    boardId: board.id,
+    boardId: board.boardId,
     taskId,
     toListId: meta.listId,
     toStatus: meta.status,
@@ -105,7 +105,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
   const celebration = useBoardTaskCompletionCelebrationOptional();
   const { data: statuses } = useStatuses();
   const closedStatusIds = useMemo(
-    () => new Set(statuses?.filter((s) => s.isClosed).map((s) => s.id) ?? []),
+    () => new Set(statuses?.filter((s) => s.isClosed).map((s) => s.statusId) ?? []),
     [statuses],
   );
   const workflowOrder = useStatusWorkflowOrder();
@@ -113,13 +113,13 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.id, board.taskGroups);
+  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
+    board.boardId,
     board.taskPriorities,
   );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.id, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.id);
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
+  const dateFilterResolved = useResolvedTaskDateFilter(board.boardId);
 
   const listIds = listIdsOverride ?? list.localListIds;
 
@@ -138,7 +138,7 @@ export function useLanesBoardDnd(board: Board, listIdsOverride?: number[]) {
       : `${dateFilterResolved.mode}|${dateFilterResolved.startDate}|${dateFilterResolved.endDate}`;
   const releaseSig =
     activeReleaseIds === null ? "__all__" : activeReleaseIds.join("\0");
-  const containerMapDeps = `${board.id}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
+  const containerMapDeps = `${board.boardId}|${board.updatedAt}|${tasksLayoutHash}|${listIds.join(",")}|${visibleStatuses.join("\0")}|${groupSig}|${prioritySig}|${releaseSig}|${dateSig}`;
 
   const tasksByListStatus = useMemo(
     () => buildTasksByListStatusIndex(board.tasks),

@@ -23,12 +23,12 @@ export function BoardPriorityToggles({
 }: BoardPriorityTogglesProps) {
   const setActive = usePreferencesStore((s) => s.setActiveTaskPriorityIdsForBoard);
   const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.id,
+    board.boardId,
     board.taskPriorities,
   );
   const orderedPriorities = sortPrioritiesByValue(board.taskPriorities);
   const options = orderedPriorities.map((priority) => ({
-    id: String(priority.id),
+    id: String(priority.priorityId),
     label: priorityDisplayLabel(priority.label),
     color: priority.color,
   }));
@@ -44,7 +44,7 @@ export function BoardPriorityToggles({
       selectedIds={activePriorityIds ?? []}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.id, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
       }
       onOpenEditor={onOpenPriorityEditor}
       editButtonAriaLabel="Edit task priorities"

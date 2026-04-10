@@ -68,7 +68,7 @@ export function listStatuses(): Status[] {
     is_closed: number;
   }[];
   return rows.map((r) => ({
-    id: r.id,
+    statusId: r.id,
     label: r.label,
     sortOrder: r.sort_order,
     isClosed: r.is_closed !== 0,
@@ -96,7 +96,7 @@ function mapIndexRow(row: {
   const policy =
     boardCliPolicyFromJoinColumns(row) ?? EMPTY_BOARD_CLI_POLICY;
   return {
-    id: row.id,
+    boardId: row.id,
     slug: row.slug,
     name: row.name,
     emoji:
@@ -267,7 +267,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
   }[];
 
   const taskGroups: GroupDefinition[] = groupRows.map((g) => ({
-    id: g.id,
+    groupId: g.id,
     label: g.label,
     sortOrder: g.sort_order,
     emoji:
@@ -276,8 +276,8 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
         : null,
   }));
 
-  const groupIdSet = new Set(taskGroups.map((g) => g.id));
-  const firstGroupId = taskGroups[0]?.id;
+  const groupIdSet = new Set(taskGroups.map((g) => g.groupId));
+  const firstGroupId = taskGroups[0]?.groupId;
   let defaultTaskGroupId =
     boardRow.default_task_group_id ?? firstGroupId ?? 0;
   let deletedGroupFallbackId =
@@ -304,7 +304,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
 
   const taskPriorities: TaskPriorityDefinition[] = sortPrioritiesByValue(
     priorityRows.map((p) => ({
-      id: p.id,
+      priorityId: p.id,
       value: p.value,
       label: p.label,
       color: p.color,
@@ -313,7 +313,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
   );
 
   const releases: ReleaseDefinition[] = listReleasesForBoard(boardId);
-  const releaseIdSet = new Set(releases.map((r) => r.id));
+  const releaseIdSet = new Set(releases.map((r) => r.releaseId));
   let defaultReleaseId: number | null = boardRow.default_release_id ?? null;
   if (defaultReleaseId != null && !releaseIdSet.has(defaultReleaseId)) {
     defaultReleaseId = null;
@@ -338,7 +338,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
   }[];
 
   const lists: List[] = listRows.map((l) => ({
-    id: l.id,
+    listId: l.id,
     name: l.name,
     order: l.sort_order,
     color: l.color ?? undefined,
@@ -383,7 +383,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
     const releaseId =
       rawRid != null && releaseIdSet.has(rawRid) ? rawRid : null;
     return {
-      id: t.id,
+      taskId: t.id,
       listId: t.list_id,
       title: t.title,
       body: t.body,
@@ -421,7 +421,7 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
   );
 
   return {
-    id: boardRow.id,
+    boardId: boardRow.id,
     slug: boardRow.slug,
     name: boardRow.name,
     emoji:
@@ -634,7 +634,7 @@ function applyTaskPriorityChanges(
   taskPriorities: TaskPriorityDefinition[],
 ): void {
   const normalized = taskPriorities.map((priority) => ({
-    id: priority.id,
+    priorityId: priority.priorityId,
     value: priority.value,
     label: priority.label.trim(),
     color: priority.color.trim(),
@@ -672,7 +672,7 @@ function applyTaskPriorityChanges(
   // to delete or renumber the seeded value slots.
   for (const row of existingRows) {
     if (row.is_system === 0) continue;
-    const incoming = normalized.find((priority) => priority.id === row.id);
+    const incoming = normalized.find((priority) => priority.priorityId === row.id);
     if (!incoming) {
       throw new Error("Built-in priorities cannot be deleted");
     }
@@ -683,20 +683,20 @@ function applyTaskPriorityChanges(
 
   const keptPriorityIds = new Set<number>();
   for (const priority of normalized) {
-    const existing = existingById.get(priority.id);
+    const existing = existingById.get(priority.priorityId);
     if (existing) {
       if (existing.is_system !== 0) {
         db.run(
           "UPDATE task_priority SET label = ?, color = ? WHERE id = ?",
-          [priority.label, priority.color, priority.id],
+          [priority.label, priority.color, priority.priorityId],
         );
       } else {
         db.run(
           "UPDATE task_priority SET value = ?, label = ?, color = ? WHERE id = ?",
-          [priority.value, priority.label, priority.color, priority.id],
+          [priority.value, priority.label, priority.color, priority.priorityId],
         );
       }
-      keptPriorityIds.add(priority.id);
+      keptPriorityIds.add(priority.priorityId);
       continue;
     }
 
@@ -757,16 +757,16 @@ function applyTaskGroupConfig(
     .all(boardId) as { id: number }[];
   const existingIds = new Set(existingRows.map((r) => r.id));
 
-  const deleteIds = input.deletes.map((d) => d.id);
+  const deleteIds = input.deletes.map((d) => d.groupId);
   const deleteSet = new Set(deleteIds);
   if (deleteSet.size !== deleteIds.length) {
-    throw new Error("Duplicate delete id");
+    throw new Error("Duplicate delete groupId");
   }
 
-  const updateIds = input.updates.map((u) => u.id);
+  const updateIds = input.updates.map((u) => u.groupId);
   const updateSet = new Set(updateIds);
   if (updateSet.size !== updateIds.length) {
-    throw new Error("Duplicate update id");
+    throw new Error("Duplicate update groupId");
   }
 
   for (const id of updateSet) {
@@ -782,17 +782,17 @@ function applyTaskGroupConfig(
   }
 
   for (const u of input.updates) {
-    if (!existingIds.has(u.id)) {
-      throw new Error(`Update references unknown task group id ${u.id}`);
+    if (!existingIds.has(u.groupId)) {
+      throw new Error(`Update references unknown task group id ${u.groupId}`);
     }
-    if (deleteSet.has(u.id)) {
-      throw new Error(`Cannot update deleted task group id ${u.id}`);
+    if (deleteSet.has(u.groupId)) {
+      throw new Error(`Cannot update deleted task group id ${u.groupId}`);
     }
   }
 
   for (const d of input.deletes) {
-    if (!existingIds.has(d.id)) {
-      throw new Error(`Delete references unknown task group id ${d.id}`);
+    if (!existingIds.has(d.groupId)) {
+      throw new Error(`Delete references unknown task group id ${d.groupId}`);
     }
   }
 
@@ -851,10 +851,10 @@ function applyTaskGroupConfig(
   }
 
   for (const u of input.updates) {
-    const emoji = resolveTaskGroupUpdateEmoji(db, boardId, u.id, u.emoji);
+    const emoji = resolveTaskGroupUpdateEmoji(db, boardId, u.groupId, u.emoji);
     db.run(
       "UPDATE task_group SET label = ?, emoji = ?, sort_order = ? WHERE id = ? AND board_id = ?",
-      [u.label, emoji, u.sortOrder, u.id, boardId],
+      [u.label, emoji, u.sortOrder, u.groupId, boardId],
     );
   }
 
@@ -875,16 +875,16 @@ function applyTaskGroupConfig(
     if (deleteSet.has(target)) {
       throw new Error("Cannot move tasks to a deleted task group");
     }
-    if (target === d.id) {
+    if (target === d.groupId) {
       throw new Error("Cannot move tasks to the group being deleted");
     }
     db.run("UPDATE task SET group_id = ? WHERE group_id = ? AND board_id = ?", [
       target,
-      d.id,
+      d.groupId,
       boardId,
     ]);
     db.run("DELETE FROM task_group WHERE id = ? AND board_id = ?", [
-      d.id,
+      d.groupId,
       boardId,
     ]);
   }
@@ -973,7 +973,7 @@ export async function patchBoard(
   if (hasDefaultRel) {
     const v = patch.defaultReleaseId;
     if (v != null) {
-      if (!existing.releases.some((r) => r.id === v)) return null;
+      if (!existing.releases.some((r) => r.releaseId === v)) return null;
       nextDefaultReleaseId = v;
     } else {
       nextDefaultReleaseId = null;

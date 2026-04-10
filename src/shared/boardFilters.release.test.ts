@@ -7,7 +7,7 @@ import {
 import type { Task } from "./models";
 
 const baseTask: Task = {
-  id: 1,
+  taskId: 1,
   listId: 1,
   title: "t",
   body: "",

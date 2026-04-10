@@ -5,9 +5,9 @@ import {
   taskContainerMapsEqual,
 } from "./boardTaskDndDeps";
 
-function task(partial: Partial<Task> & Pick<Task, "id" | "listId">): Task {
+function task(partial: Partial<Task> & Pick<Task, "taskId" | "listId">): Task {
   return {
-    id: partial.id,
+    taskId: partial.taskId,
     listId: partial.listId,
     title: partial.title ?? "t",
     body: partial.body ?? "",
@@ -23,14 +23,14 @@ function task(partial: Partial<Task> & Pick<Task, "id" | "listId">): Task {
 
 describe("boardTaskDndDeps", () => {
   test("hashTasksForDndLayoutDeps changes when order field changes", () => {
-    const a = [task({ id: 1, listId: 1, order: 0 })];
-    const b = [task({ id: 1, listId: 1, order: 1 })];
+    const a = [task({ taskId: 1, listId: 1, order: 0 })];
+    const b = [task({ taskId: 1, listId: 1, order: 1 })];
     expect(hashTasksForDndLayoutDeps(a)).not.toBe(hashTasksForDndLayoutDeps(b));
   });
 
   test("hashTasksForDndLayoutDeps depends on array order", () => {
-    const t1 = task({ id: 1, listId: 1, order: 0 });
-    const t2 = task({ id: 2, listId: 1, order: 1 });
+    const t1 = task({ taskId: 1, listId: 1, order: 0 });
+    const t2 = task({ taskId: 2, listId: 1, order: 1 });
     expect(hashTasksForDndLayoutDeps([t1, t2])).not.toBe(
       hashTasksForDndLayoutDeps([t2, t1]),
     );

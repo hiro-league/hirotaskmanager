@@ -70,7 +70,7 @@ hirotaskmanager --setup
 Use the CLI directly:
 
 ```bash
-hirotm status
+hirotm server status
 hirotm boards list
 ```
 

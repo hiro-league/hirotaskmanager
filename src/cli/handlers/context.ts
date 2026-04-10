@@ -2,7 +2,7 @@ import { fetchApi } from "../lib/api-client";
 import type { ConfigOverrides } from "../lib/config";
 import { resolveDataDir, resolvePort } from "../lib/config";
 import { printJson, printSearchTable } from "../lib/output";
-import { readServerStatus, startServer } from "../lib/process";
+import { readServerStatus, startServer, stopServer } from "../lib/process";
 
 /**
  * Injected dependencies for CLI handlers (Phase 2) so use-cases stay testable
@@ -15,6 +15,7 @@ export type CliContext = {
   printJson: typeof printJson;
   printSearchTable: typeof printSearchTable;
   startServer: typeof startServer;
+  stopServer: typeof stopServer;
   readServerStatus: typeof readServerStatus;
 };
 
@@ -26,6 +27,7 @@ export function createDefaultCliContext(): CliContext {
     printJson,
     printSearchTable,
     startServer,
+    stopServer,
     readServerStatus,
   };
 }

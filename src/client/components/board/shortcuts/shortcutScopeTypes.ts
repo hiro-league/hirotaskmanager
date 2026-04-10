@@ -10,6 +10,7 @@ export type ShortcutScope =
   | "task-groups-editor"
   | "board-edit-dialog"
   | "task-priorities-editor"
+  | "releases-editor"
   | "discard-dialog"
   | "task-delete-confirmation"
   | "list-delete-confirmation"

@@ -47,7 +47,7 @@ export function useCreateList() {
       const listName = trimmed || "New list";
       const maxOrder = prev.lists.reduce((m, l) => Math.max(m, l.order), -1);
       const optimisticList: List = {
-        id: tempNumericId(),
+        listId: tempNumericId(),
         name: listName,
         order: maxOrder + 1,
         emoji: input.emoji ?? null,
@@ -58,7 +58,7 @@ export function useCreateList() {
         updatedAt: new Date().toISOString(),
       };
       qc.setQueryData<Board>(boardKeys.detail(input.boardId), next);
-      return { prev, optimisticListId: optimisticList.id };
+      return { prev, optimisticListId: optimisticList.listId };
     },
     onError: (_err, input, ctx) => {
       if (ctx?.prev) {
@@ -70,12 +70,12 @@ export function useCreateList() {
         if (!current) return current;
         const optimisticId = ctx?.optimisticListId;
         const hasOptimistic =
-          optimisticId != null && current.lists.some((list) => list.id === optimisticId);
+          optimisticId != null && current.lists.some((list) => list.listId === optimisticId);
         return {
           ...current,
           lists: hasOptimistic
             ? current.lists.map((list) =>
-                list.id === optimisticId ? data.entity : list,
+                list.listId === optimisticId ? data.entity : list,
               )
             : [...current.lists, data.entity],
           updatedAt: data.boardUpdatedAt,
@@ -112,7 +112,7 @@ export function usePatchList() {
       const next: Board = {
         ...prev,
         lists: prev.lists.map((l) => {
-          if (l.id !== input.listId) return l;
+          if (l.listId !== input.listId) return l;
           return {
             ...l,
             ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
@@ -135,7 +135,7 @@ export function usePatchList() {
         return {
           ...current,
           lists: current.lists.map((list) =>
-            list.id === data.entity.id ? data.entity : list,
+            list.listId === data.entity.listId ? data.entity : list,
           ),
           updatedAt: data.boardUpdatedAt,
         };
@@ -160,7 +160,7 @@ export function useDeleteList() {
       if (!prev) return { prev: undefined as Board | undefined };
       const next: Board = {
         ...prev,
-        lists: prev.lists.filter((l) => l.id !== input.listId),
+        lists: prev.lists.filter((l) => l.listId !== input.listId),
         tasks: prev.tasks.filter((t) => t.listId !== input.listId),
         updatedAt: new Date().toISOString(),
       };
@@ -177,7 +177,7 @@ export function useDeleteList() {
         if (!current) return current;
         return {
           ...current,
-          lists: current.lists.filter((list) => list.id !== data.deletedListId),
+          lists: current.lists.filter((list) => list.listId !== data.deletedListId),
           tasks: current.tasks.filter((task) => task.listId !== data.deletedListId),
           updatedAt: data.boardUpdatedAt,
         };
@@ -211,8 +211,8 @@ export function useMoveList() {
       });
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
+      invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
   });
@@ -238,7 +238,7 @@ export function useReorderLists() {
       if (input.orderedListIds.length !== prev.lists.length) {
         return { prev };
       }
-      const byId = new Map(prev.lists.map((l) => [l.id, l] as const));
+      const byId = new Map(prev.lists.map((l) => [l.listId, l] as const));
       for (const id of input.orderedListIds) {
         if (!byId.has(id)) return { prev };
       }
@@ -260,8 +260,8 @@ export function useReorderLists() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      invalidateBoardStatsQueries(qc, data.id);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
+      invalidateBoardStatsQueries(qc, data.boardId);
       invalidateNotificationQueries(qc);
     },
   });

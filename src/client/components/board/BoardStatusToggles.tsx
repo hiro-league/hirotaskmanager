@@ -46,7 +46,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
     );
 
     patchViewPrefs.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       patch: {
         visibleStatuses: nextVis,
         statusBandWeights: nextWeights,
@@ -76,7 +76,7 @@ export function BoardStatusToggles({ board }: BoardStatusTogglesProps) {
             statusId,
           );
           const label =
-            statuses?.find((s) => s.id === statusId)?.label ?? statusId;
+            statuses?.find((s) => s.statusId === statusId)?.label ?? statusId;
           return (
             <button
               key={statusId}

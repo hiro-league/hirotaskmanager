@@ -8,11 +8,11 @@ export function mergeReleaseUpsertIntoList(
   releases: readonly ReleaseDefinition[],
   next: ReleaseDefinition,
 ): ReleaseDefinition[] {
-  const without = releases.filter((r) => r.id !== next.id);
+  const without = releases.filter((r) => r.releaseId !== next.releaseId);
   const merged = [...without, next];
   merged.sort(
     (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.id - b.id,
+      a.createdAt.localeCompare(b.createdAt) || a.releaseId - b.releaseId,
   );
   return merged;
 }

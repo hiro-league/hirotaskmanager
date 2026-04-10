@@ -48,7 +48,7 @@ export function BoardSearchDialog({
     setDebouncedQuery("");
     setHits([]);
     setFetchError(null);
-  }, [open, board.id]);
+  }, [open, board.boardId]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +62,7 @@ export function BoardSearchDialog({
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
-    fetchBoardSearchHits(debouncedQuery, board.id, { limit: MAX_LIMIT })
+    fetchBoardSearchHits(debouncedQuery, board.boardId, { limit: MAX_LIMIT })
       .then((data) => {
         if (!cancelled) setHits(data);
       })
@@ -79,7 +79,7 @@ export function BoardSearchDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, board.id, debouncedQuery]);
+  }, [open, board.boardId, debouncedQuery]);
 
   useEffect(() => {
     if (!open) return;

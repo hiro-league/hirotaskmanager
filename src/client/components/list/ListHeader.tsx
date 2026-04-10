@@ -79,22 +79,22 @@ export function ListHeader({
   const boardDrag = dragHandleRef != null;
   const busy = patchList.isPending;
 
-  const baseName = list.name.trim() || String(list.id);
+  const baseName = list.name.trim() || String(list.listId);
   const emojiChar = list.emoji?.trim() || null;
 
   const startRename = useCallback(() => {
     // Keep the list current when rename is entered so canceling leaves the
     // user's last-touched list selected.
-    boardNav?.selectList(list.id);
+    boardNav?.selectList(list.listId);
     setEditing(true);
     setEditValue(list.name);
-  }, [boardNav, list.id, list.name]);
+  }, [boardNav, list.listId, list.name]);
 
   // F2 on a keyboard-selected list calls the same entry point as click / ⋮ Rename.
   useEffect(() => {
     if (!boardNav) return;
-    return boardNav.registerListRename(list.id, startRename);
-  }, [boardNav, list.id, startRename]);
+    return boardNav.registerListRename(list.listId, startRename);
+  }, [boardNav, list.listId, startRename]);
 
   const cancelRename = useCallback(() => {
     setEditing(false);
@@ -111,13 +111,13 @@ export function ListHeader({
     try {
       await patchList.mutateAsync({
         boardId,
-        listId: list.id,
+        listId: list.listId,
         patch: { name: trimmed },
       });
     } catch {
       setEditValue(list.name);
     }
-  }, [boardId, editValue, list.id, list.name, patchList]);
+  }, [boardId, editValue, list.listId, list.name, patchList]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -151,9 +151,9 @@ export function ListHeader({
   }, []);
 
   const confirmListDelete = useCallback(() => {
-    deleteList.mutate({ boardId, listId: list.id });
+    deleteList.mutate({ boardId, listId: list.listId });
     setListDeleteConfirmOpen(false);
-  }, [boardId, deleteList, list.id]);
+  }, [boardId, deleteList, list.listId]);
 
   const displayName = listDisplayName(list);
 
@@ -162,11 +162,11 @@ export function ListHeader({
       setEmojiFieldError(null);
       void patchList.mutateAsync({
         boardId,
-        listId: list.id,
+        listId: list.listId,
         patch: { emoji: next },
       });
     },
-    [boardId, list.id, patchList],
+    [boardId, list.listId, patchList],
   );
 
   const titleLine = (
@@ -189,7 +189,7 @@ export function ListHeader({
       )}
       onPointerDown={() => {
         // Any direct interaction with the header should make this list current.
-        boardNav?.selectList(list.id);
+        boardNav?.selectList(list.listId);
       }}
     >
       {emojiFieldError ? (

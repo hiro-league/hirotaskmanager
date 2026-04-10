@@ -30,7 +30,7 @@ export function BoardNotificationDeepLink({ board }: { board: Board }) {
     const listId = listRaw != null ? Number(listRaw) : NaN;
 
     if (Number.isFinite(taskId)) {
-      if (!board.tasks.some((t) => t.id === taskId)) {
+      if (!board.tasks.some((t) => t.taskId === taskId)) {
         return;
       }
       const r = nav.applyNotificationTarget({ taskId });
@@ -42,14 +42,14 @@ export function BoardNotificationDeepLink({ board }: { board: Board }) {
     }
 
     if (Number.isFinite(listId)) {
-      if (!board.lists.some((l) => l.id === listId)) {
+      if (!board.lists.some((l) => l.listId === listId)) {
         return;
       }
       nav.applyNotificationTarget({ listId });
       navigate({ hash: "" }, { replace: true });
     }
   }, [
-    board.id,
+    board.boardId,
     board.lists,
     board.tasks,
     bridge,

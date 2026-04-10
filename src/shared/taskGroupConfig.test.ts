@@ -8,7 +8,9 @@ import {
   type TaskGroupSelection,
 } from "./taskGroupConfig";
 
-const minimalBoard = (overrides: Partial<Board> & Pick<Board, "id" | "taskGroups">): Board =>
+const minimalBoard = (
+  overrides: Partial<Board> & Pick<Board, "boardId" | "taskGroups">,
+): Board =>
   ({
     name: "T",
     cliPolicy: EMPTY_BOARD_CLI_POLICY,
@@ -31,10 +33,10 @@ const minimalBoard = (overrides: Partial<Board> & Pick<Board, "id" | "taskGroups
 
 describe("buildPatchBoardTaskGroupConfigFromEditor", () => {
   const board = minimalBoard({
-    id: 1,
+    boardId: 1,
     taskGroups: [
-      { id: 10, label: "A", emoji: null, sortOrder: 0 },
-      { id: 11, label: "B", emoji: null, sortOrder: 1 },
+      { groupId: 10, label: "A", emoji: null, sortOrder: 0 },
+      { groupId: 11, label: "B", emoji: null, sortOrder: 1 },
     ],
     defaultTaskGroupId: 10,
     deletedGroupFallbackId: 10,
@@ -44,9 +46,9 @@ describe("buildPatchBoardTaskGroupConfigFromEditor", () => {
 
   test("default group + fallback from star; creates with empty delete map", () => {
     const rows: TaskGroupEditorRow[] = [
-      { clientId: "c10", id: 10, label: "A", emoji: null, sortOrder: 0 },
-      { clientId: "c11", id: 11, label: "B", emoji: null, sortOrder: 1 },
-      { clientId: "new1", id: 12, label: "New", emoji: null, sortOrder: 2 },
+      { clientId: "c10", groupId: 10, label: "A", emoji: null, sortOrder: 0 },
+      { clientId: "c11", groupId: 11, label: "B", emoji: null, sortOrder: 1 },
+      { clientId: "new1", groupId: 12, label: "New", emoji: null, sortOrder: 2 },
     ];
     const patch = buildPatchBoardTaskGroupConfigFromEditor(board, rows, {
       defaultGroup: defaultA,
@@ -60,8 +62,8 @@ describe("buildPatchBoardTaskGroupConfigFromEditor", () => {
 
   test("delete with explicit move to new row (clientId)", () => {
     const rows: TaskGroupEditorRow[] = [
-      { clientId: "c10", id: 10, label: "A", emoji: null, sortOrder: 0 },
-      { clientId: "sink", id: 12, label: "Sink", emoji: null, sortOrder: 1 },
+      { clientId: "c10", groupId: 10, label: "A", emoji: null, sortOrder: 0 },
+      { clientId: "sink", groupId: 12, label: "Sink", emoji: null, sortOrder: 1 },
     ];
     const sink: TaskGroupSelection = { kind: "clientId", clientId: "sink" };
     const patch = buildPatchBoardTaskGroupConfigFromEditor(board, rows, {
@@ -70,18 +72,20 @@ describe("buildPatchBoardTaskGroupConfigFromEditor", () => {
     });
     expect(patch.defaultTaskGroupId).toBe(10);
     expect(patch.deletedGroupFallbackId).toBe(10);
-    expect(patch.deletes).toEqual([{ id: 11, moveTasksToClientId: "sink" }]);
+    expect(patch.deletes).toEqual([
+      { groupId: 11, moveTasksToClientId: "sink" },
+    ]);
   });
 
   test("delete empty group may omit move (null in map)", () => {
     const rows: TaskGroupEditorRow[] = [
-      { clientId: "c10", id: 10, label: "A", emoji: null, sortOrder: 0 },
+      { clientId: "c10", groupId: 10, label: "A", emoji: null, sortOrder: 0 },
     ];
     const patch = buildPatchBoardTaskGroupConfigFromEditor(board, rows, {
       defaultGroup: defaultA,
       deleteMoves: new Map([[11, null]]),
     });
-    expect(patch.deletes).toEqual([{ id: 11 }]);
+    expect(patch.deletes).toEqual([{ groupId: 11 }]);
   });
 });
 

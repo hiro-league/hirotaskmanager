@@ -36,7 +36,7 @@ export function BoardCelebrationSoundToggle({
       }
       onClick={() =>
         patch.mutate({
-          boardId: board.id,
+          boardId: board.boardId,
           patch: { muteCelebrationSounds: !muted },
         })
       }

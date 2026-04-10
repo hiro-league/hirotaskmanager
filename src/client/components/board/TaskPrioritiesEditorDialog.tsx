@@ -34,7 +34,7 @@ function nextPriorityValue(rows: TaskPriorityDefinition[]): number {
 
 function nextLocalPriorityId(rows: TaskPriorityDefinition[]): number {
   const min = rows.reduce(
-    (currentMin, row) => Math.min(currentMin, row.id),
+    (currentMin, row) => Math.min(currentMin, row.priorityId),
     0,
   );
   return min <= 0 ? min - 1 : -1;
@@ -59,7 +59,7 @@ export function TaskPrioritiesEditorDialog({
     // while the user renames or recolors priorities.
     const initial = sortPrioritiesByValue(board.taskPriorities).map((priority) => ({
       ...priority,
-      taskCount: board.tasks.filter((task) => task.priorityId === priority.id).length,
+      taskCount: board.tasks.filter((task) => task.priorityId === priority.priorityId).length,
     }));
     setRows(initial);
     setBaseline(JSON.stringify(initial));
@@ -129,7 +129,7 @@ export function TaskPrioritiesEditorDialog({
 
     for (const priority of board.taskPriorities) {
       if (!priority.isSystem) continue;
-      const current = rows.find((row) => row.id === priority.id);
+      const current = rows.find((row) => row.priorityId === priority.priorityId);
       if (!current) {
         errors.push("Built-in priorities cannot be deleted.");
         break;
@@ -144,13 +144,13 @@ export function TaskPrioritiesEditorDialog({
   }, [rows, board.taskPriorities]);
 
   const removedCustomTaskCount = useMemo(() => {
-    const rowIds = new Set(rows.map((row) => row.id));
+    const rowIds = new Set(rows.map((row) => row.priorityId));
     return board.taskPriorities
-      .filter((priority) => !priority.isSystem && !rowIds.has(priority.id))
+      .filter((priority) => !priority.isSystem && !rowIds.has(priority.priorityId))
       .reduce(
         (count, priority) =>
           count +
-          board.tasks.filter((task) => task.priorityId === priority.id).length,
+          board.tasks.filter((task) => task.priorityId === priority.priorityId).length,
         0,
       );
   }, [rows, board.taskPriorities, board.tasks]);
@@ -164,7 +164,7 @@ export function TaskPrioritiesEditorDialog({
       rows.map(({ taskCount: _taskCount, ...priority }) => priority),
     );
     patchPriorities.mutate(
-      { boardId: board.id, taskPriorities },
+      { boardId: board.boardId, taskPriorities },
       { onSuccess: () => onClose() },
     );
   };
@@ -209,7 +209,7 @@ export function TaskPrioritiesEditorDialog({
           <ul className="mt-4 space-y-3">
             {rows.map((row) => (
               <li
-                key={row.id}
+                key={row.priorityId}
                 className="grid gap-2 rounded-md border border-border/70 p-3 md:grid-cols-[7rem_minmax(0,1fr)_8rem_auto]"
               >
                 <div>
@@ -221,12 +221,12 @@ export function TaskPrioritiesEditorDialog({
                     className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text disabled:cursor-not-allowed disabled:opacity-60"
                     value={row.value}
                     disabled={busy || row.isSystem}
-                    aria-label={`Priority number ${row.label || row.id}`}
+                    aria-label={`Priority number ${row.label || row.priorityId}`}
                     onChange={(e) => {
                       const value = Number(e.target.value);
                       setRows((prev) =>
                         prev.map((current) =>
-                          current.id === row.id ? { ...current, value } : current,
+                          current.priorityId === row.priorityId ? { ...current, value } : current,
                         ),
                       );
                     }}
@@ -244,12 +244,12 @@ export function TaskPrioritiesEditorDialog({
                       value={row.label}
                       disabled={busy}
                       placeholder="Priority name"
-                      aria-label={`Priority name ${row.label || row.id}`}
+                      aria-label={`Priority name ${row.label || row.priorityId}`}
                       onChange={(e) => {
                         const label = e.target.value;
                         setRows((prev) =>
                           prev.map((current) =>
-                            current.id === row.id ? { ...current, label } : current,
+                            current.priorityId === row.priorityId ? { ...current, label } : current,
                           ),
                         );
                       }}
@@ -279,12 +279,12 @@ export function TaskPrioritiesEditorDialog({
                       className="h-9 w-10 rounded-md border border-input bg-background p-1"
                       value={HEX_COLOR_RE.test(row.color) ? row.color : "#3b82f6"}
                       disabled={busy}
-                      aria-label={`Priority color ${row.label || row.id}`}
+                      aria-label={`Priority color ${row.label || row.priorityId}`}
                       onChange={(e) => {
                         const color = e.target.value;
                         setRows((prev) =>
                           prev.map((current) =>
-                            current.id === row.id ? { ...current, color } : current,
+                            current.priorityId === row.priorityId ? { ...current, color } : current,
                           ),
                         );
                       }}
@@ -295,12 +295,12 @@ export function TaskPrioritiesEditorDialog({
                       value={row.color}
                       disabled={busy}
                       placeholder="#3b82f6"
-                      aria-label={`Priority hex color ${row.label || row.id}`}
+                      aria-label={`Priority hex color ${row.label || row.priorityId}`}
                       onChange={(e) => {
                         const color = e.target.value;
                         setRows((prev) =>
                           prev.map((current) =>
-                            current.id === row.id ? { ...current, color } : current,
+                            current.priorityId === row.priorityId ? { ...current, color } : current,
                           ),
                         );
                       }}
@@ -319,7 +319,7 @@ export function TaskPrioritiesEditorDialog({
                         : "Remove priority row"
                     }
                     onClick={() =>
-                      setRows((prev) => prev.filter((current) => current.id !== row.id))
+                      setRows((prev) => prev.filter((current) => current.priorityId !== row.priorityId))
                     }
                   >
                     <Trash2 className="size-4" aria-hidden />
@@ -337,7 +337,7 @@ export function TaskPrioritiesEditorDialog({
               setRows((prev) => [
                 ...prev,
                 {
-                  id: nextLocalPriorityId(prev),
+                  priorityId: nextLocalPriorityId(prev),
                   value: nextPriorityValue(prev),
                   label: "",
                   color: "#64748b",

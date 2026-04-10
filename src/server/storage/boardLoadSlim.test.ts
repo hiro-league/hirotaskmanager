@@ -23,14 +23,14 @@ describe("loadBoard taskBodyMaxChars (slim board payload)", () => {
     const board = await createBoardWithDefaults("Slim", "slim-board", null, "", {
       cliBootstrap: "cli_full",
     });
-    const listRes = createListOnBoard(board.id, { name: "L1" });
+    const listRes = createListOnBoard(board.boardId, { name: "L1" });
     expect(listRes).not.toBeNull();
-    const listId = listRes!.list.id;
-    const full = loadBoard(board.id)!;
-    const groupId = full.taskGroups[0]!.id;
+    const listId = listRes!.list.listId;
+    const full = loadBoard(board.boardId)!;
+    const groupId = full.taskGroups[0]!.groupId;
     const longBody = "x".repeat(500);
     const created = createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
         listId,
         status: "open",
@@ -42,11 +42,11 @@ describe("loadBoard taskBodyMaxChars (slim board payload)", () => {
     );
     expect(created).not.toBeNull();
 
-    const loadedFull = loadBoard(board.id)!;
+    const loadedFull = loadBoard(board.boardId)!;
     const row = loadedFull.tasks.find((t) => t.title === "T");
     expect(row?.body).toBe(longBody);
 
-    const slim = loadBoard(board.id, {
+    const slim = loadBoard(board.boardId, {
       taskBodyMaxChars: BOARD_FETCH_SLIM_TASK_BODY_CHARS,
     })!;
     const slimRow = slim.tasks.find((t) => t.title === "T");
@@ -57,13 +57,13 @@ describe("loadBoard taskBodyMaxChars (slim board payload)", () => {
     const board = await createBoardWithDefaults("Zero", "zero-body", null, "", {
       cliBootstrap: "cli_full",
     });
-    const listRes = createListOnBoard(board.id, { name: "L2" });
+    const listRes = createListOnBoard(board.boardId, { name: "L2" });
     expect(listRes).not.toBeNull();
-    const listId = listRes!.list.id;
-    const full = loadBoard(board.id)!;
-    const groupId = full.taskGroups[0]!.id;
+    const listId = listRes!.list.listId;
+    const full = loadBoard(board.boardId)!;
+    const groupId = full.taskGroups[0]!.groupId;
     createTaskOnBoard(
-      board.id,
+      board.boardId,
       {
         listId,
         status: "open",
@@ -73,7 +73,7 @@ describe("loadBoard taskBodyMaxChars (slim board payload)", () => {
       },
       undefined,
     );
-    const z = loadBoard(board.id, { taskBodyMaxChars: 0 })!.tasks.find(
+    const z = loadBoard(board.boardId, { taskBodyMaxChars: 0 })!.tasks.find(
       (t) => t.title === "Z",
     );
     expect(z?.body).toBe("");

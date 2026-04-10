@@ -12,7 +12,7 @@ function mapReleaseRow(r: {
   created_at: string;
 }): ReleaseDefinition {
   return {
-    id: r.id,
+    releaseId: r.id,
     name: r.name,
     color:
       r.color != null && String(r.color).trim() !== ""

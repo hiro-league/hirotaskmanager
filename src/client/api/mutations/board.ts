@@ -25,9 +25,10 @@ function buildOptimisticBoard(id: number, name: string): Board {
   const now = new Date().toISOString();
   const taskGroups = createDefaultTaskGroups();
   const taskPriorities = createDefaultTaskPriorities();
-  const firstGroupId = sortTaskGroupsForDisplay(taskGroups)[0]?.id ?? 0;
+  const firstGroupId =
+    sortTaskGroupsForDisplay(taskGroups)[0]?.groupId ?? 0;
   return {
-    id,
+    boardId: id,
     name,
     emoji: null,
     description: "",
@@ -74,7 +75,7 @@ export function useCreateBoard() {
           ? input.name.trim()
           : "New board";
       const entry: BoardIndexEntry = {
-        id: optimisticId,
+        boardId: optimisticId,
         slug: "",
         name,
         emoji: null,
@@ -107,9 +108,9 @@ export function useCreateBoard() {
         qc.removeQueries({ queryKey: boardKeys.detail(optId) });
         qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
           (old ?? []).map((e: BoardIndexEntry) =>
-            e.id === optId
+            e.boardId === optId
               ? {
-                  id: data.id,
+                  boardId: data.boardId,
                   slug: data.slug ?? e.slug,
                   name: data.name,
                   emoji: data.emoji ?? null,
@@ -121,8 +122,8 @@ export function useCreateBoard() {
           ),
         );
       }
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
-      appNavigate(boardPath(data.id), { replace: true });
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
+      appNavigate(boardPath(data.boardId), { replace: true });
       invalidateNotificationQueries(qc);
     },
   });
@@ -172,7 +173,7 @@ export function usePatchBoard() {
         input.name !== undefined ? input.name.trim() : undefined;
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === input.boardId
+          e.boardId === input.boardId
             ? {
                 ...e,
                 ...(trimmed !== undefined ? { name: trimmed } : {}),
@@ -228,7 +229,7 @@ export function usePatchBoard() {
     onSuccess: (data) => {
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
         (old ?? []).map((e: BoardIndexEntry) =>
-          e.id === data.id
+          e.boardId === data.boardId
             ? {
                 ...e,
                 name: data.name,
@@ -240,7 +241,7 @@ export function usePatchBoard() {
             : e,
         ),
       );
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
       invalidateNotificationQueries(qc);
     },
   });
@@ -314,7 +315,7 @@ export function usePatchBoardViewPrefs() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
       invalidateNotificationQueries(qc);
     },
   });
@@ -334,7 +335,7 @@ export function usePatchBoardTaskGroups() {
       });
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
       invalidateNotificationQueries(qc);
     },
   });
@@ -354,7 +355,7 @@ export function usePatchBoardTaskPriorities() {
       });
     },
     onSuccess: (data) => {
-      qc.setQueryData<Board>(boardKeys.detail(data.id), data);
+      qc.setQueryData<Board>(boardKeys.detail(data.boardId), data);
       invalidateNotificationQueries(qc);
     },
   });
@@ -375,16 +376,16 @@ export function useDeleteBoard() {
       await qc.cancelQueries({ queryKey: boardKeys.detail(id), exact: true });
       const prevList = qc.getQueryData<BoardIndexEntry[]>(boardKeys.all);
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
-        (old ?? []).filter((e: BoardIndexEntry) => e.id !== id),
+        (old ?? []).filter((e: BoardIndexEntry) => e.boardId !== id),
       );
       qc.removeQueries({ queryKey: boardKeys.detail(id) });
       const selected = parseBoardIdFromPath(window.location.pathname);
       const selectedNum =
         selected != null ? Number(selected) : Number.NaN;
       if (Number.isFinite(selectedNum) && selectedNum === id) {
-        const remaining = (prevList ?? []).filter((e) => e.id !== id);
+        const remaining = (prevList ?? []).filter((e) => e.boardId !== id);
         if (remaining.length > 0) {
-          appNavigate(boardPath(remaining[0].id), { replace: true });
+          appNavigate(boardPath(remaining[0].boardId), { replace: true });
         } else {
           appNavigate("/", { replace: true });
         }

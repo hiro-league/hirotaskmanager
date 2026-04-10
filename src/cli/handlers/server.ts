@@ -30,3 +30,12 @@ export async function handleServerStatus(
   const status = await ctx.readServerStatus({ port });
   ctx.printJson(status);
 }
+
+export async function handleServerStop(
+  ctx: CliContext,
+  options: { port?: string },
+): Promise<void> {
+  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const status = await ctx.stopServer({ port });
+  ctx.printJson(status);
+}

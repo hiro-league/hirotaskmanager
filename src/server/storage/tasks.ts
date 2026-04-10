@@ -51,7 +51,7 @@ export type TaskDeleteResult = {
 
 function mapTaskRow(t: TaskRow): Task {
   return {
-    id: t.id,
+    taskId: t.id,
     listId: t.list_id,
     title: t.title,
     body: t.body,

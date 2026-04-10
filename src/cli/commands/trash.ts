@@ -5,7 +5,11 @@ import {
   handleTrashLists,
   handleTrashTasks,
 } from "../handlers/trash";
-import { addPortOption, withCliErrors } from "../lib/command-helpers";
+import {
+  addPortOption,
+  CLI_FIELDS_OPTION_DESC,
+  withCliErrors,
+} from "../lib/command-helpers";
 
 export function registerTrashCommands(
   program: Command,
@@ -15,25 +19,67 @@ export function registerTrashCommands(
     .command("trash")
     .description("Inspect Trash (same JSON shapes as GET /api/trash/...)");
 
-  addPortOption(
-    trashCommand.command("boards").description("List boards in Trash"),
-  ).action(async (options: { port?: string }) => {
-    await withCliErrors(() => handleTrashBoards(ctx, options));
-  });
+  const listCommand = trashCommand
+    .command("list")
+    .description("List entities currently in Trash");
 
   addPortOption(
-    trashCommand
+    listCommand
+      .command("boards")
+      .description("List boards in Trash")
+      .option("--limit <n>", "Page size (omit for one full response)")
+      .option("--offset <n>", "Skip this many rows (default 0)")
+      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() => handleTrashBoards(ctx, options));
+    },
+  );
+
+  addPortOption(
+    listCommand
       .command("lists")
-      .description("Lists in Trash (includes board name and canRestore)"),
-  ).action(async (options: { port?: string }) => {
-    await withCliErrors(() => handleTrashLists(ctx, options));
-  });
+      .description("Lists in Trash (includes board name and canRestore)")
+      .option("--limit <n>", "Page size (omit for one full response)")
+      .option("--offset <n>", "Skip this many rows (default 0)")
+      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() => handleTrashLists(ctx, options));
+    },
+  );
 
   addPortOption(
-    trashCommand
+    listCommand
       .command("tasks")
-      .description("Tasks in Trash (includes board/list names and canRestore)"),
-  ).action(async (options: { port?: string }) => {
-    await withCliErrors(() => handleTrashTasks(ctx, options));
-  });
+      .description("Tasks in Trash (includes board/list names and canRestore)")
+      .option("--limit <n>", "Page size (omit for one full response)")
+      .option("--offset <n>", "Skip this many rows (default 0)")
+      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    async (options: {
+      port?: string;
+      limit?: string;
+      offset?: string;
+      pageAll?: boolean;
+      fields?: string;
+    }) => {
+      await withCliErrors(() => handleTrashTasks(ctx, options));
+    },
+  );
 }

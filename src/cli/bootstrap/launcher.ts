@@ -13,6 +13,7 @@ import {
   type CliConfigFile,
 } from "../lib/config";
 import { parsePortOption } from "../lib/command-helpers";
+import { CLI_ERR } from "../lib/cli-error-codes";
 import { CliError, exitWithError } from "../lib/output";
 import { startServer } from "../lib/process";
 
@@ -42,6 +43,7 @@ function parseBrowserMode(browser: string | undefined): boolean | undefined {
   }
 
   throw new CliError("Invalid browser mode", 2, {
+    code: CLI_ERR.invalidValue,
     browser,
     hint: "Use --browser auto or --browser manual.",
   });

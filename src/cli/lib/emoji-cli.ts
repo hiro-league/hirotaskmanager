@@ -1,4 +1,5 @@
 import { parseEmojiField } from "../../shared/emojiField";
+import { CLI_ERR } from "./cli-error-codes";
 import { CliError } from "./output";
 
 /** Optional `--emoji` flag: omit key when undefined, send null when cleared. */
@@ -8,7 +9,7 @@ export function parseOptionalEmojiFlag(raw: string | undefined): {
   if (raw === undefined) return { omit: true };
   const parsed = parseEmojiField(raw);
   if (!parsed.ok) {
-    throw new CliError(parsed.error, 2);
+    throw new CliError(parsed.error, 2, { code: CLI_ERR.emojiValidation });
   }
   return { omit: false, value: parsed.value };
 }

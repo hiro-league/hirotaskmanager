@@ -5,21 +5,21 @@ import {
 } from "./models";
 
 describe("sortTaskGroupsForDisplay", () => {
-  test("orders by sortOrder then id", () => {
+  test("orders by sortOrder then groupId", () => {
     const groups = [
-      { id: 30, label: "c", sortOrder: 2 },
-      { id: 10, label: "a", sortOrder: 0 },
-      { id: 20, label: "b", sortOrder: 1 },
+      { groupId: 30, label: "c", sortOrder: 2 },
+      { groupId: 10, label: "a", sortOrder: 0 },
+      { groupId: 20, label: "b", sortOrder: 1 },
     ];
-    expect(sortTaskGroupsForDisplay(groups).map((g) => g.id)).toEqual([
+    expect(sortTaskGroupsForDisplay(groups).map((g) => g.groupId)).toEqual([
       10, 20, 30,
     ]);
   });
 
   test("does not mutate input", () => {
     const groups = [
-      { id: 2, label: "b", sortOrder: 1 },
-      { id: 1, label: "a", sortOrder: 0 },
+      { groupId: 2, label: "b", sortOrder: 1 },
+      { groupId: 1, label: "a", sortOrder: 0 },
     ];
     const copy = [...groups];
     sortTaskGroupsForDisplay(groups);
@@ -32,8 +32,8 @@ describe("effectiveDefaultTaskGroupId", () => {
     expect(
       effectiveDefaultTaskGroupId({
         taskGroups: [
-          { id: 1, label: "a", sortOrder: 0 },
-          { id: 2, label: "b", sortOrder: 1 },
+          { groupId: 1, label: "a", sortOrder: 0 },
+          { groupId: 2, label: "b", sortOrder: 1 },
         ],
         defaultTaskGroupId: 2,
       }),
@@ -44,8 +44,8 @@ describe("effectiveDefaultTaskGroupId", () => {
     expect(
       effectiveDefaultTaskGroupId({
         taskGroups: [
-          { id: 20, label: "second", sortOrder: 1 },
-          { id: 10, label: "first", sortOrder: 0 },
+          { groupId: 20, label: "second", sortOrder: 1 },
+          { groupId: 10, label: "first", sortOrder: 0 },
         ],
         defaultTaskGroupId: 999,
       }),

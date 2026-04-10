@@ -546,7 +546,7 @@ export function useResolvedActiveTaskGroupIds(
   );
   return useMemo(() => {
     if (!Array.isArray(raw) || raw.length === 0) return null;
-    const validIds = new Set(taskGroups.map((group) => String(group.id)));
+    const validIds = new Set(taskGroups.map((group) => String(group.groupId)));
     const filtered = raw.filter((id) => validIds.has(id));
     return filtered.length > 0 ? filtered : null;
   }, [raw, taskGroups]);
@@ -569,7 +569,7 @@ export function useResolvedActiveTaskPriorityIds(
     if (!Array.isArray(raw)) return null;
     if (raw.length === 0) return [];
     const validIds = new Set(
-      sortPrioritiesByValue(taskPriorities).map((priority) => String(priority.id)),
+      sortPrioritiesByValue(taskPriorities).map((priority) => String(priority.priorityId)),
     );
     const filtered = raw.filter((id) => validIds.has(id));
     return filtered.length > 0 ? filtered : null;
@@ -590,7 +590,7 @@ export function useResolvedActiveReleaseIds(
     if (raw === undefined) return null;
     if (!Array.isArray(raw)) return null;
     if (raw.length === 0) return [];
-    const validIds = new Set(releases.map((r) => String(r.id)));
+    const validIds = new Set(releases.map((r) => String(r.releaseId)));
     const filtered = raw.filter(
       (id) => id === RELEASE_FILTER_UNTAGGED || validIds.has(id),
     );

@@ -26,7 +26,7 @@ export function buildListColumnTaskIds(
     );
     map.set(
       listId,
-      tasks.map((t) => t.id),
+      tasks.map((t) => t.taskId),
     );
   }
   return map;

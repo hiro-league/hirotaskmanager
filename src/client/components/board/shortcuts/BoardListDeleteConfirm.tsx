@@ -22,7 +22,7 @@ export function BoardListDeleteConfirm({
   const deleteList = useDeleteList();
   const open = listId != null;
   const list =
-    listId != null ? board.lists.find((l) => l.id === listId) : undefined;
+    listId != null ? board.lists.find((l) => l.listId === listId) : undefined;
 
   return (
     <ConfirmDialog
@@ -41,7 +41,7 @@ export function BoardListDeleteConfirm({
       onConfirm={() => {
         if (listId == null) return;
         deleteList.mutate(
-          { boardId: board.id, listId },
+          { boardId: board.boardId, listId },
           {
             onSuccess: () => {
               nav.setHighlightedListId(null);

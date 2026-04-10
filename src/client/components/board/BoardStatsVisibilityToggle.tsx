@@ -36,7 +36,7 @@ export function BoardStatsVisibilityToggle({
           : "Show board statistics. Keyboard shortcut n."
       }
       onClick={() =>
-        patch.mutate({ boardId: board.id, patch: { showStats: !on } })
+        patch.mutate({ boardId: board.boardId, patch: { showStats: !on } })
       }
     >
       <BarChart3 className="size-3.5 shrink-0" aria-hidden />

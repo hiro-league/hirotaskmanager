@@ -130,7 +130,7 @@ This document describes the **latest** tables only: structure, how they map to `
 
 **Maintenance:** Triggers on `task` (insert / update / delete) keep rows aligned. `AFTER UPDATE OF name` on `list`, `AFTER UPDATE OF label` on `task_group`, and `AFTER UPDATE OF label` on `status` reindex affected tasks so renames stay searchable. CASCADE deletes on tasks still remove FTS rows via the task delete trigger.
 
-**Features / API:** `GET /api/search` (`q`, optional `board`, optional `limit`, optional `prefix` — default adds `*` to the last token for prefix match; `prefix=0` disables). CLI: `hirotm search` (e.g. `--format table`, `--no-prefix`).
+**Features / API:** `GET /api/search` (`q`, optional `board`, optional `limit`, optional `prefix` — default adds `*` to the last token for prefix match; `prefix=0` disables). CLI: `hirotm query search` (e.g. `--format table`, `--no-prefix`).
 
 ---
 

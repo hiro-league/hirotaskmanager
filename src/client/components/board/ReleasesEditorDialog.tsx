@@ -161,10 +161,11 @@ function sortReleasesForEditorDisplay(
     const db = (b.releaseDate ?? "").trim();
     const cmp = db.localeCompare(da);
     if (cmp !== 0) return cmp;
-    return b.id - a.id;
+    return b.releaseId - a.releaseId;
   });
   undated.sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id,
+    (a, b) =>
+      a.createdAt.localeCompare(b.createdAt) || a.releaseId - b.releaseId,
   );
   return [...dated, ...undated];
 }
@@ -212,7 +213,7 @@ export function ReleasesEditorDialog({
     const nextRows: Record<number, { name: string; color: string; releaseDate: string }> =
       {};
     for (const r of board.releases) {
-      nextRows[r.id] = {
+      nextRows[r.releaseId] = {
         name: r.name,
         color: r.color?.trim() ?? "",
         releaseDate: r.releaseDate?.trim() ?? "",
@@ -249,7 +250,7 @@ export function ReleasesEditorDialog({
   const isDirty = useMemo(() => {
     if (!open) return false;
     for (const r of board.releases) {
-      const row = rows[r.id];
+      const row = rows[r.releaseId];
       if (!row) return true;
       if (releaseRowDirty(r, row)) return true;
     }
@@ -290,7 +291,7 @@ export function ReleasesEditorDialog({
   const setStarDefault = (releaseId: number) => {
     if (board.defaultReleaseId === releaseId) return;
     patchBoard.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       defaultReleaseId: releaseId,
     });
   };
@@ -298,7 +299,7 @@ export function ReleasesEditorDialog({
   const clearDefaultRelease = () => {
     if (board.defaultReleaseId == null) return;
     patchBoard.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       defaultReleaseId: null,
     });
   };
@@ -306,21 +307,21 @@ export function ReleasesEditorDialog({
   const saveAutoAssign = () => {
     if (board.defaultReleaseId == null) return;
     patchBoard.mutate({
-      boardId: board.id,
+      boardId: board.boardId,
       autoAssignReleaseOnCreateUi: autoUi,
       autoAssignReleaseOnCreateCli: autoCli,
     });
   };
 
   const saveRow = async (releaseId: number) => {
-    const r = board.releases.find((x) => x.id === releaseId);
+    const r = board.releases.find((x) => x.releaseId === releaseId);
     const row = rows[releaseId];
     if (!r || !row || !rowCanSave(r, row)) return;
     const colorTrim = row.color.trim();
     setRowSaveError((prev) => ({ ...prev, [releaseId]: null }));
     try {
       await updateRelease.mutateAsync({
-        boardId: board.id,
+        boardId: board.boardId,
         releaseId,
         name: row.name.trim(),
         color: colorTrim === "" ? null : colorTrim,
@@ -350,7 +351,7 @@ export function ReleasesEditorDialog({
     }
     createRelease.mutate(
       {
-        boardId: board.id,
+        boardId: board.boardId,
         name,
         color: c === "" ? null : c,
         releaseDate: newDate.trim() === "" ? null : newDate.trim(),
@@ -376,7 +377,7 @@ export function ReleasesEditorDialog({
     if (moveTo !== undefined && !Number.isFinite(moveTo)) return;
     deleteRelease.mutate(
       {
-        boardId: board.id,
+        boardId: board.boardId,
         releaseId: deleteTargetId,
         moveTasksToReleaseId: moveTo,
       },
@@ -391,18 +392,18 @@ export function ReleasesEditorDialog({
 
   if (!open) return null;
 
-  const deletePending = board.releases.find((r) => r.id === deleteTargetId);
+  const deletePending = board.releases.find((r) => r.releaseId === deleteTargetId);
   const deleteTaskCount = deletePending
-    ? (taskCountByReleaseId.get(deletePending.id) ?? 0)
+    ? (taskCountByReleaseId.get(deletePending.releaseId) ?? 0)
     : 0;
   const otherReleases = deletePending
-    ? releasesInEditorOrder.filter((r) => r.id !== deletePending.id)
+    ? releasesInEditorOrder.filter((r) => r.releaseId !== deletePending.releaseId)
     : [];
 
   const hasDefault = board.defaultReleaseId != null;
   const defaultReleaseName =
     board.defaultReleaseId != null
-      ? board.releases.find((r) => r.id === board.defaultReleaseId)?.name ??
+      ? board.releases.find((r) => r.releaseId === board.defaultReleaseId)?.name ??
         `#${board.defaultReleaseId}`
       : null;
 
@@ -502,19 +503,19 @@ export function ReleasesEditorDialog({
 
           <ul className="mt-4 space-y-3">
             {releasesInEditorOrder.map((r) => {
-              const row = rows[r.id] ?? {
+              const row = rows[r.releaseId] ?? {
                 name: r.name,
                 color: r.color ?? "",
                 releaseDate: r.releaseDate ?? "",
               };
-              const tc = taskCountByReleaseId.get(r.id) ?? 0;
-              const isDefault = board.defaultReleaseId === r.id;
+              const tc = taskCountByReleaseId.get(r.releaseId) ?? 0;
+              const isDefault = board.defaultReleaseId === r.releaseId;
               const dirty = releaseRowDirty(r, row);
               const canSave = rowCanSave(r, row);
-              const saveErr = rowSaveError[r.id];
+              const saveErr = rowSaveError[r.releaseId];
               return (
                 <li
-                  key={r.id}
+                  key={r.releaseId}
                   className={cn(
                     "flex min-w-0 flex-col rounded-md border p-2 pb-2.5",
                     dirty
@@ -540,7 +541,7 @@ export function ReleasesEditorDialog({
                     title={
                       isDefault ? "Default release" : "Make default release"
                     }
-                    onClick={() => setStarDefault(r.id)}
+                    onClick={() => setStarDefault(r.releaseId)}
                   >
                     <Star
                       className={`size-4 ${isDefault ? "fill-current" : ""}`}
@@ -555,10 +556,10 @@ export function ReleasesEditorDialog({
                       value={row.name}
                       disabled={busy}
                       onChange={(e) => {
-                        setRowSaveError((prev) => ({ ...prev, [r.id]: null }));
+                        setRowSaveError((prev) => ({ ...prev, [r.releaseId]: null }));
                         setRows((prev) => ({
                           ...prev,
-                          [r.id]: { ...row, name: e.target.value },
+                          [r.releaseId]: { ...row, name: e.target.value },
                         }));
                       }}
                     />
@@ -569,12 +570,12 @@ export function ReleasesEditorDialog({
                       <ReleaseColorSwatchInput
                         value={row.color}
                         disabled={busy}
-                        ariaLabel={`Release color ${row.name || r.id}`}
+                        ariaLabel={`Release color ${row.name || r.releaseId}`}
                         onChange={(hex) => {
-                          setRowSaveError((prev) => ({ ...prev, [r.id]: null }));
+                          setRowSaveError((prev) => ({ ...prev, [r.releaseId]: null }));
                           setRows((prev) => ({
                             ...prev,
-                            [r.id]: { ...row, color: hex },
+                            [r.releaseId]: { ...row, color: hex },
                           }));
                         }}
                       />
@@ -584,23 +585,23 @@ export function ReleasesEditorDialog({
                         value={row.color}
                         disabled={busy}
                         placeholder="#rrggbb"
-                        aria-label={`Release hex ${row.name || r.id}`}
+                        aria-label={`Release hex ${row.name || r.releaseId}`}
                         onChange={(e) => {
-                          setRowSaveError((prev) => ({ ...prev, [r.id]: null }));
+                          setRowSaveError((prev) => ({ ...prev, [r.releaseId]: null }));
                           setRows((prev) => ({
                             ...prev,
-                            [r.id]: { ...row, color: e.target.value },
+                            [r.releaseId]: { ...row, color: e.target.value },
                           }));
                         }}
                       />
                       <ClearColorIconButton
                         disabled={busy || row.color.trim() === ""}
-                        label={`Clear color for ${row.name || `release ${r.id}`}`}
+                        label={`Clear color for ${row.name || `release ${r.releaseId}`}`}
                         onClick={() => {
-                          setRowSaveError((prev) => ({ ...prev, [r.id]: null }));
+                          setRowSaveError((prev) => ({ ...prev, [r.releaseId]: null }));
                           setRows((prev) => ({
                             ...prev,
-                            [r.id]: { ...row, color: "" },
+                            [r.releaseId]: { ...row, color: "" },
                           }));
                         }}
                       />
@@ -615,10 +616,10 @@ export function ReleasesEditorDialog({
                         value={row.releaseDate}
                         disabled={busy}
                         onChange={(e) => {
-                          setRowSaveError((prev) => ({ ...prev, [r.id]: null }));
+                          setRowSaveError((prev) => ({ ...prev, [r.releaseId]: null }));
                           setRows((prev) => ({
                             ...prev,
-                            [r.id]: { ...row, releaseDate: e.target.value },
+                            [r.releaseId]: { ...row, releaseDate: e.target.value },
                           }));
                         }}
                       />
@@ -632,9 +633,9 @@ export function ReleasesEditorDialog({
                           ? `Delete release (${tc} task${tc === 1 ? "" : "s"})`
                           : "Delete release"
                       }
-                      aria-label={`Delete release ${row.name || r.id}`}
+                      aria-label={`Delete release ${row.name || r.releaseId}`}
                       onClick={() => {
-                        setDeleteTargetId(r.id);
+                        setDeleteTargetId(r.releaseId);
                         setDeleteMoveToId("");
                       }}
                     >
@@ -652,8 +653,8 @@ export function ReleasesEditorDialog({
                         disabled={busy || !dirty || !canSave}
                         tabIndex={dirty ? 0 : -1}
                         aria-hidden={!dirty}
-                        aria-label={`Save release ${row.name || r.id}`}
-                        onClick={() => void saveRow(r.id)}
+                        aria-label={`Save release ${row.name || r.releaseId}`}
+                        onClick={() => void saveRow(r.releaseId)}
                       >
                         <Save className="size-4" aria-hidden />
                       </button>
@@ -771,7 +772,7 @@ export function ReleasesEditorDialog({
                 >
                   <option value="">Clear release (untagged)</option>
                   {otherReleases.map((r) => (
-                    <option key={r.id} value={String(r.id)}>
+                    <option key={r.releaseId} value={String(r.releaseId)}>
                       {r.name}
                     </option>
                   ))}

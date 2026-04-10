@@ -36,7 +36,7 @@ function normalizePrincipal(
 
 function mapListRow(row: ListRow): List {
   return {
-    id: row.id,
+    listId: row.id,
     name: row.name,
     order: row.sort_order,
     color: row.color ?? undefined,

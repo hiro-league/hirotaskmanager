@@ -200,7 +200,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
     if (!trimmed) return;
     patchBoard.mutate(
       {
-        boardId: board.id,
+        boardId: board.boardId,
         name: trimmed,
         emoji,
         description: description.trim(),

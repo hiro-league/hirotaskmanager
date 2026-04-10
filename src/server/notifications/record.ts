@@ -90,7 +90,7 @@ function payloadTask(
 
 export function recordBoardCreated(c: Context, board: Board): void {
   commit(c, {
-    boardId: board.id,
+    boardId: board.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -110,7 +110,7 @@ export function recordBoardTrashed(
   snapshot: Board,
 ): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -122,7 +122,7 @@ export function recordBoardTrashed(
 
 export function recordBoardPatched(c: Context, entry: BoardIndexEntry, saved: Board): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -140,7 +140,7 @@ export function recordBoardTaskGroups(
   saved: Board,
 ): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -156,7 +156,7 @@ export function recordBoardTaskPriorities(
   saved: Board,
 ): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -174,7 +174,7 @@ export function recordListCreated(
 ): void {
   commit(c, {
     boardId: result.boardId,
-    listId: result.list.id,
+    listId: result.list.listId,
     taskId: null,
     entityType: "list",
     actionType: "list.created",
@@ -191,7 +191,7 @@ export function recordListUpdated(
 ): void {
   commit(c, {
     boardId: result.boardId,
-    listId: result.list.id,
+    listId: result.list.listId,
     taskId: null,
     entityType: "list",
     actionType: "list.updated",
@@ -224,10 +224,10 @@ export function recordListMoved(
   board: Board,
   listId: number,
 ): void {
-  const list = board.lists.find((l) => l.id === listId);
+  const list = board.lists.find((l) => l.listId === listId);
   const name = list?.name ?? `List #${listId}`;
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId,
     taskId: null,
     entityType: "list",
@@ -241,7 +241,7 @@ export function recordListMoved(
 
 export function recordListsReordered(c: Context, entry: BoardIndexEntry, board: Board): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "list",
@@ -257,11 +257,11 @@ export function recordTaskCreated(
   board: Board,
   result: TaskWriteResult,
 ): void {
-  const list = board.lists.find((l) => l.id === result.task.listId);
+  const list = board.lists.find((l) => l.listId === result.task.listId);
   commit(c, {
     boardId: result.boardId,
     listId: result.task.listId,
-    taskId: result.task.id,
+    taskId: result.task.taskId,
     entityType: "task",
     actionType: "task.created",
     message: `Task created: ${result.task.title || "Untitled"}`,
@@ -277,7 +277,7 @@ export function recordTaskUpdated(
   result: TaskWriteResult,
 ): void {
   const after = result.task;
-  const list = board.lists.find((l) => l.id === after.listId);
+  const list = board.lists.find((l) => l.listId === after.listId);
   const title = after.title.trim() || "Untitled";
   const db = getDb();
 
@@ -342,7 +342,7 @@ export function recordTaskUpdated(
     commit(c, {
       boardId: result.boardId,
       listId: after.listId,
-      taskId: after.id,
+      taskId: after.taskId,
       entityType: "task",
       actionType: notification.actionType,
       message: notification.message,
@@ -358,7 +358,7 @@ export function recordTaskTrashed(
   taskSnapshot: Task,
   result: TaskDeleteResult,
 ): void {
-  const list = board.lists.find((l) => l.id === taskSnapshot.listId);
+  const list = board.lists.find((l) => l.listId === taskSnapshot.listId);
   commit(c, {
     boardId: result.boardId,
     listId: taskSnapshot.listId,
@@ -376,13 +376,13 @@ export function recordTaskMoved(
   board: Board,
   taskId: number,
 ): void {
-  const task = board.tasks.find((t) => t.id === taskId);
+  const task = board.tasks.find((t) => t.taskId === taskId);
   const list = task
-    ? board.lists.find((l) => l.id === task.listId)
+    ? board.lists.find((l) => l.listId === task.listId)
     : undefined;
   const title = task?.title ?? `Task #${taskId}`;
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: task?.listId ?? null,
     taskId,
     entityType: "task",
@@ -401,10 +401,10 @@ export function recordTasksReordered(
   listId: number,
   status: string,
 ): void {
-  const list = board.lists.find((l) => l.id === listId);
+  const list = board.lists.find((l) => l.listId === listId);
   const listPart = list ? list.name : `List #${listId}`;
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId,
     taskId: null,
     entityType: "task",
@@ -425,7 +425,7 @@ export function recordBoardRestored(
   board: Board,
 ): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -437,7 +437,7 @@ export function recordBoardRestored(
 
 export function recordBoardPurged(c: Context, entry: BoardIndexEntry): void {
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: null,
     taskId: null,
     entityType: "board",
@@ -454,8 +454,8 @@ export function recordListRestored(
   list: List,
 ): void {
   commit(c, {
-    boardId: entry.id,
-    listId: list.id,
+    boardId: entry.boardId,
+    listId: list.listId,
     taskId: null,
     entityType: "list",
     actionType: "list.restored",
@@ -478,8 +478,8 @@ export function recordListPurged(
         listEmoji: listSnapshot.emoji ?? null,
       };
   commit(c, {
-    boardId: entry.id,
-    listId: listSnapshot.id,
+    boardId: entry.boardId,
+    listId: listSnapshot.listId,
     taskId: null,
     entityType: "list",
     actionType: "list.permanently_deleted",
@@ -494,11 +494,11 @@ export function recordTaskRestored(
   board: Board,
   task: Task,
 ): void {
-  const list = board.lists.find((l) => l.id === task.listId);
+  const list = board.lists.find((l) => l.listId === task.listId);
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: task.listId,
-    taskId: task.id,
+    taskId: task.taskId,
     entityType: "task",
     actionType: "task.restored",
     message: `Task restored: ${task.title.trim() || "Untitled"}`,
@@ -512,7 +512,7 @@ export function recordTaskPurged(
   board: Board | null,
   taskSnapshot: Task,
 ): void {
-  const list = board?.lists.find((l) => l.id === taskSnapshot.listId);
+  const list = board?.lists.find((l) => l.listId === taskSnapshot.listId);
   const payload =
     board != null
       ? payloadTask(entry, board, list ?? null, taskSnapshot)
@@ -522,9 +522,9 @@ export function recordTaskPurged(
           taskEmoji: taskSnapshot.emoji ?? null,
         };
   commit(c, {
-    boardId: entry.id,
+    boardId: entry.boardId,
     listId: taskSnapshot.listId,
-    taskId: taskSnapshot.id,
+    taskId: taskSnapshot.taskId,
     entityType: "task",
     actionType: "task.permanently_deleted",
     message: `Task permanently deleted: ${taskSnapshot.title.trim() || "Untitled"}`,

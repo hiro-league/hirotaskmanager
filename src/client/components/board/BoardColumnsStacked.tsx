@@ -76,18 +76,18 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
   }, []);
 
   const listLen = localListIds.length;
-  const prevBoardIdRef = useRef(board.id);
+  const prevBoardIdRef = useRef(board.boardId);
   const [mountedColumnCount, setMountedColumnCount] = useState(() =>
     Math.min(STACKED_COLUMNS_INITIAL_MOUNT, listLen),
   );
 
   // New board: remount budget from scratch (#9B).
   useEffect(() => {
-    if (prevBoardIdRef.current !== board.id) {
-      prevBoardIdRef.current = board.id;
+    if (prevBoardIdRef.current !== board.boardId) {
+      prevBoardIdRef.current = board.boardId;
       setMountedColumnCount(Math.min(STACKED_COLUMNS_INITIAL_MOUNT, listLen));
     }
-  }, [board.id, listLen]);
+  }, [board.boardId, listLen]);
 
   // Fewer lists (delete, etc.): keep mounted index valid.
   useEffect(() => {
@@ -107,7 +107,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
 
   const overlayTask =
     activeTaskId != null
-      ? board.tasks.find((task) => task.id === activeTaskId)
+      ? board.tasks.find((task) => task.taskId === activeTaskId)
       : undefined;
 
   return (
@@ -125,7 +125,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
           <div className="flex w-max min-w-full flex-row items-start gap-5 bg-transparent pb-1">
             <div className="flex flex-row items-start gap-4">
               {localListIds.flatMap((id, index) => {
-                const list = board.lists.find((l) => l.id === id);
+                const list = board.lists.find((l) => l.listId === id);
                 if (!list) return [];
                 const items: ReactNode[] = [];
                 if (index < mountedColumnCount) {
@@ -158,7 +158,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
                   items.push(
                     <AddListSlot
                       key={`add-after-${id}`}
-                      boardId={board.id}
+                      boardId={board.boardId}
                       open
                       insertAfterListId={insertAfterListId}
                       onOpen={setInsertAfterListId}
@@ -171,7 +171,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
               })}
             </div>
             <AddListSlot
-              boardId={board.id}
+              boardId={board.boardId}
               open={addListOpen && insertAfterListId == null}
               insertAfterListId={null}
               onOpen={(anchorListId) => {

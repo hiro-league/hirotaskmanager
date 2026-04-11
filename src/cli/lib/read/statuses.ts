@@ -1,6 +1,5 @@
 import type { Status } from "../../../shared/models";
 import {
-  parsePortOption,
   requireNdjsonWhenQuiet,
   requireNdjsonWhenUsingFields,
   resolveQuietExplicitField,
@@ -20,9 +19,9 @@ import type { CliContext } from "../../types/context";
 /** Global workflow statuses (`GET /statuses`). */
 export async function runStatusesList(
   ctx: CliContext,
-  options: { port?: string; fields?: string },
+  options: { fields?: string },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   const fieldKeys = parseAndValidateFields(options.fields, FIELDS_STATUS);
   requireNdjsonWhenUsingFields(fieldKeys);
   requireNdjsonWhenQuiet();

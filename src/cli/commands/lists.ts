@@ -10,7 +10,7 @@ import {
   handleListsUpdate,
 } from "../handlers/lists";
 import {
-  addPortOption,
+  addClientNameOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
@@ -25,7 +25,7 @@ export function registerListCommands(
     .command("lists")
     .description("List and manage lists (columns) on boards");
 
-  addPortOption(
+  addClientNameOption(
     listsCommand
       .command("list")
       .description("List lists on a board (readBoard policy)")
@@ -39,7 +39,6 @@ export function registerListCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       board: string;
       limit?: string;
       offset?: string;
@@ -48,7 +47,7 @@ export function registerListCommands(
     }) => handleListsList(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     listsCommand
       .command("add")
       .description("Create a list on a board (appended to the end)")
@@ -59,12 +58,12 @@ export function registerListCommands(
     cliAction(
       (
         name: string | undefined,
-        options: { port?: string; board: string; emoji?: string },
+        options: { board: string; emoji?: string },
       ) => handleListsAdd(ctx, name, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     listsCommand
       .command("update")
       .description("Patch fields on a list")
@@ -80,7 +79,6 @@ export function registerListCommands(
       (
         listId: string,
         options: {
-          port?: string;
           board: string;
           name?: string;
           color?: string;
@@ -92,7 +90,7 @@ export function registerListCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       listsCommand
         .command("delete")
@@ -106,12 +104,12 @@ export function registerListCommands(
     cliAction(
       (
         listId: string,
-        options: { port?: string; board: string; yes?: boolean },
+        options: { board: string; yes?: boolean },
       ) => handleListsDelete(ctx, listId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       listsCommand
         .command("restore")
@@ -119,12 +117,12 @@ export function registerListCommands(
         .argument("<list-id>", "Numeric list id (see: hirotm trash list lists)"),
     ),
   ).action(
-    cliAction((listId: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((listId: string, options: { yes?: boolean }) =>
       handleListsRestore(ctx, listId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       listsCommand
         .command("purge")
@@ -132,12 +130,12 @@ export function registerListCommands(
         .argument("<list-id>", "Numeric list id"),
     ),
   ).action(
-    cliAction((listId: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((listId: string, options: { yes?: boolean }) =>
       handleListsPurge(ctx, listId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     listsCommand
       .command("move")
       .description("Move a list with server-owned relative placement")
@@ -152,7 +150,6 @@ export function registerListCommands(
       (
         listId: string,
         options: {
-          port?: string;
           board: string;
           before?: string;
           after?: string;

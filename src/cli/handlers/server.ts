@@ -1,4 +1,3 @@
-import { parsePortOption } from "../lib/command-helpers";
 import type { CliContext } from "./context";
 
 export async function handleServerStart(
@@ -6,10 +5,9 @@ export async function handleServerStart(
   options: {
     background?: boolean;
     dataDir?: string;
-    port?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   const dataDir = ctx.resolveDataDir({ dataDir: options.dataDir });
 
   if (options.background) {
@@ -22,20 +20,14 @@ export async function handleServerStart(
   await ctx.startServer({ dataDir, port }, false);
 }
 
-export async function handleServerStatus(
-  ctx: CliContext,
-  options: { port?: string },
-): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+export async function handleServerStatus(ctx: CliContext): Promise<void> {
+  const port = ctx.resolvePort();
   const status = await ctx.readServerStatus({ port });
   ctx.printJson(status);
 }
 
-export async function handleServerStop(
-  ctx: CliContext,
-  options: { port?: string },
-): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+export async function handleServerStop(ctx: CliContext): Promise<void> {
+  const port = ctx.resolvePort();
   const status = await ctx.stopServer({ port });
   ctx.printJson(status);
 }

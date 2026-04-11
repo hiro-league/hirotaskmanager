@@ -23,7 +23,6 @@ import { canPromptInteractively } from "../lib/tty";
 
 interface LauncherOptions {
   setup?: boolean;
-  port?: string;
   dataDir?: string;
   browser?: string;
   profile?: string;
@@ -195,7 +194,6 @@ export function createHirotaskmanagerProgram(): Command {
     .name("hirotaskmanager")
     .description("Launch the local TaskManager app")
     .option("--setup", "Run or rerun launcher setup")
-    .option("-p, --port <port>", "Port for the local TaskManager app")
     .option("--data-dir <path>", "Override the task data directory")
     .option("--profile <name>", "Launcher profile name (default: default)")
     .option(
@@ -204,7 +202,6 @@ export function createHirotaskmanagerProgram(): Command {
     )
     .action(async (options: LauncherOptions) => {
       try {
-        const overridePort = parsePortOption(options.port);
         const overrideDataDir = options.dataDir?.trim()
           ? path.resolve(options.dataDir.trim())
           : undefined;
@@ -220,16 +217,13 @@ export function createHirotaskmanagerProgram(): Command {
         const launcherConfig = shouldRunSetup
           ? await runLauncherSetup({
               profile: selectedProfile,
-              port: overridePort,
               dataDir: overrideDataDir,
               openBrowser: overrideOpenBrowser,
             })
           : readConfigFile({ profile: selectedProfile, kind: "installed" });
 
         const port =
-          overridePort ??
-          launcherConfig.port ??
-          CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
+          launcherConfig.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
         const dataDir = path.resolve(
           overrideDataDir ??
             launcherConfig.data_dir ??

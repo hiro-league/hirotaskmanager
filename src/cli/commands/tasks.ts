@@ -11,7 +11,7 @@ import {
   handleTasksUpdate,
 } from "../handlers/tasks";
 import {
-  addPortOption,
+  addClientNameOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
@@ -27,7 +27,7 @@ export function registerTaskCommands(
     .command("tasks")
     .description("List, create, and update tasks on boards");
 
-  addPortOption(
+  addClientNameOption(
     tasksCommand
       .command("list")
       .description("List filtered tasks for one board")
@@ -76,7 +76,6 @@ export function registerTaskCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       board: string;
       list?: string;
       group?: string[];
@@ -93,7 +92,6 @@ export function registerTaskCommands(
       fields?: string;
     }) =>
       handleBoardsTasks(ctx, options.board, {
-        port: options.port,
         list: options.list,
         group: options.group,
         priority: options.priority,
@@ -110,7 +108,7 @@ export function registerTaskCommands(
       })),
   );
 
-  addPortOption(
+  addClientNameOption(
     tasksCommand
       .command("add")
       .description("Create a task")
@@ -138,7 +136,6 @@ export function registerTaskCommands(
       .option("--body-stdin", "Read body from stdin until EOF"),
   ).action(
     cliAction((options: {
-      port?: string;
       board: string;
       list: string;
       group: string;
@@ -155,7 +152,7 @@ export function registerTaskCommands(
     }) => handleTasksAdd(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     tasksCommand
       .command("update")
       .description("Patch fields on a task")
@@ -189,7 +186,6 @@ export function registerTaskCommands(
       (
         taskId: string,
         options: {
-          port?: string;
           board: string;
           title?: string;
           body?: string;
@@ -210,7 +206,7 @@ export function registerTaskCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       tasksCommand
         .command("delete")
@@ -224,12 +220,12 @@ export function registerTaskCommands(
     cliAction(
       (
         taskId: string,
-        options: { port?: string; board: string; yes?: boolean },
+        options: { board: string; yes?: boolean },
       ) => handleTasksDelete(ctx, taskId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       tasksCommand
         .command("restore")
@@ -237,12 +233,12 @@ export function registerTaskCommands(
         .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
     ),
   ).action(
-    cliAction((taskId: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((taskId: string, options: { yes?: boolean }) =>
       handleTasksRestore(ctx, taskId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       tasksCommand
         .command("purge")
@@ -250,12 +246,12 @@ export function registerTaskCommands(
         .argument("<task-id>", "Numeric task id"),
     ),
   ).action(
-    cliAction((taskId: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((taskId: string, options: { yes?: boolean }) =>
       handleTasksPurge(ctx, taskId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     tasksCommand
       .command("move")
       .description("Move a task with server-owned relative placement")
@@ -281,7 +277,6 @@ export function registerTaskCommands(
       (
         taskId: string,
         options: {
-          port?: string;
           board: string;
           toList: string;
           toStatus?: string;

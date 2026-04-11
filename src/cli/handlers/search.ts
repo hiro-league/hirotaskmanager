@@ -5,7 +5,6 @@ export async function handleSearch(
   ctx: CliContext,
   queryParts: string[],
   options: {
-    port?: string;
     board?: string;
     limit?: string;
     offset?: string;

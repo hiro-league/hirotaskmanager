@@ -2,7 +2,7 @@ import { Command } from "commander";
 import type { CliContext } from "../types/context";
 import { handleStatusesList } from "../handlers/statuses";
 import {
-  addPortOption,
+  addClientNameOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
 } from "../lib/command-helpers";
@@ -15,13 +15,13 @@ export function registerStatusCommands(
     .command("statuses")
     .description("Inspect workflow statuses");
 
-  addPortOption(
+  addClientNameOption(
     statusesCommand
       .command("list")
       .description("List all statuses")
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    cliAction((options: { port?: string; fields?: string }) =>
+    cliAction((options: { fields?: string }) =>
       handleStatusesList(ctx, options),
     ),
   );

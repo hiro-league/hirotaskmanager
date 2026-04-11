@@ -163,7 +163,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     args: string[],
   ): Promise<{ code: number; stdout: string; stderr: string }> {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, ...args, "-p", String(port)],
+      cmd: ["bun", "run", hirotmEntry, ...args],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -171,6 +171,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         ...process.env,
         HOME: rootDir,
         TASKMANAGER_PROFILE: "default",
+        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -182,15 +183,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
   test("boards list returns NDJSON (empty DB → no stdout lines) via real GET /api/boards", async () => {
     const proc = Bun.spawn({
-      cmd: [
-        "bun",
-        "run",
-        hirotmEntry,
-        "boards",
-        "list",
-        "-p",
-        String(port),
-      ],
+      cmd: ["bun", "run", hirotmEntry, "boards", "list"],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -198,6 +191,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         ...process.env,
         HOME: rootDir,
         TASKMANAGER_PROFILE: "default",
+        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -213,7 +207,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
   test("statuses list returns seeded workflow rows", async () => {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, "statuses", "list", "-p", String(port)],
+      cmd: ["bun", "run", hirotmEntry, "statuses", "list"],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -221,6 +215,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         ...process.env,
         HOME: rootDir,
         TASKMANAGER_PROFILE: "default",
+        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -574,15 +569,7 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
     process.env.HOME = rootDir;
     try {
       const proc = Bun.spawn({
-        cmd: [
-          "bun",
-          "run",
-          hirotmEntry,
-          "boards",
-          "list",
-          "-p",
-          String(deadPort),
-        ],
+        cmd: ["bun", "run", hirotmEntry, "boards", "list"],
         cwd: repoRoot,
         stdout: "pipe",
         stderr: "pipe",
@@ -590,6 +577,7 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
           ...process.env,
           HOME: rootDir,
           TASKMANAGER_PROFILE: "default",
+          TASKMANAGER_PORT: String(deadPort),
         },
       });
       const stderr = await readSubprocessStream(proc.stderr);

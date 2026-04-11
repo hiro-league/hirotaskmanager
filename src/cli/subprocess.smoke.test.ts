@@ -60,7 +60,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm(["boards", "list", "-p", String(port)]);
+      const proc = spawnHirotm(["boards", "list"], { TASKMANAGER_PORT: String(port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -108,14 +108,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm([
-        "boards",
-        "list",
-        "--format",
-        "human",
-        "-p",
-        String(port),
-      ]);
+      const proc = spawnHirotm(
+        ["boards", "list", "--format", "human"],
+        { TASKMANAGER_PORT: String(port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -164,13 +160,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm([
-        "--quiet",
-        "boards",
-        "list",
-        "-p",
-        String(port),
-      ]);
+      const proc = spawnHirotm(
+        ["--quiet", "boards", "list"],
+        { TASKMANAGER_PORT: String(port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -194,15 +187,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "--quiet",
-        "--format",
-        "human",
-        "boards",
-        "list",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["--quiet", "--format", "human", "boards", "list"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -220,7 +208,9 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
   });
 
   test("boards list with no server → exit 6 and stderr JSON contract", async () => {
-    const proc = spawnHirotm(["boards", "list", "-p", "59123"]);
+    const proc = spawnHirotm(["boards", "list"], {
+      TASKMANAGER_PORT: "59123",
+    });
     const [stdout, stderr] = await Promise.all([
       readSubprocessStream(proc.stdout),
       readSubprocessStream(proc.stderr),
@@ -264,7 +254,9 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
   });
 
   test("handler validation: empty query → exit 2 and stderr JSON (no server)", async () => {
-    const proc = spawnHirotm(["query", "search", "-p", "59998", ""]);
+    const proc = spawnHirotm(["query", "search", ""], {
+      TASKMANAGER_PORT: "59998",
+    });
     const [stdout, stderr] = await Promise.all([
       readSubprocessStream(proc.stdout),
       readSubprocessStream(proc.stderr),
@@ -301,13 +293,9 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "boards",
-        "delete",
-        "x",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(["boards", "delete", "x"], {
+        TASKMANAGER_PORT: String(server.port),
+      });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -355,14 +343,9 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "boards",
-        "delete",
-        "x",
-        "--yes",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(["boards", "delete", "x", "--yes"], {
+        TASKMANAGER_PORT: String(server.port),
+      });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -399,7 +382,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(["boards", "list", "-p", String(server.port)]);
+      const proc = spawnHirotm(["boards", "list"], { TASKMANAGER_PORT: String(server.port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -438,7 +421,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(["boards", "list", "-p", String(server.port)]);
+      const proc = spawnHirotm(["boards", "list"], { TASKMANAGER_PORT: String(server.port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -473,7 +456,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(["boards", "list", "-p", String(server.port)]);
+      const proc = spawnHirotm(["boards", "list"], { TASKMANAGER_PORT: String(server.port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -508,7 +491,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(["boards", "list", "-p", String(server.port)]);
+      const proc = spawnHirotm(["boards", "list"], { TASKMANAGER_PORT: String(server.port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -562,20 +545,21 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "tasks",
-        "add",
-        "--board",
-        "b",
-        "--list",
-        "1",
-        "--group",
-        "1",
-        "--title",
-        "Hello",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        [
+          "tasks",
+          "add",
+          "--board",
+          "b",
+          "--list",
+          "1",
+          "--group",
+          "1",
+          "--title",
+          "Hello",
+        ],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -620,15 +604,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "lists",
-        "add",
-        "--board",
-        "b",
-        "Backlog",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["lists", "add", "--board", "b", "Backlog"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -677,14 +656,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "releases",
-        "list",
-        "--board",
-        "b",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["releases", "list", "--board", "b"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -723,7 +698,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(["statuses", "list", "-p", String(server.port)]);
+      const proc = spawnHirotm(["statuses", "list"], { TASKMANAGER_PORT: String(server.port) });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -775,15 +750,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "query",
-        "search",
-        "test",
-        "--format",
-        "human",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["query", "search", "test", "--format", "human"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -838,14 +808,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "tasks",
-        "list",
-        "--board",
-        "b",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["tasks", "list", "--board", "b"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -893,14 +859,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "boards",
-        "list",
-        "--fields",
-        "boardId",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["boards", "list", "--fields", "boardId"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -945,14 +907,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "--client-name",
-        "Agent",
-        "boards",
-        "list",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["--client-name", "Agent", "boards", "list"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -991,14 +949,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm([
-        "boards",
-        "list",
-        "--format",
-        "human",
-        "-p",
-        String(server.port),
-      ]);
+      const proc = spawnHirotm(
+        ["boards", "list", "--format", "human"],
+        { TASKMANAGER_PORT: String(server.port) },
+      );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),

@@ -8,7 +8,7 @@ import {
   handleReleasesUpdate,
 } from "../handlers/releases";
 import {
-  addPortOption,
+  addClientNameOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
@@ -25,7 +25,7 @@ export function registerReleaseCommands(
       "List and manage board releases (writes require manageStructure on the board)",
     );
 
-  addPortOption(
+  addClientNameOption(
     releasesCommand
       .command("list")
       .description("List releases for a board")
@@ -39,7 +39,6 @@ export function registerReleaseCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       board: string;
       limit?: string;
       offset?: string;
@@ -48,7 +47,7 @@ export function registerReleaseCommands(
     }) => handleReleasesList(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     releasesCommand
       .command("show")
       .description("Show one release by id")
@@ -59,12 +58,12 @@ export function registerReleaseCommands(
     cliAction(
       (
         releaseId: string,
-        options: { port?: string; board: string; fields?: string },
+        options: { board: string; fields?: string },
       ) => handleReleasesShow(ctx, releaseId, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     releasesCommand
       .command("add")
       .description("Create a release on a board")
@@ -76,7 +75,6 @@ export function registerReleaseCommands(
       .option("--clear-release-date", "Clear release date"),
   ).action(
     cliAction((options: {
-      port?: string;
       board: string;
       name: string;
       color?: string;
@@ -86,7 +84,7 @@ export function registerReleaseCommands(
     }) => handleReleasesAdd(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     releasesCommand
       .command("update")
       .description("Patch a release")
@@ -102,7 +100,6 @@ export function registerReleaseCommands(
       (
         releaseId: string,
         options: {
-          port?: string;
           board: string;
           name?: string;
           color?: string;
@@ -114,7 +111,7 @@ export function registerReleaseCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       releasesCommand
         .command("delete")
@@ -133,7 +130,6 @@ export function registerReleaseCommands(
       (
         releaseId: string,
         options: {
-          port?: string;
           board: string;
           moveTasksTo?: string;
           yes?: boolean;

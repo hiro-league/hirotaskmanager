@@ -4,7 +4,7 @@ This document defines the **contract** for process exit codes and structured err
 
 **Related:** `docs/hirotm-vs-building-cli-for-agents-review.md`, `AGENTS.md`.
 
-**Operator / agent catalog (no repo paths):** Mintlify **Task Manager → Errors & exit codes** (`hiro-docs/mintdocs/task-manager/cli/hirotm-error-codes.mdx`), route `/task-manager/cli/hirotm-error-codes`.
+**Operator / agent catalog (no repo paths):** Mintlify **Task Manager → Errors & exit codes** (`hiro-docs/mintdocs/task-manager/cli/error-codes.mdx`), route `/task-manager/cli/error-codes`.
 
 ---
 

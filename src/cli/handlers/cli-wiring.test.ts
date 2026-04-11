@@ -1,9 +1,8 @@
 /**
  * Thin handlers delegate to writeCommands/trashCommands with resolved port.
- * Ensures `parsePortOption` + `resolvePort` wiring matches real CLI usage.
+ * Ensures `resolvePort` wiring matches real CLI usage.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ConfigOverrides } from "../lib/config";
 import { createTestCliRuntime } from "../lib/runtime";
 import { captureStdout } from "../lib/testHelpers";
 import { createDefaultCliContext } from "./context";
@@ -18,12 +17,11 @@ function reqUrl(input: RequestInfo | URL): string {
   return typeof input === "string" ? input : (input as Request).url;
 }
 
-/** `resolvePort` must honor `-p` / `--port` like createDefaultCliContext. */
+/** Deterministic port for fetch URL assertions (no CLI `--port`; profile/env/config only). */
 function wiringContext(): CliContext {
   return {
     ...createDefaultCliContext(),
-    resolvePort: (o?: ConfigOverrides) =>
-      typeof o?.port === "number" ? o.port : 31999,
+    resolvePort: () => 31999,
     getRuntime: () => createTestCliRuntime({ port: 31999 }),
   };
 }
@@ -44,7 +42,7 @@ describe("CLI handler → writeCommands wiring", () => {
     globalThis.fetch = origFetch;
   });
 
-  test("handleListsAdd uses port from options", async () => {
+  test("handleListsAdd uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -61,13 +59,12 @@ describe("CLI handler → writeCommands wiring", () => {
     await captureStdout(() =>
       handleListsAdd(wiringContext(), "L", {
         board: "wb",
-        port: "22301",
       }),
     );
-    expect(sawPort).toBe("22301");
+    expect(sawPort).toBe("31999");
   });
 
-  test("handleListsList uses port from options", async () => {
+  test("handleListsList uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -84,13 +81,12 @@ describe("CLI handler → writeCommands wiring", () => {
     await captureStdout(() =>
       handleListsList(wiringContext(), {
         board: "wb",
-        port: "22306",
       }),
     );
-    expect(sawPort).toBe("22306");
+    expect(sawPort).toBe("31999");
   });
 
-  test("handleTasksAdd uses port from options", async () => {
+  test("handleTasksAdd uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -121,13 +117,12 @@ describe("CLI handler → writeCommands wiring", () => {
         list: "1",
         group: "1",
         title: "T",
-        port: "22302",
       }),
     );
-    expect(sawPort).toBe("22302");
+    expect(sawPort).toBe("31999");
   });
 
-  test("handleReleasesAdd uses port from options", async () => {
+  test("handleReleasesAdd uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -149,13 +144,12 @@ describe("CLI handler → writeCommands wiring", () => {
       handleReleasesAdd(wiringContext(), {
         board: "rb",
         name: "R",
-        port: "22303",
       }),
     );
-    expect(sawPort).toBe("22303");
+    expect(sawPort).toBe("31999");
   });
 
-  test("handleBoardsUpdate uses port from options", async () => {
+  test("handleBoardsUpdate uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -176,13 +170,12 @@ describe("CLI handler → writeCommands wiring", () => {
     await captureStdout(() =>
       handleBoardsUpdate(wiringContext(), "bu", {
         name: "BU",
-        port: "22304",
       }),
     );
-    expect(sawPort).toBe("22304");
+    expect(sawPort).toBe("31999");
   });
 
-  test("handleTrashLists uses port from options", async () => {
+  test("handleTrashLists uses resolved port from context", async () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
@@ -200,8 +193,8 @@ describe("CLI handler → writeCommands wiring", () => {
       );
     });
     await captureStdout(() =>
-      handleTrashLists(wiringContext(), { port: "22305" }),
+      handleTrashLists(wiringContext(), {}),
     );
-    expect(sawPort).toBe("22305");
+    expect(sawPort).toBe("31999");
   });
 });

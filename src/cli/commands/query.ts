@@ -2,7 +2,7 @@ import { Command } from "commander";
 import type { CliContext } from "../types/context";
 import { handleSearch } from "../handlers/search";
 import {
-  addPortOption,
+  addClientNameOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
 } from "../lib/command-helpers";
@@ -16,7 +16,7 @@ export function registerQueryCommands(
     .command("query")
     .description("Read-only queries across boards (search, etc.)");
 
-  addPortOption(
+  addClientNameOption(
     query
       .command("search")
       .description(
@@ -43,7 +43,6 @@ export function registerQueryCommands(
       (
         queryParts: string[],
         options: {
-          port?: string;
           board?: string;
           limit?: string;
           offset?: string;

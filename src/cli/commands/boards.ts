@@ -12,7 +12,7 @@ import {
   handleBoardsUpdate,
 } from "../handlers/boards";
 import {
-  addPortOption,
+  addClientNameOption,
   addYesOption,
   CLI_BOARD_DESCRIBE_ENTITIES_DESC,
   CLI_FIELDS_OPTION_DESC,
@@ -28,7 +28,7 @@ export function registerBoardCommands(
     .command("boards")
     .description("Inspect TaskManager boards");
 
-  addPortOption(
+  addClientNameOption(
     boardsCommand
       .command("list")
       .description(
@@ -46,7 +46,6 @@ export function registerBoardCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
@@ -54,7 +53,7 @@ export function registerBoardCommands(
     }) => handleBoardsList(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     boardsCommand
       .command("describe")
       .description(
@@ -66,12 +65,12 @@ export function registerBoardCommands(
     cliAction(
       (
         idOrSlug: string,
-        options: { port?: string; entities?: string },
+        options: { entities?: string },
       ) => handleBoardsDescribe(ctx, idOrSlug, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     boardsCommand
       .command("add")
       .description("Create a board")
@@ -85,7 +84,6 @@ export function registerBoardCommands(
       (
         name: string | undefined,
         options: {
-          port?: string;
           emoji?: string;
           description?: string;
           descriptionFile?: string;
@@ -95,7 +93,7 @@ export function registerBoardCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     boardsCommand
       .command("update")
       .description("Patch board metadata")
@@ -117,7 +115,6 @@ export function registerBoardCommands(
       (
         idOrSlug: string,
         options: {
-          port?: string;
           name?: string;
           emoji?: string;
           clearEmoji?: boolean;
@@ -132,7 +129,7 @@ export function registerBoardCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       boardsCommand
         .command("delete")
@@ -142,12 +139,12 @@ export function registerBoardCommands(
         .argument("<id-or-slug>", "Board id or slug"),
     ),
   ).action(
-    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((idOrSlug: string, options: { yes?: boolean }) =>
       handleBoardsDelete(ctx, idOrSlug, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       boardsCommand
         .command("restore")
@@ -158,12 +155,12 @@ export function registerBoardCommands(
         ),
     ),
   ).action(
-    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((idOrSlug: string, options: { yes?: boolean }) =>
       handleBoardsRestore(ctx, idOrSlug, options),
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       boardsCommand
         .command("purge")
@@ -174,7 +171,7 @@ export function registerBoardCommands(
         ),
     ),
   ).action(
-    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+    cliAction((idOrSlug: string, options: { yes?: boolean }) =>
       handleBoardsPurge(ctx, idOrSlug, options),
     ),
   );
@@ -183,7 +180,7 @@ export function registerBoardCommands(
     .command("configure")
     .description("Replace-style board structure from JSON");
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       configure
         .command("groups")
@@ -203,7 +200,6 @@ export function registerBoardCommands(
       (
         idOrSlug: string,
         options: {
-          port?: string;
           json?: string;
           file?: string;
           stdin?: boolean;
@@ -213,7 +209,7 @@ export function registerBoardCommands(
     ),
   );
 
-  addPortOption(
+  addClientNameOption(
     addYesOption(
       configure
         .command("priorities")
@@ -228,7 +224,6 @@ export function registerBoardCommands(
       (
         idOrSlug: string,
         options: {
-          port?: string;
           json?: string;
           file?: string;
           stdin?: boolean;

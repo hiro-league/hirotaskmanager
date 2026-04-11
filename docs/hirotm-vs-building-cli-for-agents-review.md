@@ -102,7 +102,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** When the API can expose **cursor** (or equivalent) in addition to offset paging, add **`--cursor`** (or align with API), and document it in subcommand help and Mint (bible § Context window).
 
-**Mint (Task Manager → CLI):** When cursor or response shape changes, update [hirotm CLI](/task-manager/cli/hirotm-commands) (**Paginated list responses**), plus [hirotm tasks](/task-manager/cli/hirotm-tasks), [Search](/task-manager/cli/hirotm-search), [hirotm boards](/task-manager/cli/hirotm-boards), [hirotm trash](/task-manager/cli/hirotm-trash), [hirotm releases](/task-manager/cli/hirotm-releases), and [CLI overview](/task-manager/cli/cli-overview) as needed.
+**Mint (Task Manager → CLI):** When cursor or response shape changes, update [hirotm CLI](/task-manager/cli/cli-commands) (**Paginated list responses**), plus [hirotm tasks](/task-manager/cli/tasks), [Search](/task-manager/cli/search), [hirotm boards](/task-manager/cli/boards), [hirotm trash](/task-manager/cli/trash), [hirotm releases](/task-manager/cli/releases), and [CLI overview](/task-manager/cli/cli-overview) as needed.
 
 ---
 
@@ -115,7 +115,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** ~~Support `--fields id,title,listId`~~ **Shipped** in `hirotm` (`src/cli/lib/jsonFieldProjection.ts`). Optional follow-up: slimmer **default** list payloads (product decision) or API-level projection.
 
-**Mint (Task Manager → CLI):** Section **Field projection** on `hiro-docs/mintdocs/task-manager/cli/hirotm-commands.mdx` (published as `/task-manager/cli/hirotm-commands#field-projection`), with cross-links from `cli-overview.mdx`, `hirotm-boards.mdx`, `hirotm-tasks.mdx`, `hirotm-releases.mdx`, `hirotm-search.mdx`, `hirotm-trash.mdx`, and `hirotm-statuses.mdx`.
+**Mint (Task Manager → CLI):** Section **Field projection** on `hiro-docs/mintdocs/task-manager/cli/cli-commands.mdx` (published as `/task-manager/cli/cli-commands#field-projection`), with cross-links from `cli-overview.mdx`, `boards.mdx`, `tasks.mdx`, `releases.mdx`, `search.mdx`, `trash.mdx`, and `statuses.mdx`.
 
 ---
 
@@ -126,7 +126,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** e.g. `hirotm tasks list ... --ndjson` emitting one JSON object per line for incremental consumption (bible §1 and Context window).
 
-**Mint (Task Manager → CLI):** Add **`--ndjson`** behavior and examples to [hirotm CLI](/task-manager/cli/hirotm-commands), [hirotm tasks](/task-manager/cli/hirotm-tasks), and any other affected command pages; mention stdout contract vs JSON array in [CLI overview](/task-manager/cli/cli-overview).
+**Mint (Task Manager → CLI):** Add **`--ndjson`** behavior and examples to [hirotm CLI](/task-manager/cli/cli-commands), [hirotm tasks](/task-manager/cli/tasks), and any other affected command pages; mention stdout contract vs JSON array in [CLI overview](/task-manager/cli/cli-overview).
 
 ---
 
@@ -139,7 +139,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** ~~For commands that return arrays of boards/tasks, support `--quiet` emitting one id or `slug` per line (bible §5).~~ **Shipped** (`program.ts`, `cliFormat.ts`, `output.ts`, list handlers).
 
-**Mint (Task Manager → CLI):** [hirotm CLI](/task-manager/cli/hirotm-commands) (global options + pipe-friendly quiet); [CLI overview](/task-manager/cli/cli-overview).
+**Mint (Task Manager → CLI):** [hirotm CLI](/task-manager/cli/cli-commands) (global options + pipe-friendly quiet); [CLI overview](/task-manager/cli/cli-overview).
 
 ---
 
@@ -152,7 +152,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** Where uniqueness matters, either idempotent commands or stable **5** exit + `code: "conflict"` in stderr JSON.
 
-**Mint (Task Manager → CLI):** Update [Errors & exit codes](/task-manager/cli/hirotm-error-codes), [hirotm CLI](/task-manager/cli/hirotm-commands), and mutation pages ([hirotm boards](/task-manager/cli/hirotm-boards), [hirotm lists](/task-manager/cli/hirotm-lists), [hirotm tasks](/task-manager/cli/hirotm-tasks), [hirotm releases](/task-manager/cli/hirotm-releases)) for new flags and conflict behavior.
+**Mint (Task Manager → CLI):** Update [Errors & exit codes](/task-manager/cli/error-codes), [hirotm CLI](/task-manager/cli/cli-commands), and mutation pages ([hirotm boards](/task-manager/cli/boards), [hirotm lists](/task-manager/cli/lists), [hirotm tasks](/task-manager/cli/tasks), [hirotm releases](/task-manager/cli/releases)) for new flags and conflict behavior.
 
 ---
 
@@ -165,7 +165,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** If any destructive path can prompt, enforce non-TTY behavior per bible §6. Add structured `--dry-run` only where the server can preview changes.
 
-**Mint (Task Manager → CLI):** Document behavior in [CLI overview](/task-manager/cli/cli-overview), [hirotm CLI](/task-manager/cli/hirotm-commands), [Server](/task-manager/cli/hirotm-server) if launcher-related, and each destructive subcommand page (boards/lists/tasks/releases **delete** / **purge**).
+**Mint (Task Manager → CLI):** Document behavior in [CLI overview](/task-manager/cli/cli-overview), [hirotm CLI](/task-manager/cli/cli-commands), [Server](/task-manager/cli/server) if launcher-related, and each destructive subcommand page (boards/lists/tasks/releases **delete** / **purge**).
 
 ---
 
@@ -178,7 +178,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** For common failures (not found, bad board slug, missing API key), always echo the offending input and a short `suggestion` string (bible §7).
 
-**Mint (Task Manager → CLI):** Extend [Errors & exit codes](/task-manager/cli/hirotm-error-codes) with `suggestion` and echoed-field examples; add a short note in [CLI overview](/task-manager/cli/cli-overview) stderr contract.
+**Mint (Task Manager → CLI):** Extend [Errors & exit codes](/task-manager/cli/error-codes) with `suggestion` and echoed-field examples; add a short note in [CLI overview](/task-manager/cli/cli-overview) stderr contract.
 
 ---
 
@@ -191,7 +191,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Recommendation:** In top-level `hirotm --help` or `AGENTS.md`, state explicitly: “Read commands print JSON to stdout by default.” Add 1–2 copy-paste examples per high-traffic subcommand (`tasks list`, `query search`, writes with `--client-name`).
 
-**Mint (Task Manager → CLI):** Strengthen [CLI overview](/task-manager/cli/cli-overview) and [hirotm CLI](/task-manager/cli/hirotm-commands) with an explicit **JSON default** callout; add copy-paste blocks to [hirotm tasks](/task-manager/cli/hirotm-tasks), [Search](/task-manager/cli/hirotm-search), and write-heavy pages as help text catches up.
+**Mint (Task Manager → CLI):** Strengthen [CLI overview](/task-manager/cli/cli-overview) and [hirotm CLI](/task-manager/cli/cli-commands) with an explicit **JSON default** callout; add copy-paste blocks to [hirotm tasks](/task-manager/cli/tasks), [Search](/task-manager/cli/search), and write-heavy pages as help text catches up.
 
 ---
 
@@ -202,9 +202,9 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 **Current state:** Global **`--format human`** prints fixed-width tables for list reads and **`query search`**; default **`--format ndjson`** is for agents. There is no per-command **`query search --format`** or **`--view`**.
 
-**Recommendation:** Keep Mint [hirotm CLI](/task-manager/cli/hirotm-commands) **Response format** as the single explanation; per-command pages point to it. **`--fields`** requires **`ndjson`** (documented on **`hirotm-commands`** and search page).
+**Recommendation:** Keep Mint [hirotm CLI](/task-manager/cli/cli-commands) **Response format** as the single explanation; per-command pages point to it. **`--fields`** requires **`ndjson`** (documented on **`cli-commands`** and search page).
 
-**Mint (Task Manager → CLI):** [Search](/task-manager/cli/hirotm-search) and [hirotm CLI](/task-manager/cli/hirotm-commands) — done (global **`--format`**, no search-local format flag).
+**Mint (Task Manager → CLI):** [Search](/task-manager/cli/search) and [hirotm CLI](/task-manager/cli/cli-commands) — done (global **`--format`**, no search-local format flag).
 
 ---
 
@@ -214,7 +214,7 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 |------|--------|------------|------------|--------|
 | 1 | Exit-code contract + HTTP mapping | High | — | **Done** |
 | 2 | Error JSON `code` / `retryable` | High | 1 | **Done** (`CLI_ERR` + all local throws) |
-| 3 | Document codes + error shape | High | 1, 2 | **Done** (`AGENTS.md`, `cli-error-handling.md`, Mint `/task-manager/cli/hirotm-error-codes`) |
+| 3 | Document codes + error shape | High | 1, 2 | **Done** (`AGENTS.md`, `cli-error-handling.md`, Mint `/task-manager/cli/error-codes`) |
 | 4 | Compact JSON default | Medium | (docs 3) | **Done** (default compact; `--pretty`, `AGENTS.md`) |
 | 5 | Pagination / total / explicit fetch-all | High / Medium | API; 1–2 first | Open |
 | 6 | `--fields` / slimmer payloads | Medium–High | API or CLI; 5 | **Done** (CLI projection on list reads; full board via API only) |
@@ -237,4 +237,4 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 ## Mint doc updates for open recommendations
 
-When closing items **5** and **7–13**, update the Task Manager CLI pages in **`hiro-docs/mintdocs/task-manager/cli/`** as described in each section’s **Mint (Task Manager → CLI)** bullet. Done items **1–4**, **6**, and **8** are already reflected in Mint where noted (item **3**: [Errors & exit codes](/task-manager/cli/hirotm-error-codes); item **6**: [Field projection](/task-manager/cli/hirotm-commands#field-projection); item **8**: global **`--quiet`** on [hirotm CLI](/task-manager/cli/hirotm-commands)).
+When closing items **5** and **7–13**, update the Task Manager CLI pages in **`hiro-docs/mintdocs/task-manager/cli/`** as described in each section’s **Mint (Task Manager → CLI)** bullet. Done items **1–4**, **6**, and **8** are already reflected in Mint where noted (item **3**: [Errors & exit codes](/task-manager/cli/error-codes); item **6**: [Field projection](/task-manager/cli/cli-commands#field-projection); item **8**: global **`--quiet`** on [hirotm CLI](/task-manager/cli/cli-commands)).

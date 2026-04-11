@@ -1,6 +1,5 @@
 import type { PaginatedListBody } from "../../../shared/pagination";
 import type { BoardIndexEntry } from "../../../shared/models";
-import { parsePortOption } from "../command-helpers";
 import {
   COLUMNS_BOARDS_LIST,
   QUIET_DEFAULT_BOARD_INDEX,
@@ -13,14 +12,13 @@ import type { CliContext } from "../../types/context";
 export async function runBoardsList(
   ctx: CliContext,
   options: {
-    port?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await executePaginatedListRead(
     {
       kind: "optionalLimit",

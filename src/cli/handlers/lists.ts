@@ -1,4 +1,3 @@
-import { parsePortOption } from "../lib/command-helpers";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runListsPurge, runListsRestore } from "../lib/trashCommands";
 import {
@@ -13,7 +12,6 @@ import type { CliContext } from "./context";
 export async function handleListsList(
   ctx: CliContext,
   options: {
-    port?: string;
     board: string;
     limit?: string;
     offset?: string;
@@ -21,7 +19,7 @@ export async function handleListsList(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runListsList(ctx, {
     port,
     board: options.board,
@@ -35,9 +33,9 @@ export async function handleListsList(
 export async function handleListsAdd(
   ctx: CliContext,
   name: string | undefined,
-  options: { port?: string; board: string; emoji?: string },
+  options: { board: string; emoji?: string },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runListsAdd(ctx, {
     port,
     board: options.board,
@@ -50,7 +48,6 @@ export async function handleListsUpdate(
   ctx: CliContext,
   listId: string,
   options: {
-    port?: string;
     board: string;
     name?: string;
     color?: string;
@@ -59,7 +56,7 @@ export async function handleListsUpdate(
     clearEmoji?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runListsUpdate(ctx, {
     port,
     board: options.board,
@@ -75,9 +72,9 @@ export async function handleListsUpdate(
 export async function handleListsDelete(
   ctx: CliContext,
   listId: string,
-  options: { port?: string; board: string; yes?: boolean },
+  options: { board: string; yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -95,9 +92,9 @@ export async function handleListsDelete(
 export async function handleListsRestore(
   ctx: CliContext,
   listId: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -110,9 +107,9 @@ export async function handleListsRestore(
 export async function handleListsPurge(
   ctx: CliContext,
   listId: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -127,7 +124,6 @@ export async function handleListsMove(
   ctx: CliContext,
   listId: string,
   options: {
-    port?: string;
     board: string;
     before?: string;
     after?: string;
@@ -135,7 +131,7 @@ export async function handleListsMove(
     last?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runListsMove(ctx, {
     port,
     board: options.board,

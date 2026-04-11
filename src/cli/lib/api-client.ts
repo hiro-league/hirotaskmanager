@@ -55,7 +55,6 @@ function buildBaseUrl(overrides: ConfigOverrides = {}): string {
 
 function buildStartCommand(overrides: ConfigOverrides = {}): string {
   const command = ["hirotm", "server", "start", "--background"];
-  const port = resolvePort(overrides);
   const profile = resolveProfileName(overrides);
   const runtime = resolveRuntimeKind(overrides);
 
@@ -63,10 +62,8 @@ function buildStartCommand(overrides: ConfigOverrides = {}): string {
     command.push("--profile", profile);
   }
 
-  // Include the resolved port so agents can recover with a copy/pasteable command.
-  if (port !== resolvePort({ kind: runtime, profile })) {
-    command.push("--port", String(port));
-  }
+  // Port is not a CLI flag; it comes from profile config or TASKMANAGER_PORT. The shell
+  // inherits env when copy-pasting this command, so overrides still apply.
 
   return command.join(" ");
 }

@@ -5,11 +5,7 @@ import {
   handleServerStatus,
   handleServerStop,
 } from "../handlers/server";
-import {
-  addPortOption,
-  addProfileOption,
-  cliAction,
-} from "../lib/command-helpers";
+import { addClientNameOption, addProfileOption, cliAction } from "../lib/command-helpers";
 
 export function registerServerCommands(
   program: Command,
@@ -24,37 +20,29 @@ export function registerServerCommands(
       .command("start")
       .description("Start the local TaskManager server")
       .option("-b, --background", "Run the server in the background")
-      .option("-p, --port <port>", "Port for the local TaskManager API")
       .option("--data-dir <path>", "Override the task data directory"),
   ).action(
     cliAction((options: {
       background?: boolean;
       dataDir?: string;
-      port?: string;
     }) => handleServerStart(ctx, options)),
   );
 
   addProfileOption(
-    addPortOption(
+    addClientNameOption(
       server
         .command("status")
         .description("Show whether the local TaskManager server is running"),
     ),
-  ).action(
-    cliAction((options: { port?: string }) =>
-      handleServerStatus(ctx, options),
-    ),
-  );
+  ).action(cliAction(() => handleServerStatus(ctx)));
 
   addProfileOption(
-    addPortOption(
+    addClientNameOption(
       server
         .command("stop")
         .description(
           "Stop a background server started by hirotm (uses CLI pid file)",
         ),
     ),
-  ).action(
-    cliAction((options: { port?: string }) => handleServerStop(ctx, options)),
-  );
+  ).action(cliAction(() => handleServerStop(ctx)));
 }

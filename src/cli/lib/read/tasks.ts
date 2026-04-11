@@ -1,7 +1,6 @@
 import { RELEASE_FILTER_UNTAGGED } from "../../../shared/boardFilters";
 import type { PaginatedListBody } from "../../../shared/pagination";
 import type { Task } from "../../../shared/models";
-import { parsePortOption } from "../command-helpers";
 import {
   COLUMNS_TASKS_LIST,
   QUIET_DEFAULT_TASK,
@@ -15,7 +14,6 @@ export async function runBoardsTasksList(
   ctx: CliContext,
   idOrSlug: string,
   options: {
-    port?: string;
     list?: string;
     group?: string[];
     priority?: string[];
@@ -31,7 +29,7 @@ export async function runBoardsTasksList(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   const params = new URLSearchParams();
   if (options.list?.trim()) params.set("listId", options.list.trim());
   for (const group of options.group ?? []) {

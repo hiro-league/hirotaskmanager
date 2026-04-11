@@ -64,13 +64,12 @@ export function resolveQuietExplicitField(
   return fieldKeys[0];
 }
 
-export function addPortOption(command: Command): Command {
-  return command
-    .option("-p, --port <port>", "Port for the local TaskManager API")
-    .option(
-      "--client-name <name>",
-      "Human-friendly client label sent with API requests (for notifications)",
-    );
+/** Attach `--client-name` for commands that call the HTTP API (mutations send the label). */
+export function addClientNameOption(command: Command): Command {
+  return command.option(
+    "--client-name <name>",
+    "Human-friendly client label sent with API requests (for notifications)",
+  );
 }
 
 export function addProfileOption(command: Command): Command {

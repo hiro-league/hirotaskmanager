@@ -2,7 +2,7 @@ import {
   parseBoardDescribeEntities,
   type BoardDescribeResponse,
 } from "../../shared/boardDescribe";
-import { parsePortOption, requireNdjsonWhenQuiet } from "../lib/command-helpers";
+import { requireNdjsonWhenQuiet } from "../lib/command-helpers";
 import { getCliQuiet } from "../lib/cliFormat";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runBoardsList } from "../lib/read/boards";
@@ -26,7 +26,6 @@ import type { CliContext } from "./context";
 export async function handleBoardsList(
   ctx: CliContext,
   options: {
-    port?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
@@ -39,9 +38,9 @@ export async function handleBoardsList(
 export async function handleBoardsDescribe(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; entities?: string },
+  options: { entities?: string },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   // Multi-line NDJSON / human tables cannot be collapsed to one identifier per line.
   if (getCliQuiet()) {
     throw new CliError("--quiet is not supported for boards describe", 2, {
@@ -74,7 +73,6 @@ export async function handleBoardsTasks(
   ctx: CliContext,
   idOrSlug: string,
   options: {
-    port?: string;
     list?: string;
     group?: string[];
     priority?: string[];
@@ -97,14 +95,13 @@ export async function handleBoardsAdd(
   ctx: CliContext,
   name: string | undefined,
   options: {
-    port?: string;
     emoji?: string;
     description?: string;
     descriptionFile?: string;
     descriptionStdin?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runBoardsAdd(ctx, {
     port,
     name,
@@ -119,7 +116,6 @@ export async function handleBoardsUpdate(
   ctx: CliContext,
   idOrSlug: string,
   options: {
-    port?: string;
     name?: string;
     emoji?: string;
     clearEmoji?: boolean;
@@ -131,7 +127,7 @@ export async function handleBoardsUpdate(
     clearBoardColor?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runBoardsUpdate(ctx, {
     port,
     board: idOrSlug,
@@ -150,9 +146,9 @@ export async function handleBoardsUpdate(
 export async function handleBoardsDelete(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -166,9 +162,9 @@ export async function handleBoardsDelete(
 export async function handleBoardsRestore(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -181,9 +177,9 @@ export async function handleBoardsRestore(
 export async function handleBoardsPurge(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -198,14 +194,13 @@ export async function handleBoardsGroups(
   ctx: CliContext,
   idOrSlug: string,
   options: {
-    port?: string;
     json?: string;
     file?: string;
     stdin?: boolean;
     yes?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     stdinReservedForPayload: options.stdin === true,
@@ -227,14 +222,13 @@ export async function handleBoardsPriorities(
   ctx: CliContext,
   idOrSlug: string,
   options: {
-    port?: string;
     json?: string;
     file?: string;
     stdin?: boolean;
     yes?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     stdinReservedForPayload: options.stdin === true,

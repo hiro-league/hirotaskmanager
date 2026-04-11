@@ -1,4 +1,3 @@
-import { parsePortOption } from "../lib/command-helpers";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import {
   runReleasesAdd,
@@ -12,7 +11,6 @@ import type { CliContext } from "./context";
 export async function handleReleasesList(
   ctx: CliContext,
   options: {
-    port?: string;
     board: string;
     limit?: string;
     offset?: string;
@@ -20,7 +18,7 @@ export async function handleReleasesList(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runReleasesList(ctx, {
     port,
     board: options.board,
@@ -34,9 +32,9 @@ export async function handleReleasesList(
 export async function handleReleasesShow(
   ctx: CliContext,
   releaseId: string,
-  options: { port?: string; board: string; fields?: string },
+  options: { board: string; fields?: string },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runReleasesShow(ctx, {
     port,
     board: options.board,
@@ -48,7 +46,6 @@ export async function handleReleasesShow(
 export async function handleReleasesAdd(
   ctx: CliContext,
   options: {
-    port?: string;
     board: string;
     name: string;
     color?: string;
@@ -57,7 +54,7 @@ export async function handleReleasesAdd(
     clearReleaseDate?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runReleasesAdd(ctx, {
     port,
     board: options.board,
@@ -73,7 +70,6 @@ export async function handleReleasesUpdate(
   ctx: CliContext,
   releaseId: string,
   options: {
-    port?: string;
     board: string;
     name?: string;
     color?: string;
@@ -82,7 +78,7 @@ export async function handleReleasesUpdate(
     clearReleaseDate?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runReleasesUpdate(ctx, {
     port,
     board: options.board,
@@ -98,9 +94,9 @@ export async function handleReleasesUpdate(
 export async function handleReleasesDelete(
   ctx: CliContext,
   releaseId: string,
-  options: { port?: string; board: string; moveTasksTo?: string; yes?: boolean },
+  options: { board: string; moveTasksTo?: string; yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   const moveLine =
     options.moveTasksTo != null && String(options.moveTasksTo).trim() !== ""
       ? `Tasks on this release will be moved to release id ${options.moveTasksTo} before delete.`

@@ -1,4 +1,3 @@
-import { parsePortOption } from "../lib/command-helpers";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runTasksPurge, runTasksRestore } from "../lib/trashCommands";
 import {
@@ -12,7 +11,6 @@ import type { CliContext } from "./context";
 export async function handleTasksAdd(
   ctx: CliContext,
   options: {
-    port?: string;
     board: string;
     list: string;
     group: string;
@@ -28,7 +26,7 @@ export async function handleTasksAdd(
     bodyStdin?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTasksAdd(ctx, {
     port,
     board: options.board,
@@ -51,7 +49,6 @@ export async function handleTasksUpdate(
   ctx: CliContext,
   taskId: string,
   options: {
-    port?: string;
     board: string;
     title?: string;
     body?: string;
@@ -69,7 +66,7 @@ export async function handleTasksUpdate(
     clearEmoji?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTasksUpdate(ctx, {
     port,
     board: options.board,
@@ -94,9 +91,9 @@ export async function handleTasksUpdate(
 export async function handleTasksDelete(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string; board: string; yes?: boolean },
+  options: { board: string; yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -114,9 +111,9 @@ export async function handleTasksDelete(
 export async function handleTasksRestore(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -129,9 +126,9 @@ export async function handleTasksRestore(
 export async function handleTasksPurge(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string; yes?: boolean },
+  options: { yes?: boolean },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -146,7 +143,6 @@ export async function handleTasksMove(
   ctx: CliContext,
   taskId: string,
   options: {
-    port?: string;
     board: string;
     toList: string;
     toStatus?: string;
@@ -156,7 +152,7 @@ export async function handleTasksMove(
     last?: boolean;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTasksMove(ctx, {
     port,
     board: options.board,

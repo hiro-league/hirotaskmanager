@@ -1,4 +1,3 @@
-import { parsePortOption } from "../lib/command-helpers";
 import {
   runTrashBoards,
   runTrashLists,
@@ -9,14 +8,13 @@ import type { CliContext } from "./context";
 export async function handleTrashBoards(
   ctx: CliContext,
   options: {
-    port?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTrashBoards(ctx, {
     port,
     limit: options.limit,
@@ -29,14 +27,13 @@ export async function handleTrashBoards(
 export async function handleTrashLists(
   ctx: CliContext,
   options: {
-    port?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTrashLists(ctx, {
     port,
     limit: options.limit,
@@ -49,14 +46,13 @@ export async function handleTrashLists(
 export async function handleTrashTasks(
   ctx: CliContext,
   options: {
-    port?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   await runTrashTasks(ctx, {
     port,
     limit: options.limit,

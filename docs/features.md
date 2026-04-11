@@ -25,19 +25,18 @@
   - Customize your View
     - Board Themes, Custom Task Groups, Custom Statuses, Emojis, Multiple Board/Task Views.
 
-- Agentic Workflow
+- Agentic workflow
 
-  Chat about your Tasks
-  Chat to your Coding Agent about your tasks and let it do the heavy lifting.
+  The **web app** is for people: boards, settings, and a clear view of work. The **`hirotm` CLI** is the path for **AI agents** (and scripts) to inspect and manage the same boards, lists, and tasks—**convenience**, **automation**, and **delegation** without a separate copy of your data.
 
-  - Manage your lists and tasks
-    Let your Agent create your tasks and organize them in lists and boards.
-  - Control Agent Access
-    Define exactly what your Agent can see or change.
-  - Cursor IDE, Claude Caude, Github Copilot.
-    works out of the box with any AI Agent that can execute CLI commands.
-  - Web Notifications
-    Stay informed about what your agents are doing on your boards.
+  - Manage boards, lists, and tasks through agents
+    Agents use the CLI to align with how you organize work in the UI.
+  - Control agent access
+    Per-board policy in the web app defines what automation may read or change.
+  - Works with any agent that can run CLI commands
+    Cursor, Claude Code, GitHub Copilot, and similar setups.
+  - Web notifications
+    Stay informed when agents change work you care about.
 
 - Productivity
   - Keyboard Shortcuts
@@ -95,9 +94,9 @@ A Trello-style board for people who ship products—organized on your PC, with a
 
 ### Automation and AI-friendly workflows
 
-- **`hirotm` CLI** talks to the same local HTTP API as the app: list boards, add/update/move tasks, list statuses, and **search** from the terminal or scripts.
-- **Per-board CLI access**—after you sign in in the browser, you grant automation tools only the boards they should touch.
-- **Labeled clients** (e.g. “Cursor Agent”) so changes from tools show up clearly in **activity/notifications**—you can see what the web UI did vs. what an agent did.
+- **`hirotm`** shares the same local service as the app so people and agents work on **one** set of boards, lists, and tasks—inspect, update, and search from the terminal or agent sessions.
+- **Per-board CLI access** is configured in the **browser** after sign-in: you choose what automation may do on each board.
+- **Labeled clients** (e.g. “Cursor Agent”) so activity and notifications reflect **who** changed what—the UI vs. an agent or script.
 
 ---
 
@@ -110,6 +109,6 @@ A Trello-style board for people who ship products—organized on your PC, with a
 | Task detail | Markdown edit + preview |
 | Drag and drop | Short GIF of moving a card |
 | Search | Search UI + results |
-| Agents / CLI | Terminal + notification or “who changed this” |
+| Agents / CLI | Web UI plus terminal or agent—same boards; policy and labels showing who acted |
 
 ---

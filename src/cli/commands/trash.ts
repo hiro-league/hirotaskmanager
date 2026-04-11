@@ -6,7 +6,7 @@ import {
   handleTrashTasks,
 } from "../handlers/trash";
 import {
-  addPortOption,
+  addClientNameOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
 } from "../lib/command-helpers";
@@ -24,7 +24,7 @@ export function registerTrashCommands(
     .command("list")
     .description("List entities currently in Trash");
 
-  addPortOption(
+  addClientNameOption(
     listCommand
       .command("boards")
       .description("List boards in Trash")
@@ -37,7 +37,6 @@ export function registerTrashCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
@@ -45,7 +44,7 @@ export function registerTrashCommands(
     }) => handleTrashBoards(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     listCommand
       .command("lists")
       .description("Lists in Trash (includes board name and canRestore)")
@@ -58,7 +57,6 @@ export function registerTrashCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
@@ -66,7 +64,7 @@ export function registerTrashCommands(
     }) => handleTrashLists(ctx, options)),
   );
 
-  addPortOption(
+  addClientNameOption(
     listCommand
       .command("tasks")
       .description("Tasks in Trash (includes board/list names and canRestore)")
@@ -79,7 +77,6 @@ export function registerTrashCommands(
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     cliAction((options: {
-      port?: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;

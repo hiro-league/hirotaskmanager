@@ -1,6 +1,5 @@
 import type { PaginatedListBody } from "../../../shared/pagination";
 import type { SearchHit } from "../../../shared/models";
-import { parsePortOption } from "../command-helpers";
 import { FIELDS_SEARCH_HIT } from "../jsonFieldProjection";
 import {
   COLUMNS_SEARCH_HITS,
@@ -16,7 +15,6 @@ export async function runSearch(
   ctx: CliContext,
   queryParts: string[],
   options: {
-    port?: string;
     board?: string;
     limit?: string;
     offset?: string;
@@ -25,7 +23,7 @@ export async function runSearch(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  const port = ctx.resolvePort();
   const q = queryParts.join(" ").trim();
   if (!q) {
     throw new CliError("Query required", 2, { code: CLI_ERR.missingRequired });

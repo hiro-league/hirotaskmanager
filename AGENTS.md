@@ -32,7 +32,7 @@ Global options on every command: `--format ndjson|human` (default `ndjson`), `-q
 
 | Command | Synopsis |
 |---------|----------|
-| `server start` | `hirotm server start [--background] [--port <port>] [--data-dir <path>]` |
+| `server start` | `hirotm server start [--background] [--data-dir <path>]` |
 | `server status` | `hirotm server status` |
 | `server stop` | `hirotm server stop` |
 

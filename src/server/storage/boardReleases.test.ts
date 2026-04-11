@@ -3,7 +3,11 @@ import { Database } from "bun:sqlite";
 import { replaceDbForTesting, getDb } from "../db";
 import { runPendingMigrations } from "../migrations/runner";
 import { createBoardWithDefaults, loadBoard, patchBoard } from "./board";
-import { createBoardRelease, deleteBoardRelease } from "./releases";
+import {
+  createBoardRelease,
+  deleteBoardRelease,
+  updateBoardRelease,
+} from "./releases";
 import { createListOnBoard } from "./lists";
 import { createTaskOnBoard, patchTaskOnBoard } from "./tasks";
 
@@ -40,6 +44,33 @@ describe("board releases (phase 1–2)", () => {
     expect(dup).toBeNull();
     const loaded = loadBoard(board.boardId)!;
     expect(loaded.releases.some((r) => r.name === "v1.0")).toBe(true);
+  });
+
+  test("updateBoardRelease: not_found, duplicate_name, success", async () => {
+    const board = await createBoardWithDefaults("R1b", "r1b", null, "", {
+      cliBootstrap: "cli_full",
+    });
+    const r1 = createBoardRelease(board.boardId, { name: "A" })!;
+    const r2 = createBoardRelease(board.boardId, { name: "B" })!;
+
+    expect(
+      updateBoardRelease(board.boardId, 999_999, { name: "X" }),
+    ).toEqual({ ok: false, reason: "not_found" });
+
+    expect(updateBoardRelease(board.boardId, r2.releaseId, { name: "A" })).toEqual({
+      ok: false,
+      reason: "duplicate_name",
+    });
+
+    const ok = updateBoardRelease(board.boardId, r1.releaseId, {
+      name: "A2",
+      color: "#112233",
+    });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.release.name).toBe("A2");
+      expect(ok.release.color).toBe("#112233");
+    }
   });
 
   test("delete release clears tasks or moves to another release", async () => {

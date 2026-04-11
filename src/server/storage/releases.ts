@@ -98,22 +98,30 @@ export type UpdateBoardReleaseInput = {
   releaseDate?: string | null;
 };
 
+/** Route maps: not_found → 404, duplicate_name → 409, invalid → 400. */
+export type UpdateBoardReleaseResult =
+  | { ok: true; release: ReleaseDefinition }
+  | {
+      ok: false;
+      reason: "not_found" | "duplicate_name" | "invalid";
+    };
+
 export function updateBoardRelease(
   boardId: number,
   releaseId: number,
   input: UpdateBoardReleaseInput,
-): ReleaseDefinition | null {
+): UpdateBoardReleaseResult {
   const db = getDb();
   const row = db
     .query(
       "SELECT id, board_id, name, color, release_date, created_at FROM board_release WHERE id = ? AND board_id = ?",
     )
     .get(releaseId, boardId) as Parameters<typeof mapReleaseRow>[0] | null;
-  if (!row) return null;
+  if (!row) return { ok: false, reason: "not_found" };
 
   const nextName =
     input.name !== undefined ? input.name.trim() : row.name;
-  if (!nextName) return null;
+  if (!nextName) return { ok: false, reason: "invalid" };
 
   let nextColor: string | null;
   if (input.color !== undefined) {
@@ -145,15 +153,16 @@ export function updateBoardRelease(
       db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now, boardId]);
     });
   } catch {
-    // Unique `(board_id, name)` — duplicate rename returns null for API 400.
-    return null;
+    // Unique `(board_id, name)` — surface as HTTP 409 from the route (not 400).
+    return { ok: false, reason: "duplicate_name" };
   }
   const out = db
     .query(
       "SELECT id, board_id, name, color, release_date, created_at FROM board_release WHERE id = ?",
     )
     .get(releaseId) as Parameters<typeof mapReleaseRow>[0] | null;
-  return out ? mapReleaseRow(out) : null;
+  if (!out) return { ok: false, reason: "invalid" };
+  return { ok: true, release: mapReleaseRow(out) };
 }
 
 export type DeleteBoardReleaseOptions = {

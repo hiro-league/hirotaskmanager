@@ -64,6 +64,8 @@ Stderr remains **JSON** (today: `{ "error": "<message>", ... }`). The plan adds 
 
 **Conflict (duplicate resource):** **cat 5** might also surface as **409** → map to **`$?` = 5**, `code: "conflict"` (or more specific), not **9**.
 
+**Where the API uses 409 today:** board **release** create/rename when the name collides on that board; **Trash** restore for a list/task when the board or list is still trashed. Other server paths (for example task **group** or **priority** patches that throw on duplicate labels/values) may still respond with **400** until they are aligned the same way.
+
 ---
 
 ## 4. How agents should interpret each exit code
@@ -73,7 +75,7 @@ Stderr remains **JSON** (today: `{ "error": "<message>", ... }`). The plan adds 
 | **0** | Success | Parse stdout JSON; continue. |
 | **1** | Generic / server / DB failure | Read stderr JSON; if `retryable: true`, backoff and retry; else surface to user. |
 | **2** | Usage / CLI validation | Fix flags and arguments; **do not** retry unchanged. |
-| **3** | Missing resource | Refresh ids/slugs (`boards list`, `boards show`, etc.); adjust target id. |
+| **3** | Missing resource | Refresh ids/slugs (`boards list`, `boards describe`, etc.); adjust target id. |
 | **4** | Forbidden / policy | **Do not** retry mutations; user must change CLI access or permissions. |
 | **5** | Conflict | Use idempotent strategy, skip create, or resolve duplicate. |
 | **6** | Unreachable / down | Run `hirotm server start …` (use `hint` when present), check `--profile` / port. |
@@ -174,6 +176,6 @@ Until the API exposes **401** for CLI flows, **401** can be mapped to **4** with
 | State | Description |
 |-------|-------------|
 | **Implemented** | Exit codes, HTTP mapping, fetch timeout, stderr `code` / `retryable`, and docs (`AGENTS.md`) are in place per §7–§8. |
-| **JSON formatting** | Default is compact single-line JSON on stdout (`printJson`) and stderr (`printError`). Global `--pretty` opts into indented output (`src/cli/lib/output.ts`). |
+| **Output format** | Global `--format ndjson|human` (`program.ts` → `cliFormat.ts`). Default **ndjson**: list/search stdout uses `printNdjsonLines`; `printJson` / `printError` emit compact single-line JSON. **human**: list/search tables via `renderRecordsTable`; `printJson` / labeled success; `printError` → plain text stderr (`src/cli/lib/output.ts`, `humanText.ts`). |
 
 Adjust server HTTP statuses or error bodies only if you need finer agent behavior than status-based mapping provides.

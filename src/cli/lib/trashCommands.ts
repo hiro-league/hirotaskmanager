@@ -10,7 +10,18 @@ import { CLI_ERR } from "./cli-error-codes";
 import {
   parseOptionalListLimit,
   parseOptionalOffset,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
 } from "./command-helpers";
+import {
+  COLUMNS_TRASH_BOARDS,
+  COLUMNS_TRASH_LISTS,
+  COLUMNS_TRASH_TASKS,
+  QUIET_DEFAULT_TRASH_BOARD,
+  QUIET_DEFAULT_TRASH_LIST,
+  QUIET_DEFAULT_TRASH_TASK,
+} from "./listTableSpecs";
 import { fetchAllPages } from "./paginatedFetch";
 import {
   FIELDS_TRASH_BOARD,
@@ -19,7 +30,7 @@ import {
   parseAndValidateFields,
   projectPaginatedItems,
 } from "./jsonFieldProjection";
-import { CliError, printJson } from "./output";
+import { CliError, printJson, printPaginatedListRead } from "./output";
 import {
   compactBoardEntity,
   compactListEntity,
@@ -104,6 +115,9 @@ export async function runTrashBoards(opts: {
   fields?: string;
 }): Promise<void> {
   const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_BOARD);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const limitOpt = parseOptionalListLimit(opts.limit);
   const offsetOpt = parseOptionalOffset(opts.offset);
   const pageAll = opts.pageAll === true;
@@ -122,9 +136,11 @@ export async function runTrashBoards(opts: {
       `/trash/boards${suffix}`,
       { port },
     );
-    printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_TRASH_BOARDS, {
+      defaultKeys: QUIET_DEFAULT_TRASH_BOARD,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -140,7 +156,13 @@ export async function runTrashBoards(opts: {
       { port },
     );
   }, pageSize);
-  printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_BOARDS, {
+    defaultKeys: QUIET_DEFAULT_TRASH_BOARD,
+    explicitField: quietExplicit,
+  });
 }
 
 export async function runTrashLists(opts: {
@@ -151,6 +173,9 @@ export async function runTrashLists(opts: {
   fields?: string;
 }): Promise<void> {
   const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_LIST);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const limitOpt = parseOptionalListLimit(opts.limit);
   const offsetOpt = parseOptionalOffset(opts.offset);
   const pageAll = opts.pageAll === true;
@@ -169,9 +194,11 @@ export async function runTrashLists(opts: {
       `/trash/lists${suffix}`,
       { port },
     );
-    printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_TRASH_LISTS, {
+      defaultKeys: QUIET_DEFAULT_TRASH_LIST,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -187,7 +214,13 @@ export async function runTrashLists(opts: {
       { port },
     );
   }, pageSize);
-  printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_LISTS, {
+    defaultKeys: QUIET_DEFAULT_TRASH_LIST,
+    explicitField: quietExplicit,
+  });
 }
 
 export async function runTrashTasks(opts: {
@@ -198,6 +231,9 @@ export async function runTrashTasks(opts: {
   fields?: string;
 }): Promise<void> {
   const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_TASK);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const limitOpt = parseOptionalListLimit(opts.limit);
   const offsetOpt = parseOptionalOffset(opts.offset);
   const pageAll = opts.pageAll === true;
@@ -216,9 +252,11 @@ export async function runTrashTasks(opts: {
       `/trash/tasks${suffix}`,
       { port },
     );
-    printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_TRASH_TASKS, {
+      defaultKeys: QUIET_DEFAULT_TRASH_TASK,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -234,7 +272,13 @@ export async function runTrashTasks(opts: {
       { port },
     );
   }, pageSize);
-  printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_TASKS, {
+    defaultKeys: QUIET_DEFAULT_TRASH_TASK,
+    explicitField: quietExplicit,
+  });
 }
 
 export async function runBoardsRestore(opts: {

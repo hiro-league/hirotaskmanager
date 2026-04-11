@@ -1,4 +1,5 @@
 import { parsePortOption } from "../lib/command-helpers";
+import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runTasksPurge, runTasksRestore } from "../lib/trashCommands";
 import {
   runTasksAdd,
@@ -93,9 +94,16 @@ export async function handleTasksUpdate(
 export async function handleTasksDelete(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string; board: string },
+  options: { port?: string; board: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `tasks delete: move task ${taskId} on board "${options.board}" to Trash.`,
+      "Restore later with: hirotm tasks restore <task-id>",
+    ],
+  });
   await runTasksDelete({
     port,
     board: options.board,
@@ -106,18 +114,31 @@ export async function handleTasksDelete(
 export async function handleTasksRestore(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `tasks restore: restore task ${taskId} from Trash (board and list must allow it).`,
+    ],
+  });
   await runTasksRestore({ port, taskId });
 }
 
 export async function handleTasksPurge(
   ctx: CliContext,
   taskId: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `tasks purge: permanently delete task ${taskId} from Trash.`,
+      "This cannot be undone.",
+    ],
+  });
   await runTasksPurge({ port, taskId });
 }
 

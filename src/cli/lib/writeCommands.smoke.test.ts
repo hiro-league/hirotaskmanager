@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
 import { CLI_ERR } from "./cli-error-codes";
-import { runBoardsAdd, runReleasesList, runReleasesShow } from "./writeCommands";
+import { resetCliOutputFormat } from "./output";
+import {
+  runBoardsAdd,
+  runListsList,
+  runReleasesList,
+  runReleasesShow,
+} from "./writeCommands";
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
   let buf = "";
@@ -38,6 +44,7 @@ describe("writeCommands smoke (mock fetch)", () => {
 
   afterEach(() => {
     globalThis.fetch = origFetch;
+    resetCliOutputFormat();
   });
 
   test("runReleasesList prints JSON from GET releases", async () => {
@@ -60,7 +67,9 @@ describe("writeCommands smoke (mock fetch)", () => {
     const out = await captureStdout(() =>
       runReleasesList({ port: 21001, board: "brd" }),
     );
-    expect(JSON.parse(out.trim())).toEqual(envelope);
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual(rel);
   });
 
   test("runReleasesList throws when board missing", async () => {
@@ -68,6 +77,34 @@ describe("writeCommands smoke (mock fetch)", () => {
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
+  });
+
+  test("runListsList prints JSON lines from GET lists", async () => {
+    const row = {
+      listId: 4,
+      name: "Backlog",
+      order: 1,
+      emoji: null,
+    };
+    setMockFetch(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      expect(url).toContain("/api/boards/brd/lists");
+      return new Response(
+        JSON.stringify({
+          items: [row],
+          total: 1,
+          limit: 1,
+          offset: 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const out = await captureStdout(() =>
+      runListsList({ port: 21002, board: "brd" }),
+    );
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject(row);
   });
 
   test("runReleasesShow prints single release when releaseId matches", async () => {

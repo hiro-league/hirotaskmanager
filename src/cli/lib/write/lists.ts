@@ -1,11 +1,27 @@
+import type { Board, List } from "../../../shared/models";
+import type { PaginatedListBody } from "../../../shared/pagination";
 import type {
   ListDeleteMutationResult,
   ListMutationResult,
 } from "../../../shared/mutationResults";
-import { fetchApiMutate } from "../api-client";
+import { fetchApi, fetchApiMutate } from "../api-client";
 import { CLI_ERR } from "../cli-error-codes";
+import {
+  parseOptionalListLimit,
+  parseOptionalOffset,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
+} from "../command-helpers";
 import { parseOptionalEmojiFlag } from "../emoji-cli";
-import { CliError, printJson } from "../output";
+import {
+  FIELDS_LIST,
+  parseAndValidateFields,
+  projectPaginatedItems,
+} from "../jsonFieldProjection";
+import { COLUMNS_LISTS_LIST, QUIET_DEFAULT_LIST } from "../listTableSpecs";
+import { fetchAllPages } from "../paginatedFetch";
+import { CliError, printJson, printPaginatedListRead } from "../output";
 import { parsePositiveInt } from "./helpers";
 import {
   compactListEntity,
@@ -13,7 +29,72 @@ import {
   writeSuccess,
   writeTrashMove,
 } from "../write-result";
-import type { Board } from "../../../shared/models";
+
+export async function runListsList(opts: {
+  port?: number;
+  board: string | undefined;
+  limit?: string;
+  offset?: string;
+  pageAll?: boolean;
+  fields?: string;
+}): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2, {
+      code: CLI_ERR.missingRequired,
+    });
+  }
+  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_LIST);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
+  const limitOpt = parseOptionalListLimit(opts.limit);
+  const offsetOpt = parseOptionalOffset(opts.offset);
+  const pageAll = opts.pageAll === true;
+  const base = `/boards/${encodeURIComponent(boardId)}/lists`;
+  const port = opts.port;
+
+  if (!pageAll) {
+    const q = new URLSearchParams();
+    if (limitOpt != null) {
+      q.set("limit", String(limitOpt));
+    }
+    if (offsetOpt > 0) {
+      q.set("offset", String(offsetOpt));
+    }
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    const body = await fetchApi<PaginatedListBody<List>>(
+      `${base}${suffix}`,
+      { port },
+    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_LISTS_LIST, {
+      defaultKeys: QUIET_DEFAULT_LIST,
+      explicitField: quietExplicit,
+    });
+    return;
+  }
+
+  const pageSize = limitOpt ?? 500;
+  const merged = await fetchAllPages(async (offset) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(pageSize));
+    if (offset > 0) {
+      q.set("offset", String(offset));
+    }
+    return fetchApi<PaginatedListBody<List>>(
+      `${base}?${q.toString()}`,
+      { port },
+    );
+  }, pageSize);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_LISTS_LIST, {
+    defaultKeys: QUIET_DEFAULT_LIST,
+    explicitField: quietExplicit,
+  });
+}
 
 export async function runListsAdd(opts: {
   port?: number;

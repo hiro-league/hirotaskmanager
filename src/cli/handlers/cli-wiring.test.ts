@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { ConfigOverrides } from "../lib/config";
 import { handleBoardsUpdate } from "./boards";
 import type { CliContext } from "./context";
-import { handleListsAdd } from "./lists";
+import { handleListsAdd, handleListsList } from "./lists";
 import { handleReleasesAdd } from "./releases";
 import { handleTasksAdd } from "./tasks";
 import { handleTrashLists } from "./trash";
@@ -46,7 +46,6 @@ function wiringContext(): CliContext {
       throw new Error("fetchApi unused in wiring tests");
     },
     printJson: () => {},
-    printSearchTable: () => {},
     startServer: async () => {
       throw new Error("unused");
     },
@@ -94,6 +93,29 @@ describe("CLI handler → writeCommands wiring", () => {
       }),
     );
     expect(sawPort).toBe("22301");
+  });
+
+  test("handleListsList uses port from options", async () => {
+    let sawPort = "";
+    setMockFetch(async (input) => {
+      sawPort = new URL(reqUrl(input)).port;
+      return new Response(
+        JSON.stringify({
+          items: [],
+          total: 0,
+          limit: 0,
+          offset: 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      handleListsList(wiringContext(), {
+        board: "wb",
+        port: "22306",
+      }),
+    );
+    expect(sawPort).toBe("22306");
   });
 
   test("handleTasksAdd uses port from options", async () => {
@@ -183,10 +205,18 @@ describe("CLI handler → writeCommands wiring", () => {
     let sawPort = "";
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
-      return new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          items: [],
+          total: 0,
+          limit: 0,
+          offset: 0,
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
     });
     await captureStdout(() =>
       handleTrashLists(wiringContext(), { port: "22305" }),

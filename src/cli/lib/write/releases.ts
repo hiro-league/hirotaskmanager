@@ -5,7 +5,11 @@ import { CLI_ERR } from "../cli-error-codes";
 import {
   parseOptionalListLimit,
   parseOptionalOffset,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
 } from "../command-helpers";
+import { COLUMNS_RELEASES_LIST, QUIET_DEFAULT_RELEASE } from "../listTableSpecs";
 import { fetchAllPages } from "../paginatedFetch";
 import {
   FIELDS_RELEASE,
@@ -13,7 +17,7 @@ import {
   projectPaginatedItems,
   projectRecord,
 } from "../jsonFieldProjection";
-import { CliError, printJson } from "../output";
+import { CliError, printJson, printPaginatedListRead } from "../output";
 import { parsePositiveInt } from "./helpers";
 
 async function fetchAllBoardReleases(
@@ -51,6 +55,9 @@ export async function runReleasesList(opts: {
     });
   }
   const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_RELEASE);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const limitOpt = parseOptionalListLimit(opts.limit);
   const offsetOpt = parseOptionalOffset(opts.offset);
   const pageAll = opts.pageAll === true;
@@ -70,9 +77,11 @@ export async function runReleasesList(opts: {
       `${base}${suffix}`,
       { port },
     );
-    printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_RELEASES_LIST, {
+      defaultKeys: QUIET_DEFAULT_RELEASE,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -88,7 +97,13 @@ export async function runReleasesList(opts: {
       { port },
     );
   }, pageSize);
-  printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_RELEASES_LIST, {
+    defaultKeys: QUIET_DEFAULT_RELEASE,
+    explicitField: quietExplicit,
+  });
 }
 
 export async function runReleasesShow(opts: {

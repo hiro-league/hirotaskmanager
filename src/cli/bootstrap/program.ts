@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { registerBoardCommands } from "../commands/boards";
 import { registerListCommands } from "../commands/lists";
 import { registerReleaseCommands } from "../commands/releases";
@@ -8,11 +8,8 @@ import { registerStatusCommands } from "../commands/statuses";
 import { registerTaskCommands } from "../commands/tasks";
 import { registerTrashCommands } from "../commands/trash";
 import { createDefaultCliContext } from "../handlers/context";
-import {
-  exitWithError,
-  resetCliJsonFormatForRun,
-  syncCliJsonFormatFromGlobals,
-} from "../lib/output";
+import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
+import { exitWithError, resetCliOutputFormat } from "../lib/output";
 
 /**
  * Build the hirotm Commander program.
@@ -28,14 +25,22 @@ export function createHirotmProgram(): Command {
       "--client-name <name>",
       "Human-friendly client label sent with API requests (for notifications)",
     )
+    .addOption(
+      new Option("--format <mode>", "Output: ndjson (default) or human")
+        .choices(["ndjson", "human"])
+        .default("ndjson"),
+    )
     .option(
-      "--pretty",
-      "Pretty-print JSON with indentation (default is compact single-line on stdout and stderr)",
+      "-q, --quiet",
+      "List reads: print one identifier per line on stdout (requires --format ndjson)",
     );
 
   program.hook("preAction", (_thisCommand, actionCommand) => {
-    const opts = actionCommand.optsWithGlobals() as { pretty?: boolean };
-    syncCliJsonFormatFromGlobals(opts);
+    const opts = actionCommand.optsWithGlobals() as {
+      format?: string;
+      quiet?: boolean;
+    };
+    syncCliOutputFormatFromGlobals(opts);
   });
 
   const ctx = createDefaultCliContext();
@@ -53,7 +58,7 @@ export function createHirotmProgram(): Command {
 }
 
 export async function runHirotmCli(argv: string[]): Promise<void> {
-  resetCliJsonFormatForRun();
+  resetCliOutputFormat();
   const program = createHirotmProgram();
   try {
     await program.parseAsync(argv);

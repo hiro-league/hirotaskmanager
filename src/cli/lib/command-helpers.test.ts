@@ -3,6 +3,7 @@ import { Command } from "commander";
 import {
   addPortOption,
   addProfileOption,
+  addYesOption,
   collectMultiValue,
   parseLimitOption,
   parsePortOption,
@@ -60,13 +61,14 @@ describe("parseLimitOption", () => {
   });
 });
 
-describe("addPortOption / addProfileOption", () => {
+describe("addPortOption / addProfileOption / addYesOption", () => {
   test("register options on a Commander command", () => {
     const cmd = new Command("x");
-    addPortOption(cmd);
+    addPortOption(addYesOption(cmd));
     addProfileOption(cmd);
     const defs = cmd.options.map((o) => o.long);
     expect(defs).toContain("--port");
+    expect(defs).toContain("--yes");
     expect(defs).toContain("--client-name");
     expect(defs).toContain("--profile");
   });

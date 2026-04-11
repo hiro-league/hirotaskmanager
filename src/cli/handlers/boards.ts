@@ -1,11 +1,25 @@
+import {
+  parseBoardDescribeEntities,
+  type BoardDescribeResponse,
+} from "../../shared/boardDescribe";
 import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
 import type { PaginatedListBody } from "../../shared/pagination";
-import type { Board, BoardIndexEntry, Task } from "../../shared/models";
+import type { BoardIndexEntry, Task } from "../../shared/models";
 import {
   parseOptionalListLimit,
   parseOptionalOffset,
   parsePortOption,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
 } from "../lib/command-helpers";
+import { confirmMutableAction } from "../lib/mutableActionConfirm";
+import {
+  COLUMNS_BOARDS_LIST,
+  COLUMNS_TASKS_LIST,
+  QUIET_DEFAULT_BOARD_INDEX,
+  QUIET_DEFAULT_TASK,
+} from "../lib/listTableSpecs";
 import { fetchAllPages } from "../lib/paginatedFetch";
 import {
   FIELDS_BOARD_INDEX,
@@ -24,6 +38,9 @@ import {
   runBoardsPurge,
   runBoardsRestore,
 } from "../lib/trashCommands";
+import { printBoardDescribeResponse } from "../lib/boardDescribeOutput";
+import { CLI_ERR } from "../lib/cli-error-codes";
+import { CliError, printPaginatedListRead } from "../lib/output";
 import type { CliContext } from "./context";
 
 export async function handleBoardsList(
@@ -38,6 +55,9 @@ export async function handleBoardsList(
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
   const fieldKeys = parseAndValidateFields(options.fields, FIELDS_BOARD_INDEX);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const limitOpt = parseOptionalListLimit(options.limit);
   const offsetOpt = parseOptionalOffset(options.offset);
   const pageAll = options.pageAll === true;
@@ -56,9 +76,11 @@ export async function handleBoardsList(
       `${base}${suffix}`,
       { port },
     );
-    ctx.printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_BOARDS_LIST, {
+      defaultKeys: QUIET_DEFAULT_BOARD_INDEX,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -74,20 +96,41 @@ export async function handleBoardsList(
       { port },
     );
   }, pageSize);
-  ctx.printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_BOARDS_LIST, {
+    defaultKeys: QUIET_DEFAULT_BOARD_INDEX,
+    explicitField: quietExplicit,
+  });
 }
 
-export async function handleBoardsShow(
+export async function handleBoardsDescribe(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string },
+  options: { port?: string; entities?: string },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  const board = await ctx.fetchApi<Board>(
-    `/boards/${encodeURIComponent(idOrSlug)}`,
-    { port },
+  const parsed = parseBoardDescribeEntities(
+    options.entities === undefined
+      ? undefined
+      : options.entities.trim(),
   );
-  ctx.printJson(board);
+  if (!parsed.ok) {
+    throw new CliError(parsed.error, 2, { code: CLI_ERR.invalidValue });
+  }
+  let path = `/boards/${encodeURIComponent(idOrSlug)}/describe`;
+  if (!parsed.includeAll) {
+    const q = new URLSearchParams();
+    q.set(
+      "entities",
+      [...parsed.set].sort((a, b) => a.localeCompare(b, "en")).join(","),
+    );
+    path += `?${q.toString()}`;
+  }
+  const body = await ctx.fetchApi<BoardDescribeResponse>(path, { port });
+  requireNdjsonWhenQuiet();
+  printBoardDescribeResponse(body, parsed);
 }
 
 export async function handleBoardsTasks(
@@ -112,6 +155,9 @@ export async function handleBoardsTasks(
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
   const fieldKeys = parseAndValidateFields(options.fields, FIELDS_TASK);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
   const params = new URLSearchParams();
   if (options.list?.trim()) params.set("listId", options.list.trim());
   for (const group of options.group ?? []) {
@@ -151,9 +197,11 @@ export async function handleBoardsTasks(
       `${base}?${q.toString()}`,
       { port },
     );
-    ctx.printJson(
-      fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-    );
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_TASKS_LIST, {
+      defaultKeys: QUIET_DEFAULT_TASK,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -169,7 +217,13 @@ export async function handleBoardsTasks(
       { port },
     );
   }, pageSize);
-  ctx.printJson(fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged);
+  const mergedRows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, mergedRows, COLUMNS_TASKS_LIST, {
+    defaultKeys: QUIET_DEFAULT_TASK,
+    explicitField: quietExplicit,
+  });
 }
 
 export async function handleBoardsAdd(
@@ -229,36 +283,70 @@ export async function handleBoardsUpdate(
 export async function handleBoardsDelete(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `boards delete: move board "${idOrSlug}" to Trash.`,
+      "You can restore it later with: hirotm boards restore <id-or-slug>",
+    ],
+  });
   await runBoardsDelete({ port, board: idOrSlug });
 }
 
 export async function handleBoardsRestore(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `boards restore: restore board "${idOrSlug}" from Trash to the active board list.`,
+    ],
+  });
   await runBoardsRestore({ port, board: idOrSlug });
 }
 
 export async function handleBoardsPurge(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `boards purge: permanently delete board "${idOrSlug}" from Trash.`,
+      "This cannot be undone.",
+    ],
+  });
   await runBoardsPurge({ port, board: idOrSlug });
 }
 
 export async function handleBoardsGroups(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; json?: string; file?: string; stdin?: boolean },
+  options: {
+    port?: string;
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+    yes?: boolean;
+  },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    stdinReservedForPayload: options.stdin === true,
+    impactLines: [
+      `boards configure groups: replace task groups on board "${idOrSlug}" from your JSON input.`,
+      "Creates, updates, and deletes in the payload apply; groups not listed may be removed — data loss is possible.",
+    ],
+  });
   await runBoardsGroups({
     port,
     board: idOrSlug,
@@ -271,9 +359,23 @@ export async function handleBoardsGroups(
 export async function handleBoardsPriorities(
   ctx: CliContext,
   idOrSlug: string,
-  options: { port?: string; json?: string; file?: string; stdin?: boolean },
+  options: {
+    port?: string;
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+    yes?: boolean;
+  },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    stdinReservedForPayload: options.stdin === true,
+    impactLines: [
+      `boards configure priorities: replace task priorities on board "${idOrSlug}" from your JSON input.`,
+      "This overwrites priority definitions; omitted priorities may be removed — data loss is possible.",
+    ],
+  });
   await runBoardsPriorities({
     port,
     board: idOrSlug,

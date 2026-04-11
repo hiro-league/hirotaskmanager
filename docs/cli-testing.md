@@ -112,7 +112,7 @@ CLI and server both resolve **profile** → config under `~/.taskmanager/profile
 
 - **Isolated automation** — Use a dedicated profile (e.g. `test` or `ci`) with **`data_dir`** pointing at a **temp directory** (unique per parallel worker if needed) and a **free port** so runs do not touch the developer’s default DB or port.
 - **`dev` profile caveat** — Default dev data dir is the **repo `data/`** tree; avoid that for hermetic CI unless you intentionally override `data_dir` in profile config or env.
-- **Subprocess + real HTTP** — Start the server with the same profile (or matching `TASKMANAGER_PROFILE` / port / data), then invoke `hirotm --profile <name> …` so base URL and DB stay aligned.
+- **Subprocess + real HTTP** — Start the server with the same profile (or matching `TASKMANAGER_PROFILE` / port / data), then invoke `hirotm … --profile <name>` so base URL and DB stay aligned.
 
 ---
 
@@ -131,7 +131,7 @@ Checklist for new `*.test.ts` (or expanded cases in existing files). Prefer **in
 ### Handlers (mock `fetchApi`, `printJson`, stubs for server helpers as needed)
 
 - [x] **`boards`** — Read paths: `handlers/boards.test.ts`. Writes: `runBoardsUpdate`, `runBoardsDelete`, `runBoardsGroups`, `runBoardsPriorities` in `lib/writeCommands.breadth.test.ts`; `handleBoardsUpdate` port wiring in `handlers/cli-wiring.test.ts`. Optional extra handler-only wiring: see **Remaining work**.
-- [x] **`lists`** — `runLists*` in `writeCommands.breadth.test.ts`; `handleListsAdd` port wiring in `cli-wiring.test.ts`.
+- [x] **`lists`** — `runLists*` (including `runListsList`) in `writeCommands.breadth.test.ts` + `writeCommands.smoke.test.ts`; `handleListsAdd` / `handleListsList` port wiring in `cli-wiring.test.ts`.
 - [x] **`tasks`** — `runTasks*` in `writeCommands.breadth.test.ts`; `handleTasksAdd` port wiring in `cli-wiring.test.ts`.
 - [x] **`releases`** — `runReleases*` in `smoke` + `breadth`; `handleReleasesAdd` wiring in `cli-wiring.test.ts`.
 - [x] **`search`** — JSON + table branches, validation (`handlers/search.test.ts`).
@@ -169,7 +169,7 @@ Goal: behavior agents rely on — **machine-readable success and failure**, **di
 
 - [x] **HTTP-derived failures** — Table + client (`cli-http-errors.test.ts`, `api-client.test.ts`); overlaps aspect 2.
 - [x] **Validation / usage-style failures** — Example: search empty query / bad `--format` → exit **2** + `code` (`handlers/search.test.ts`).
-- [x] **Subprocess validation (handler path)** — `query search … ""` → exit **2**, stderr JSON (`subprocess.smoke.test.ts`). **Commander** missing required arg (`boards show` with no id) → exit **1**, plain stderr today (`subprocess.smoke.test.ts`); aligning with exit **2** is a separate audit (`docs/cli-error-handling.md`).
+- [x] **Subprocess validation (handler path)** — `query search … ""` → exit **2**, stderr JSON (`subprocess.smoke.test.ts`). **Commander** missing required arg (`boards describe` with no id) → exit **1**, plain stderr today (`subprocess.smoke.test.ts`); aligning with exit **2** is a separate audit (`docs/cli-error-handling.md`).
 
 ### Actionable errors (stderr JSON)
 
@@ -180,7 +180,7 @@ Goal: behavior agents rely on — **machine-readable success and failure**, **di
 
 - [x] **JSON success on stdout** — Handlers via injected `printJson`; subprocess + real-stack assert JSON on stdout and **empty stderr** on success (`subprocess.smoke.test.ts`, `subprocess.real-stack.test.ts`).
 - [x] **End-to-end stderr JSON on API failure** — Subprocess + stub **403** JSON → exit **4**, stderr `error` + `code` (`subprocess.smoke.test.ts`).
-- [x] **`query search --format table`** — Intentionally **not** JSON; table path covered in `handlers/search.test.ts` (document as human-oriented exception).
+- [x] **`query search` with `--format human`** — Fixed-width table on stdout; covered in `handlers/search.test.ts`.
 
 ### Discoverability (`--help`)
 
@@ -207,7 +207,7 @@ Goal: behavior agents rely on — **machine-readable success and failure**, **di
 - [x] **`boards list` + closed port** — Exit **6**; stderr JSON with `code: server_unreachable`, `retryable`, `hint` (`subprocess.smoke.test.ts`).
 - [x] **`--help`** — Exit **0**; usage text (Commander wiring) (`subprocess.smoke.test.ts`).
 - [x] **Subcommand `--help` spot-check** — `boards --help`, `query search --help` (`subprocess.smoke.test.ts`).
-- [x] **Handler validation subprocess** — Empty `query search` → exit **2** + JSON stderr; Commander missing arg (`boards show`) → exit **1** + plain stderr (`subprocess.smoke.test.ts`).
+- [x] **Handler validation subprocess** — Empty `query search` → exit **2** + JSON stderr; Commander missing arg (`boards describe`) → exit **1** + plain stderr (`subprocess.smoke.test.ts`).
 - [x] **Real stack (opt-in, `RUN_CLI_REAL_STACK=1`)** — Temp data/auth dirs, `integrationPrepareAuth.ts`, `bootstrapDev.ts` child, `hirotm boards list` → `[]`, `hirotm statuses list` → seeded rows (`subprocess.real-stack.test.ts`). No manual profile: isolation uses **`TASKMANAGER_DATA_DIR`**, **`TASKMANAGER_AUTH_DIR`**, **`HOME`**, ephemeral port.
 
 ---

@@ -108,10 +108,10 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 ### 6. Field projection (`--fields`) and/or slimmer default list views
 
-- **Importance:** **Medium**–**High** for `boards show` and large task payloads (body, etc.).
+- **Importance:** **Medium**–**High** for full-board JSON (`GET /api/boards/:id`, used by the app) and large task payloads (body, etc.).
 - **Depends on:** API or CLI-side projection; pairs with **5**.
 
-**Current state:** **Done (CLI-side):** list-style reads support **`--fields`** with validated allowlists; paginated envelopes keep **`total` / `limit` / `offset`**. **`boards show`** is **out of scope** until that command is redesigned. Optional future: server **`?fields=`** to reduce bytes on the wire.
+**Current state:** **Done (CLI-side):** list-style reads support **`--fields`** with validated allowlists; paginated envelopes keep **`total` / `limit` / `offset`**. There is **no** `hirotm boards show`; use **`boards describe`** plus **`tasks list --board`** (and **`--page-all`** when needed). Optional future: server **`?fields=`** on **`GET /api/boards/:id`** to reduce bytes on the wire.
 
 **Recommendation:** ~~Support `--fields id,title,listId`~~ **Shipped** in `hirotm` (`src/cli/lib/jsonFieldProjection.ts`). Optional follow-up: slimmer **default** list payloads (product decision) or API-level projection.
 
@@ -135,11 +135,11 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 - **Importance:** **Medium**.
 - **Depends on:** **5–6** optional but helpful; needs stable identifiers in list commands.
 
-**Current state:** No global `-q`; agents rely on `jq` over pretty JSON arrays.
+**Current state:** **Done:** global **`-q` / `--quiet`** on list-style reads; plain-text lines (default slug→id for boards, task id for tasks/search, etc.); **`--quiet` + `--fields`** allows at most one key; requires **`--format ndjson`**.
 
-**Recommendation:** For commands that return arrays of boards/tasks, support `--quiet` emitting one id or `slug` per line (bible §5).
+**Recommendation:** ~~For commands that return arrays of boards/tasks, support `--quiet` emitting one id or `slug` per line (bible §5).~~ **Shipped** (`program.ts`, `cliFormat.ts`, `output.ts`, list handlers).
 
-**Mint (Task Manager → CLI):** Document **`--quiet`** (or equivalent) on [hirotm CLI](/task-manager/cli/hirotm-commands), [hirotm boards](/task-manager/cli/hirotm-boards), [hirotm tasks](/task-manager/cli/hirotm-tasks), and related list pages; note non-JSON stdout where applicable in [CLI overview](/task-manager/cli/cli-overview).
+**Mint (Task Manager → CLI):** [hirotm CLI](/task-manager/cli/hirotm-commands) (global options + pipe-friendly quiet); [CLI overview](/task-manager/cli/cli-overview).
 
 ---
 
@@ -200,11 +200,11 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 - **Importance:** **Low**.
 - **Depends on:** None.
 
-**Current state:** `query search --format table` writes headers and human text to stdout (appropriate for humans).
+**Current state:** Global **`--format human`** prints fixed-width tables for list reads and **`query search`**; default **`--format ndjson`** is for agents. There is no per-command **`query search --format`** or **`--view`**.
 
-**Recommendation:** In help text, note that `--format table` is for humans; agents should use default JSON. Optional: warn on stderr when stdout is not JSON (might be noisy; documentation may suffice).
+**Recommendation:** Keep Mint [hirotm CLI](/task-manager/cli/hirotm-commands) **Response format** as the single explanation; per-command pages point to it. **`--fields`** requires **`ndjson`** (documented on **`hirotm-commands`** and search page).
 
-**Mint (Task Manager → CLI):** [Search](/task-manager/cli/hirotm-search) and [hirotm CLI](/task-manager/cli/hirotm-commands) should state agents use JSON; mention **`--fields`** incompatibility with table mode (already documented for **`--fields`**).
+**Mint (Task Manager → CLI):** [Search](/task-manager/cli/hirotm-search) and [hirotm CLI](/task-manager/cli/hirotm-commands) — done (global **`--format`**, no search-local format flag).
 
 ---
 
@@ -217,9 +217,9 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 | 3 | Document codes + error shape | High | 1, 2 | **Done** (`AGENTS.md`, `cli-error-handling.md`, Mint `/task-manager/cli/hirotm-error-codes`) |
 | 4 | Compact JSON default | Medium | (docs 3) | **Done** (default compact; `--pretty`, `AGENTS.md`) |
 | 5 | Pagination / total / explicit fetch-all | High / Medium | API; 1–2 first | Open |
-| 6 | `--fields` / slimmer payloads | Medium–High | API or CLI; 5 | **Done** (CLI projection on list reads; `boards show` deferred) |
+| 6 | `--fields` / slimmer payloads | Medium–High | API or CLI; 5 | **Done** (CLI projection on list reads; full board via API only) |
 | 7 | NDJSON streaming | Medium | 5 | Open |
-| 8 | `--quiet` lines | Medium | 5–6 optional | Open |
+| 8 | `--quiet` lines | Medium | 5–6 optional | **Done** (global `-q`/`--quiet`, `listTableSpecs` defaults) |
 | 9 | Idempotent create / conflict exit | Medium | API; 1 | Open |
 | 10 | Dry-run / non-interactive | Medium | audit + API | Open |
 | 11 | `suggestion` + echoed inputs | Medium | 2 | Open |
@@ -237,4 +237,4 @@ Items **G** and **H** are parallel tracks that touch server behavior; they are l
 
 ## Mint doc updates for open recommendations
 
-When closing items **5** and **7–13**, update the Task Manager CLI pages in **`hiro-docs/mintdocs/task-manager/cli/`** as described in each section’s **Mint (Task Manager → CLI)** bullet. Done items **1–4** and **6** are already reflected in Mint where noted (item **3**: [Errors & exit codes](/task-manager/cli/hirotm-error-codes); item **6**: [Field projection](/task-manager/cli/hirotm-commands#field-projection) and cross-links).
+When closing items **5** and **7–13**, update the Task Manager CLI pages in **`hiro-docs/mintdocs/task-manager/cli/`** as described in each section’s **Mint (Task Manager → CLI)** bullet. Done items **1–4**, **6**, and **8** are already reflected in Mint where noted (item **3**: [Errors & exit codes](/task-manager/cli/hirotm-error-codes); item **6**: [Field projection](/task-manager/cli/hirotm-commands#field-projection); item **8**: global **`--quiet`** on [hirotm CLI](/task-manager/cli/hirotm-commands)).

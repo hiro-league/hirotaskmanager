@@ -35,7 +35,8 @@ function parseReleaseApiErrorMessage(raw: string): string {
   if (
     /duplicate/i.test(msg) ||
     /Could not create release/i.test(msg) ||
-    msg === "Release not found or duplicate name"
+    msg === "Release not found or duplicate name" ||
+    /already exists on this board/i.test(msg)
   ) {
     return "A release with this name already exists on this board.";
   }

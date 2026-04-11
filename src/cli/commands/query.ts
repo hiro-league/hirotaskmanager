@@ -27,21 +27,13 @@ export function registerQueryCommands(
       .option("--offset <n>", "Skip this many hits (default 0)")
       .option(
         "--page-all",
-        "Fetch every page at the current --limit and merge into one envelope",
-      )
-      .option(
-        "--format <fmt>",
-        "Output format: json (default) or table",
-        "json",
+        "Fetch every page at the current --limit and merge into one result set",
       )
       .option(
         "--no-prefix",
         "Do not add * to the last token (exact token only). Default matches prefixes (drag finds dragging); this flag does not",
       )
-      .option(
-        "--fields <keys>",
-        `${CLI_FIELDS_OPTION_DESC} Not supported with --format table.`,
-      ),
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
     async (
       queryParts: string[],
@@ -51,7 +43,6 @@ export function registerQueryCommands(
         limit?: string;
         offset?: string;
         pageAll?: boolean;
-        format?: string;
         noPrefix?: boolean;
         fields?: string;
       },

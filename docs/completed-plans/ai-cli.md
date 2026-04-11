@@ -46,7 +46,7 @@ hirotm trash tasks
 
 Why:
 
-- matches the existing `hirotm boards list` and `hirotm boards show`
+- matches the existing `hirotm boards list` and `hirotm boards describe` (+ `tasks list --board` for tasks)
 - is easier for agents to discover than `boards:create` or `tasks:patch`
 - keeps resource + action consistent across reads and writes
 
@@ -602,7 +602,7 @@ The commands in **Command Spec** above are implemented. Additional scope is capt
 | Gap | Blocker / note |
 |-----|----------------|
 | Advanced FTS with server-side filters (group, priority, status, dates, …) | **No API yet** — [Future B](./ai-cli-plan.md#future--advanced-search-server-side-filtering) |
-| `--format table` for `boards list`, `boards show`, `statuses list` | Only `search` supports table today — [Phase 6](./ai-cli-plan.md#phase-6--distribution--polish) |
+| `--format table` for `boards list`, `statuses list` | Only `search` supports table today — [Phase 6](./ai-cli-plan.md#phase-6--distribution--polish) |
 
 Intentionally out-of-scope for the CLI (e.g. editing **view prefs**) remain omitted; see [ai-cli-plan.md — CLI vs UI-only](./ai-cli-plan.md#cli-vs-ui-only-surface).
 

@@ -9,6 +9,7 @@ import {
 } from "../handlers/releases";
 import {
   addPortOption,
+  addYesOption,
   CLI_FIELDS_OPTION_DESC,
   withCliErrors,
 } from "../lib/command-helpers";
@@ -114,21 +115,28 @@ export function registerReleaseCommands(
   );
 
   addPortOption(
-    releasesCommand
-      .command("delete")
-      .description(
-        "Delete a release (tasks become untagged unless --move-tasks-to targets another release)",
-      )
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
-      .argument("<release-id>", "Numeric release id")
-      .option(
-        "--move-tasks-to <id>",
-        "Move tasks on this release to another release before delete",
-      ),
+    addYesOption(
+      releasesCommand
+        .command("delete")
+        .description(
+          "Delete a release (tasks become untagged unless --move-tasks-to targets another release)",
+        )
+        .requiredOption("--board <id-or-slug>", "Board id or slug")
+        .argument("<release-id>", "Numeric release id")
+        .option(
+          "--move-tasks-to <id>",
+          "Move tasks on this release to another release before delete",
+        ),
+    ),
   ).action(
     async (
       releaseId: string,
-      options: { port?: string; board: string; moveTasksTo?: string },
+      options: {
+        port?: string;
+        board: string;
+        moveTasksTo?: string;
+        yes?: boolean;
+      },
     ) => {
       await withCliErrors(() => handleReleasesDelete(ctx, releaseId, options));
     },

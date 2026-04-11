@@ -38,7 +38,7 @@ Split the work in **three** passes. Each phase should leave **`hirotm` / `hirota
 
 **Outcome:** Read/query and mutation orchestration is callable without Commander; optional formal ports in Phase 3.
 
-- **`handlers/context.ts`** — `CliContext`, `createDefaultCliContext()` (wires **`resolvePort`**, **`resolveDataDir`**, **`fetchApi`**, **`printJson`**, **`printSearchTable`**, **`startServer`**, **`stopServer`**, **`readServerStatus`**).
+- **`handlers/context.ts`** — `CliContext`, `createDefaultCliContext()` (wires **`resolvePort`**, **`resolveDataDir`**, **`fetchApi`**, **`printJson`**, **`startServer`**, **`stopServer`**, **`readServerStatus`**).
 - **`handlers/*.ts`** — `handleServerStart`, `handleBoardsList`, …; mutation paths delegate to **`writeCommands`** / **`trashCommands`** with `port` from context.
 - **`lib/command-helpers.ts`** — **`withCliErrors`** wraps handler calls so actions stay one-liners.
 - **`writeCommands.ts`** — barrel over **`lib/write/*.ts`**; **`trashCommands.ts`** unchanged.
@@ -223,11 +223,11 @@ Handlers should assume: if the call fails, the server response (normalized to `C
 
 | Concern | Where |
 |--------|--------|
-| `--format json\|table` (and defaults) | **commands/** — Commander options |
-| Formatting success output | **commands/** calling **OutputPort** with a format, or a small **lib/formatters.ts** |
-| Handlers | Prefer returning **structured data**; avoid printing inside handlers for easier tests |
+| Global `--format ndjson\|human` (and defaults) | **bootstrap/program.ts** + **lib/cliFormat.ts** |
+| Formatting success output | **lib/output.ts** (`printJson`, `printPaginatedListRead`, …) + **lib/textTable.ts** / **humanText.ts** |
+| Handlers | Prefer injected **`fetchApi`** + **`printJson`**; list reads call **`printPaginatedListRead`** with column specs |
 
-Wire format from the API stays JSON; table vs JSON on stdout is **CLI presentation only**.
+Wire format from the API stays JSON; **ndjson** vs **human** on stdout is **CLI presentation only**.
 
 ### Help (`--help`)
 

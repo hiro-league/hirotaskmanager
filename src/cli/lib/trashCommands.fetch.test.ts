@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { resetCliOutputFormat } from "./output";
 import { runTrashBoards } from "./trashCommands";
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
@@ -36,6 +37,7 @@ describe("trashCommands fetch smoke (mock fetch)", () => {
 
   afterEach(() => {
     globalThis.fetch = origFetch;
+    resetCliOutputFormat();
   });
 
   test("runTrashBoards prints rows from GET /trash/boards", async () => {
@@ -67,6 +69,8 @@ describe("trashCommands fetch smoke (mock fetch)", () => {
     });
 
     const out = await captureStdout(() => runTrashBoards({ port: 21100 }));
-    expect(JSON.parse(out.trim())).toEqual(envelope);
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual(rows[0]);
   });
 });

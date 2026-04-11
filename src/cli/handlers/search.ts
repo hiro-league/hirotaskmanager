@@ -4,6 +4,9 @@ import {
   parseLimitOption,
   parseOptionalOffset,
   parsePortOption,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
 } from "../lib/command-helpers";
 import { fetchAllPages } from "../lib/paginatedFetch";
 import {
@@ -11,8 +14,12 @@ import {
   parseAndValidateFields,
   projectPaginatedItems,
 } from "../lib/jsonFieldProjection";
+import {
+  COLUMNS_SEARCH_HITS,
+  QUIET_DEFAULT_SEARCH_HIT,
+} from "../lib/listTableSpecs";
 import { CLI_ERR } from "../lib/cli-error-codes";
-import { CliError } from "../lib/output";
+import { CliError, printPaginatedListRead } from "../lib/output";
 import type { CliContext } from "./context";
 
 export async function handleSearch(
@@ -23,7 +30,6 @@ export async function handleSearch(
     board?: string;
     limit?: string;
     offset?: string;
-    format?: string;
     noPrefix?: boolean;
     pageAll?: boolean;
     fields?: string;
@@ -37,20 +43,10 @@ export async function handleSearch(
   const limit = parseLimitOption(options.limit);
   const offset = parseOptionalOffset(options.offset);
   const pageAll = options.pageAll === true;
-  const fmt = (options.format ?? "json").toLowerCase();
-  if (fmt !== "json" && fmt !== "table") {
-    throw new CliError("Invalid --format (use json or table)", 2, {
-      code: CLI_ERR.invalidValue,
-      format: options.format,
-    });
-  }
   const fieldKeys = parseAndValidateFields(options.fields, FIELDS_SEARCH_HIT);
-  if (fieldKeys && fmt === "table") {
-    throw new CliError("--fields applies to JSON only (omit or use --format json)", 2, {
-      code: CLI_ERR.invalidValue,
-      format: options.format,
-    });
-  }
+  requireNdjsonWhenUsingFields(fieldKeys);
+  requireNdjsonWhenQuiet();
+  const quietExplicit = resolveQuietExplicitField(fieldKeys);
 
   const buildParams = (off: number, lim: number) => {
     const params = new URLSearchParams();
@@ -73,13 +69,11 @@ export async function handleSearch(
       `/search?${buildParams(offset, limit).toString()}`,
       { port },
     );
-    if (fmt === "table") {
-      ctx.printSearchTable(body.items);
-    } else {
-      ctx.printJson(
-        fieldKeys ? projectPaginatedItems(body, fieldKeys) : body,
-      );
-    }
+    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
+    printPaginatedListRead(body, rows, COLUMNS_SEARCH_HITS, {
+      defaultKeys: QUIET_DEFAULT_SEARCH_HIT,
+      explicitField: quietExplicit,
+    });
     return;
   }
 
@@ -89,11 +83,11 @@ export async function handleSearch(
       { port },
     );
   }, limit);
-  if (fmt === "table") {
-    ctx.printSearchTable(merged.items);
-  } else {
-    ctx.printJson(
-      fieldKeys ? projectPaginatedItems(merged, fieldKeys) : merged,
-    );
-  }
+  const rows = fieldKeys
+    ? projectPaginatedItems(merged, fieldKeys).items
+    : merged.items;
+  printPaginatedListRead(merged, rows, COLUMNS_SEARCH_HITS, {
+    defaultKeys: QUIET_DEFAULT_SEARCH_HIT,
+    explicitField: quietExplicit,
+  });
 }

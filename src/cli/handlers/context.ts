@@ -1,7 +1,7 @@
 import { fetchApi } from "../lib/api-client";
 import type { ConfigOverrides } from "../lib/config";
 import { resolveDataDir, resolvePort } from "../lib/config";
-import { printJson, printSearchTable } from "../lib/output";
+import { printJson } from "../lib/output";
 import { readServerStatus, startServer, stopServer } from "../lib/process";
 
 /**
@@ -13,7 +13,6 @@ export type CliContext = {
   resolveDataDir: (overrides?: ConfigOverrides) => string;
   fetchApi: typeof fetchApi;
   printJson: typeof printJson;
-  printSearchTable: typeof printSearchTable;
   startServer: typeof startServer;
   stopServer: typeof stopServer;
   readServerStatus: typeof readServerStatus;
@@ -25,7 +24,6 @@ export function createDefaultCliContext(): CliContext {
     resolveDataDir,
     fetchApi,
     printJson,
-    printSearchTable,
     startServer,
     stopServer,
     readServerStatus,

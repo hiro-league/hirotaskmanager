@@ -8,11 +8,13 @@ import {
   handleBoardsPriorities,
   handleBoardsPurge,
   handleBoardsRestore,
-  handleBoardsShow,
+  handleBoardsDescribe,
   handleBoardsUpdate,
 } from "../handlers/boards";
 import {
   addPortOption,
+  addYesOption,
+  CLI_BOARD_DESCRIBE_ENTITIES_DESC,
   CLI_FIELDS_OPTION_DESC,
   withCliErrors,
 } from "../lib/command-helpers";
@@ -28,7 +30,9 @@ export function registerBoardCommands(
   addPortOption(
     boardsCommand
       .command("list")
-      .description("List all boards (paginated JSON envelope by default)")
+      .description(
+        "List all boards (default: global --format ndjson; use --format human for a table)",
+      )
       .option(
         "--limit <n>",
         "Page size (omit to return all boards in one response)",
@@ -36,7 +40,7 @@ export function registerBoardCommands(
       .option("--offset <n>", "Skip this many boards (default 0)")
       .option(
         "--page-all",
-        "Fetch every page with --limit (or 500) and merge into one envelope",
+        "Fetch every page with --limit (or 500) and merge into one result set",
       )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
@@ -53,12 +57,20 @@ export function registerBoardCommands(
 
   addPortOption(
     boardsCommand
-      .command("show")
-      .description("Show one board by numeric id or slug")
-      .argument("<id-or-slug>", "Board id or slug"),
-  ).action(async (idOrSlug: string, options: { port?: string }) => {
-    await withCliErrors(() => handleBoardsShow(ctx, idOrSlug, options));
-  });
+      .command("describe")
+      .description(
+        "Probe board structure (lists, groups, priorities, releases, statuses, policy) without tasks",
+      )
+      .argument("<id-or-slug>", "Board id or slug")
+      .option("--entities <csv>", CLI_BOARD_DESCRIBE_ENTITIES_DESC),
+  ).action(
+    async (
+      idOrSlug: string,
+      options: { port?: string; entities?: string },
+    ) => {
+      await withCliErrors(() => handleBoardsDescribe(ctx, idOrSlug, options));
+    },
+  );
 
   addPortOption(
     boardsCommand
@@ -122,78 +134,106 @@ export function registerBoardCommands(
   );
 
   addPortOption(
-    boardsCommand
-      .command("delete")
-      .description(
-        "Move a board to Trash (same as the app; restore or purge from Trash)",
-      )
-      .argument("<id-or-slug>", "Board id or slug"),
-  ).action(async (idOrSlug: string, options: { port?: string }) => {
-    await withCliErrors(() => handleBoardsDelete(ctx, idOrSlug, options));
-  });
+    addYesOption(
+      boardsCommand
+        .command("delete")
+        .description(
+          "Move a board to Trash (same as the app; restore or purge from Trash)",
+        )
+        .argument("<id-or-slug>", "Board id or slug"),
+    ),
+  ).action(
+    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
+      await withCliErrors(() => handleBoardsDelete(ctx, idOrSlug, options));
+    },
+  );
 
   addPortOption(
-    boardsCommand
-      .command("restore")
-      .description("Restore a board from Trash to the active board list")
-      .argument(
-        "<id-or-slug>",
-        "Trashed board numeric id, or slug from Trash",
-      ),
-  ).action(async (idOrSlug: string, options: { port?: string }) => {
-    await withCliErrors(() => handleBoardsRestore(ctx, idOrSlug, options));
-  });
+    addYesOption(
+      boardsCommand
+        .command("restore")
+        .description("Restore a board from Trash to the active board list")
+        .argument(
+          "<id-or-slug>",
+          "Trashed board numeric id, or slug from Trash",
+        ),
+    ),
+  ).action(
+    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
+      await withCliErrors(() => handleBoardsRestore(ctx, idOrSlug, options));
+    },
+  );
 
   addPortOption(
-    boardsCommand
-      .command("purge")
-      .description("Permanently delete a board from Trash (cannot be undone)")
-      .argument(
-        "<id-or-slug>",
-        "Trashed board numeric id, or slug from Trash",
-      ),
-  ).action(async (idOrSlug: string, options: { port?: string }) => {
-    await withCliErrors(() => handleBoardsPurge(ctx, idOrSlug, options));
-  });
+    addYesOption(
+      boardsCommand
+        .command("purge")
+        .description("Permanently delete a board from Trash (cannot be undone)")
+        .argument(
+          "<id-or-slug>",
+          "Trashed board numeric id, or slug from Trash",
+        ),
+    ),
+  ).action(
+    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
+      await withCliErrors(() => handleBoardsPurge(ctx, idOrSlug, options));
+    },
+  );
 
   const configure = boardsCommand
     .command("configure")
     .description("Replace-style board structure from JSON");
 
   addPortOption(
-    configure
-      .command("groups")
-      .description(
-        "Set board task groups (explicit creates, updates, deletes, defaults)",
-      )
-      .argument("<id-or-slug>", "Board id or slug")
-      .option(
-        "--json <text>",
-        "JSON: creates, updates, deletes, defaultTaskGroupId, deletedGroupFallbackId (optional *ClientId for defaults); see docs/ai-cli.md",
-      )
-      .option("--file <path>", "Read JSON from a UTF-8 file")
-      .option("--stdin", "Read JSON from stdin until EOF"),
+    addYesOption(
+      configure
+        .command("groups")
+        .description(
+          "Set board task groups (explicit creates, updates, deletes, defaults)",
+        )
+        .argument("<id-or-slug>", "Board id or slug")
+        .option(
+          "--json <text>",
+          "JSON: creates, updates, deletes, defaultTaskGroupId, deletedGroupFallbackId (optional *ClientId for defaults); see docs/ai-cli.md",
+        )
+        .option("--file <path>", "Read JSON from a UTF-8 file")
+        .option("--stdin", "Read JSON from stdin until EOF"),
+    ),
   ).action(
     async (
       idOrSlug: string,
-      options: { port?: string; json?: string; file?: string; stdin?: boolean },
+      options: {
+        port?: string;
+        json?: string;
+        file?: string;
+        stdin?: boolean;
+        yes?: boolean;
+      },
     ) => {
       await withCliErrors(() => handleBoardsGroups(ctx, idOrSlug, options));
     },
   );
 
   addPortOption(
-    configure
-      .command("priorities")
-      .description("Replace board task priorities from JSON")
-      .argument("<id-or-slug>", "Board id or slug")
-      .option("--json <text>", "JSON array or object with taskPriorities")
-      .option("--file <path>", "Read JSON from a UTF-8 file")
-      .option("--stdin", "Read JSON from stdin until EOF"),
+    addYesOption(
+      configure
+        .command("priorities")
+        .description("Replace board task priorities from JSON")
+        .argument("<id-or-slug>", "Board id or slug")
+        .option("--json <text>", "JSON array or object with taskPriorities")
+        .option("--file <path>", "Read JSON from a UTF-8 file")
+        .option("--stdin", "Read JSON from stdin until EOF"),
+    ),
   ).action(
     async (
       idOrSlug: string,
-      options: { port?: string; json?: string; file?: string; stdin?: boolean },
+      options: {
+        port?: string;
+        json?: string;
+        file?: string;
+        stdin?: boolean;
+        yes?: boolean;
+      },
     ) => {
       await withCliErrors(() => handleBoardsPriorities(ctx, idOrSlug, options));
     },

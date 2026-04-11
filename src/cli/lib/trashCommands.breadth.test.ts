@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
 import { CLI_ERR } from "./cli-error-codes";
+import { resetCliOutputFormat } from "./output";
 import {
   runBoardsPurge,
   runBoardsRestore,
@@ -70,6 +71,7 @@ describe("trashCommands breadth — mock fetch", () => {
 
   afterEach(() => {
     globalThis.fetch = origFetch;
+    resetCliOutputFormat();
   });
 
   const boardWithList = (listId: number): Board =>
@@ -136,23 +138,18 @@ describe("trashCommands breadth — mock fetch", () => {
       });
     });
     const out = await captureStdout(() => runTrashLists({ port: 22100 }));
-    expect(JSON.parse(out.trim())).toEqual({
-      items: [
-        {
-          type: "list",
-          listId: 1,
-          name: "L",
-          emoji: null,
-          boardId: 1,
-          boardName: "B",
-          boardDeletedAt: null,
-          deletedAt: "",
-          canRestore: true,
-        },
-      ],
-      total: 1,
-      limit: 20,
-      offset: 0,
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual({
+      type: "list",
+      listId: 1,
+      name: "L",
+      emoji: null,
+      boardId: 1,
+      boardName: "B",
+      boardDeletedAt: null,
+      deletedAt: "",
+      canRestore: true,
     });
   });
 
@@ -186,26 +183,21 @@ describe("trashCommands breadth — mock fetch", () => {
       });
     });
     const out = await captureStdout(() => runTrashTasks({ port: 22101 }));
-    expect(JSON.parse(out.trim())).toEqual({
-      items: [
-        {
-          type: "task",
-          taskId: 2,
-          title: "X",
-          emoji: null,
-          boardId: 1,
-          boardName: "B",
-          boardDeletedAt: null,
-          listId: 1,
-          listName: "L",
-          listDeletedAt: null,
-          deletedAt: "",
-          canRestore: true,
-        },
-      ],
-      total: 1,
-      limit: 20,
-      offset: 0,
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual({
+      type: "task",
+      taskId: 2,
+      title: "X",
+      emoji: null,
+      boardId: 1,
+      boardName: "B",
+      boardDeletedAt: null,
+      listId: 1,
+      listName: "L",
+      listDeletedAt: null,
+      deletedAt: "",
+      canRestore: true,
     });
   });
 

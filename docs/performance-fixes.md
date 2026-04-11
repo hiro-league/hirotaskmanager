@@ -214,7 +214,7 @@ This document records performance-related code changes for supervisor review. Ea
 
 1. **Network:** Open a board with long task descriptions — **`GET /api/boards/<id>?slim=1`** response bodies should be truncated per task.
 2. **Task editor:** Open a task with a long description — full text appears after load; save still works.
-3. **`hirotm boards show`:** Still receives full task bodies (no slim query).
+3. **Full board JSON (`GET /api/boards/:id`, web app):** Still includes full task bodies unless callers use **`bodyPreview`** or **`slim=1`** on that route (CLI uses **`boards describe`** + **`tasks list`** instead of one-shot full board).
 
 ---
 

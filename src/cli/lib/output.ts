@@ -1,29 +1,11 @@
-import type { SearchHit } from "../../shared/models";
+import type { PaginatedListBody } from "../../shared/pagination";
 import { CLI_ERR } from "./cli-error-codes";
+import { getCliOutputFormat, getCliQuiet } from "./cliFormat";
+import { writeHumanStderrError, writeHumanStdoutObject } from "./humanText";
+import type { TableColumn } from "./textTable";
+import { renderRecordsTable } from "./textTable";
 
-/**
- * Default JSON is compact (single line) for agents and pipes; global `--pretty` opts into indented output.
- * No env var for format — only the CLI flag (see AGENTS.md).
- */
-let usePrettyCliJson = false;
-
-/** Reset before each CLI parse so a long-lived test process does not leak the prior run’s format. */
-export function resetCliJsonFormatForRun(): void {
-  usePrettyCliJson = false;
-}
-
-/** Apply global `--pretty`. Called from Commander `preAction`. */
-export function syncCliJsonFormatFromGlobals(globalOpts: {
-  pretty?: boolean;
-}): void {
-  usePrettyCliJson = Boolean(globalOpts.pretty);
-}
-
-function stringifyCliJson(data: unknown): string {
-  return usePrettyCliJson
-    ? JSON.stringify(data, null, 2)
-    : JSON.stringify(data);
-}
+export { resetCliOutputFormat, syncCliOutputFormatFromGlobals } from "./cliFormat";
 
 export class CliError extends Error {
   details?: Record<string, unknown>;
@@ -41,33 +23,110 @@ export class CliError extends Error {
   }
 }
 
+/** Single-document success (writes, `releases show`, server status, …). `boards describe` uses `printBoardDescribeResponse(body, parsed)` (multi-line ndjson or human tables). */
 export function printJson(data: unknown): void {
-  process.stdout.write(`${stringifyCliJson(data)}\n`);
+  if (getCliOutputFormat() === "ndjson") {
+    process.stdout.write(`${JSON.stringify(data)}\n`);
+  } else {
+    writeHumanStdoutObject(data);
+  }
 }
 
-function truncateCell(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return `${s.slice(0, Math.max(0, max - 1))}…`;
+/** Machine-oriented list rows: one JSON object per line. */
+export function printNdjsonLines(items: readonly unknown[] | undefined): void {
+  const rows = items ?? [];
+  for (const item of rows) {
+    process.stdout.write(`${JSON.stringify(item)}\n`);
+  }
 }
 
-/** Fixed-width rows for terminal use (`hirotm query search --format table`). */
-export function printSearchTable(hits: SearchHit[]): void {
-  if (hits.length === 0) {
-    process.stdout.write("No results.\n");
+/** Plan for global `--quiet`: one plain-text cell per row (docs: recommendation #8). */
+export type QuietListPlan = {
+  defaultKeys: readonly string[];
+  explicitField?: string;
+};
+
+function formatQuietCell(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+/** One line per item; not JSON (for pipes / xargs). */
+export function printQuietListLines(
+  items: readonly unknown[],
+  plan: QuietListPlan,
+): void {
+  for (const item of items) {
+    const row = item as Record<string, unknown>;
+    let line: string;
+    if (plan.explicitField) {
+      line = formatQuietCell(row[plan.explicitField]);
+    } else {
+      line = "";
+      for (const key of plan.defaultKeys) {
+        const v = row[key];
+        if (v === null || v === undefined) {
+          continue;
+        }
+        if (typeof v === "string" && v.trim() === "") {
+          continue;
+        }
+        line = formatQuietCell(v);
+        break;
+      }
+    }
+    process.stdout.write(`${line}\n`);
+  }
+}
+
+/** Paginated list read: NDJSON lines, `--quiet` lines, or fixed-width table + paging footer. */
+export function printPaginatedListRead<T>(
+  body: PaginatedListBody<T>,
+  displayItems: readonly unknown[],
+  columns: readonly TableColumn[],
+  quietPlan: QuietListPlan,
+): void {
+  // Global `--quiet` overrides ndjson/human for list stdout (plain lines, not JSON or tables).
+  if (getCliQuiet()) {
+    printQuietListLines(displayItems, quietPlan);
     return;
   }
-  const wBoard = 16;
-  const wId = 5;
-  const wTitle = 26;
-  const wSnip = 44;
-  const head = `${"Board".padEnd(wBoard)} ${"Id".padStart(wId)} ${"Title".padEnd(wTitle)} Snippet\n`;
-  const rule = `${"-".repeat(wBoard)} ${"-".repeat(wId)} ${"-".repeat(wTitle)} ${"-".repeat(wSnip)}\n`;
-  process.stdout.write(head);
-  process.stdout.write(rule);
-  for (const h of hits) {
-    const line = `${truncateCell(h.boardSlug, wBoard).padEnd(wBoard)} ${String(h.taskId).padStart(wId)} ${truncateCell(h.title, wTitle).padEnd(wTitle)} ${truncateCell(h.snippet, wSnip)}\n`;
-    process.stdout.write(line);
+  if (getCliOutputFormat() === "ndjson") {
+    printNdjsonLines(displayItems);
+    return;
   }
+  const records = displayItems.map((r) => r as Record<string, unknown>);
+  const footer = [
+    `total ${body.total} · showing ${records.length} · limit ${body.limit} · offset ${body.offset}`,
+  ];
+  process.stdout.write(renderRecordsTable(records, columns, footer));
+}
+
+/** Array list read (`statuses list`): NDJSON lines, `--quiet` lines, or table (no envelope). */
+export function printArrayListRead(
+  displayItems: readonly unknown[],
+  columns: readonly TableColumn[],
+  quietPlan: QuietListPlan,
+): void {
+  if (getCliQuiet()) {
+    printQuietListLines(displayItems, quietPlan);
+    return;
+  }
+  if (getCliOutputFormat() === "ndjson") {
+    printNdjsonLines(displayItems);
+    return;
+  }
+  const records = displayItems.map((r) => r as Record<string, unknown>);
+  const footer = [`count ${records.length}`];
+  process.stdout.write(renderRecordsTable(records, columns, footer));
 }
 
 /** Pulls `code` / `retryable` to top-level stderr JSON for stable agent parsing (docs/cli-error-handling.md). */
@@ -98,9 +157,16 @@ export function printError(
   exitCode = 1,
   details?: Record<string, unknown>,
 ): never {
-  process.stderr.write(
-    `${stringifyCliJson(buildStderrPayload(message, details))}\n`,
-  );
+  const payload = buildStderrPayload(message, details);
+  if (getCliOutputFormat() === "ndjson") {
+    process.stderr.write(`${JSON.stringify(payload)}\n`);
+  } else {
+    const { error, ...rest } = payload;
+    writeHumanStderrError(
+      String(error ?? message),
+      rest as Record<string, unknown>,
+    );
+  }
   process.exit(exitCode);
 }
 

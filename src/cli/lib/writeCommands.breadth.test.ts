@@ -12,6 +12,7 @@ import {
   runBoardsUpdate,
   runListsAdd,
   runListsDelete,
+  runListsList,
   runListsMove,
   runListsUpdate,
   runReleasesAdd,
@@ -51,6 +52,13 @@ function reqUrl(input: RequestInfo | URL): string {
 describe("writeCommands breadth — validation", () => {
   test("runListsAdd throws without --board", async () => {
     await expect(runListsAdd({ port: 1, board: undefined })).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
+    });
+  });
+
+  test("runListsList throws without --board", async () => {
+    await expect(runListsList({ port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
@@ -173,6 +181,35 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       tasks: [],
       ...b,
     }) as unknown as Board;
+
+  test("runListsList GETs paginated /lists", async () => {
+    const row = {
+      listId: 9,
+      name: "Todo",
+      order: 0,
+      color: "#fff",
+      emoji: null,
+      createdByPrincipal: "web",
+      createdByLabel: null,
+    };
+    setMockFetch(async (input) => {
+      expect(reqUrl(input)).toContain("/api/boards/lb/lists");
+      expect(reqUrl(input)).not.toMatch(/\/lists\/\d/);
+      return new Response(
+        JSON.stringify({
+          items: [row],
+          total: 1,
+          limit: 1,
+          offset: 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const out = await captureStdout(() =>
+      runListsList({ port: 22009, board: "lb" }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({ listId: 9, name: "Todo" });
+  });
 
   test("runListsAdd POSTs and prints writeSuccess", async () => {
     setMockFetch(async (input, init) => {

@@ -33,7 +33,7 @@ The `hirotm start` command launches the same API + web server that `npm run dev`
 | F2 | `hirotm start --background` detaches the server process for AI agent use |
 | F3 | `hirotm status` reports whether the server is running and on which port |
 | F4 | `hirotm boards list` returns all boards as JSON |
-| F5 | `hirotm boards show <id-or-slug>` returns a single board with its lists and tasks |
+| F5 | `hirotm boards describe <id-or-slug>` returns structure + policy without tasks; `hirotm tasks list --board` returns tasks (`GET /api/boards/:id` remains for the web app) |
 | F6 | `hirotm statuses list` returns the workflow statuses |
 | F7 | `hirotm boards add`, `hirotm lists add`, `hirotm tasks add`, `hirotm tasks update`, and `hirotm tasks move` provide the AI-first write surface |
 | F8 | All commands output JSON by default (AI-first) |
@@ -78,7 +78,7 @@ hirotm start
 hirotm start --background --port 4000
 hirotm status
 hirotm boards list
-hirotm boards show my-project
+hirotm boards describe my-project
 hirotm boards add "Sprint Planning"
 hirotm lists add --board sprint-planning "Ready"
 hirotm tasks add --board sprint-planning --list 12 --group 2 --title "Draft notes"
@@ -206,7 +206,7 @@ Required filter flags in the CLI surface:
 - `--from <yyyy-mm-dd>`
 - `--to <yyyy-mm-dd>`
 
-`hirotm boards show <id-or-slug>` should remain the **unfiltered full board** command. Filtered task queries should use `hirotm boards tasks ...`.
+Use **`hirotm boards describe`** for structure and **`hirotm tasks list --board`** (optionally **`--page-all`**) for tasks. Filtered task queries should use **`hirotm boards tasks …`** or **`tasks list`** with filters.
 
 Implementation requirements:
 
@@ -228,7 +228,7 @@ This behavior must be documented in command help and examples because AI callers
 - Each **create** uses a client-generated `clientId`, `label`, `sortOrder`, and optional `emoji`.
 - Each **delete** targets an existing `id`; if the group still has tasks, the delete entry must include `moveTasksToGroupId` or `moveTasksToClientId` so reassignment is explicit.
 - Legacy payloads that send a `taskGroups` array are **rejected**; callers must use the explicit shape above.
-- Safe workflow for scripts: `hirotm boards show <id-or-slug>` → build `updates` (and optional `creates` / `deletes`) from current rows → include valid default and fallback ids after the operation.
+- Safe workflow for scripts: `hirotm boards describe <id-or-slug>` (and task rows if needed) → build `updates` (and optional `creates` / `deletes`) from current rows → include valid default and fallback ids after the operation.
 
 #### Task priorities
 
@@ -321,7 +321,7 @@ Destructive commands remain explicit; no interactive confirmation for non-intera
 
 | Intent | Implemented result |
 |--------|--------------------|
-| Board-scoped task filtering endpoint | Dedicated `GET /api/boards/:id/tasks` powers `hirotm boards tasks …`; `boards show` remains the full board read |
+| Board-scoped task filtering endpoint | Dedicated `GET /api/boards/:id/tasks` powers `hirotm boards tasks …` and `tasks list --board`; full board JSON is `GET /api/boards/:id` (app), not a CLI command |
 | Relative move endpoints for lists/tasks | `PUT /api/boards/:id/lists/move` and `PUT /api/boards/:id/tasks/move` now own ordinary ordering semantics for CLI and UI flows |
 | Advanced search with server-side filters | Requires new search API semantics beyond current board fetch + local filter; tracked separately in `ai-cli-plan.md` |
 
@@ -380,16 +380,10 @@ Output: the JSON array from `GET /api/boards` (array of `BoardIndexEntry`).
 ]
 ```
 
-### `hirotm boards show <id-or-slug>`
+### `hirotm boards describe <id-or-slug>` / task reads
 
-Shows a single board with all its lists, tasks, groups, and statuses.
-
-```
-hirotm boards show my-project
-hirotm boards show 1
-```
-
-Output: the JSON object from `GET /api/boards/:id` (full `Board` model).
+- **`boards describe`** — `GET /api/boards/:id/describe`: lists, groups, priorities, releases, statuses, policy; **no** tasks (optional `--entities`).
+- **Tasks on a board** — `hirotm tasks list --board <id-or-slug>` (paginated; use `--page-all` to merge pages). The web app still loads the full `Board` via `GET /api/boards/:id`.
 
 ### `hirotm statuses list`
 

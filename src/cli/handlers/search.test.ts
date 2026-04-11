@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { PaginatedListBody } from "../../shared/pagination";
 import type { SearchHit } from "../../shared/models";
 import { CLI_ERR } from "../lib/cli-error-codes";
+import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
+import { resetCliOutputFormat } from "../lib/output";
 import { handleSearch } from "./search";
 import type { CliContext } from "./context";
 
@@ -13,7 +15,6 @@ function mockContext(overrides: Partial<CliContext> = {}): CliContext {
       throw new Error("fetchApi not stubbed");
     },
     printJson: () => {},
-    printSearchTable: () => {},
     startServer: async () => {
       throw new Error("unused");
     },
@@ -26,6 +27,10 @@ function mockContext(overrides: Partial<CliContext> = {}): CliContext {
 }
 
 describe("handleSearch", () => {
+  afterEach(() => {
+    resetCliOutputFormat();
+  });
+
   test("requires non-empty query", async () => {
     const ctx = mockContext();
     await expect(handleSearch(ctx, ["", "  "], {})).rejects.toMatchObject({
@@ -34,17 +39,7 @@ describe("handleSearch", () => {
     });
   });
 
-  test("rejects invalid format", async () => {
-    const ctx = mockContext();
-    await expect(
-      handleSearch(ctx, ["x"], { format: "xml" }),
-    ).rejects.toMatchObject({
-      exitCode: 2,
-      details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
-    });
-  });
-
-  test("json output prints hits", async () => {
+  test("ndjson output prints one JSON object per hit line", async () => {
     const hits: SearchHit[] = [
       {
         boardId: 1,
@@ -64,43 +59,56 @@ describe("handleSearch", () => {
       limit: 5,
       offset: 0,
     };
-    let printed: unknown;
     let fetchedPath = "";
     const ctx = mockContext({
       fetchApi: (async (path) => {
         fetchedPath = path;
         return body;
       }) as CliContext["fetchApi"],
-      printJson: (d) => {
-        printed = d;
-      },
     });
 
-    await handleSearch(ctx, ["hello", "world"], {
-      board: "b1",
-      limit: "5",
-      noPrefix: true,
-    });
+    let out = "";
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    try {
+      await handleSearch(ctx, ["hello", "world"], {
+        board: "b1",
+        limit: "5",
+        noPrefix: true,
+      });
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
     expect(fetchedPath).toContain("/search?");
     expect(fetchedPath).toContain("q=hello+world");
     expect(fetchedPath).toContain("limit=5");
     expect(fetchedPath).toContain("board=b1");
     expect(fetchedPath).toContain("prefix=0");
-    expect(printed).toEqual(body);
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual(hits[0]);
   });
 
-  test("rejects --fields with --format table", async () => {
+  test("rejects --fields when global format is human", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human" });
     const ctx = mockContext();
     await expect(
-      handleSearch(ctx, ["q"], { format: "table", fields: "taskId" }),
+      handleSearch(ctx, ["q"], { fields: "taskId" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
     });
   });
 
-  test("json --fields projects items", async () => {
+  test("ndjson --fields projects items", async () => {
     const hits: SearchHit[] = [
       {
         boardId: 1,
@@ -120,25 +128,33 @@ describe("handleSearch", () => {
       limit: 20,
       offset: 0,
     };
-    let printed: unknown;
     const ctx = mockContext({
       fetchApi: (async () => body) as CliContext["fetchApi"],
-      printJson: (d) => {
-        printed = d;
-      },
     });
 
-    await handleSearch(ctx, ["q"], { fields: "taskId,title" });
+    let out = "";
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    try {
+      await handleSearch(ctx, ["q"], { fields: "taskId,title" });
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
-    expect(printed).toEqual({
-      items: [{ taskId: 9, title: "T" }],
-      total: 1,
-      limit: 20,
-      offset: 0,
-    });
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual({ taskId: 9, title: "T" });
   });
 
-  test("table output uses printSearchTable", async () => {
+  test("human format prints a fixed-width table", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human" });
     const hits: SearchHit[] = [
       {
         boardId: 1,
@@ -152,7 +168,6 @@ describe("handleSearch", () => {
         score: 0.2,
       },
     ];
-    let tableHits: SearchHit[] | undefined;
     const body: PaginatedListBody<SearchHit> = {
       items: hits,
       total: 1,
@@ -161,14 +176,27 @@ describe("handleSearch", () => {
     };
     const ctx = mockContext({
       fetchApi: (async () => body) as CliContext["fetchApi"],
-      printSearchTable: (h) => {
-        tableHits = h;
-      },
     });
 
-    await handleSearch(ctx, ["q"], { format: "table" });
+    let out = "";
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    try {
+      await handleSearch(ctx, ["q"], {});
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
-    expect(tableHits).toEqual(hits);
+    expect(out).toContain("Board");
+    expect(out).toContain("Snippet");
+    expect(out).toContain("total 1");
   });
 
   test("omitted --limit sends default limit=20 in request URL (aspect 3 bounded default)", async () => {

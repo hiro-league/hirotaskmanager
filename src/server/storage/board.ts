@@ -24,6 +24,11 @@ import {
 } from "../../shared/models";
 import type { RestoreOutcome } from "../../shared/trashApi";
 import type { PatchBoardTaskGroupConfigInput } from "../../shared/taskGroupConfig";
+import {
+  buildBoardDescribeResponse,
+  type ParsedBoardDescribeEntities,
+  type BoardDescribeResponse,
+} from "../../shared/boardDescribe";
 import { BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS } from "../../shared/boardPayload";
 import { parseEmojiField } from "../../shared/emojiField";
 import { slugify, uniqueSlug } from "../../shared/slug";
@@ -208,17 +213,10 @@ export type LoadBoardOptions = {
   taskBodyMaxChars?: number;
 };
 
-export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | null {
-  const maxBody = options?.taskBodyMaxChars;
-  const useSlimBody =
-    maxBody != null && Number.isFinite(maxBody) && maxBody >= 0;
-  const slimBodyLen = useSlimBody
-    ? Math.min(
-        BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
-        Math.floor(maxBody as number),
-      )
-    : 0;
-  const bodySql = useSlimBody ? "SUBSTR(t.body, 1, ?) AS body" : "t.body";
+/**
+ * Full board document without task rows (avoids heavy task query for describe / future callers).
+ */
+export function loadBoardWithoutTasks(boardId: number): Omit<Board, "tasks"> | null {
   const db = getDb();
   const boardRow = db
     .query(
@@ -350,61 +348,6 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
     createdByLabel: l.created_by_label,
   }));
 
-  const taskRows = db
-    .query(
-      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, ${bodySql}, t.sort_order, t.color, t.emoji,
-              t.release_id, t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
-       FROM task t
-       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
-       WHERE t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
-       ORDER BY t.list_id, t.status_id, t.sort_order, t.id`,
-    )
-    .all(...(useSlimBody ? [slimBodyLen, boardId] : [boardId])) as {
-    id: number;
-    list_id: number;
-    group_id: number;
-    priority_id: number;
-    status_id: string;
-    title: string;
-    body: string;
-    sort_order: number;
-    color: string | null;
-    emoji: string | null;
-    release_id: number | null;
-    created_at: string;
-    updated_at: string;
-    closed_at: string | null;
-    created_by_principal: string | null;
-    created_by_label: string | null;
-  }[];
-
-  const tasks: Task[] = taskRows.map((t) => {
-    const rawRid = t.release_id;
-    const releaseId =
-      rawRid != null && releaseIdSet.has(rawRid) ? rawRid : null;
-    return {
-      taskId: t.id,
-      listId: t.list_id,
-      title: t.title,
-      body: t.body,
-      groupId: t.group_id,
-      priorityId: t.priority_id,
-      status: t.status_id as Task["status"],
-      order: t.sort_order,
-      color: t.color ?? undefined,
-      emoji:
-        t.emoji != null && String(t.emoji).trim() !== ""
-          ? String(t.emoji).trim()
-          : null,
-      createdAt: t.created_at,
-      updatedAt: t.updated_at,
-      closedAt: t.closed_at ?? undefined,
-      createdByPrincipal: normalizeCreatorPrincipal(t.created_by_principal),
-      createdByLabel: t.created_by_label,
-      releaseId,
-    };
-  });
-
   const rawVis = prefs?.visible_statuses
     ? parseJsonColumn<string[]>(prefs.visible_statuses, [])
     : [];
@@ -454,10 +397,100 @@ export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | 
       ? Boolean(prefs.celebration_sounds_muted)
       : false,
     lists,
-    tasks,
     createdAt: boardRow.created_at,
     updatedAt: boardRow.updated_at,
   };
+}
+
+function loadBoardTasks(
+  boardId: number,
+  releaseIdSet: Set<number>,
+  options?: LoadBoardOptions,
+): Task[] {
+  const maxBody = options?.taskBodyMaxChars;
+  const useSlimBody =
+    maxBody != null && Number.isFinite(maxBody) && maxBody >= 0;
+  const slimBodyLen = useSlimBody
+    ? Math.min(
+        BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
+        Math.floor(maxBody as number),
+      )
+    : 0;
+  const bodySql = useSlimBody ? "SUBSTR(t.body, 1, ?) AS body" : "t.body";
+  const db = getDb();
+  const taskRows = db
+    .query(
+      `SELECT t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, ${bodySql}, t.sort_order, t.color, t.emoji,
+              t.release_id, t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       WHERE t.board_id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL
+       ORDER BY t.list_id, t.status_id, t.sort_order, t.id`,
+    )
+    .all(...(useSlimBody ? [slimBodyLen, boardId] : [boardId])) as {
+    id: number;
+    list_id: number;
+    group_id: number;
+    priority_id: number;
+    status_id: string;
+    title: string;
+    body: string;
+    sort_order: number;
+    color: string | null;
+    emoji: string | null;
+    release_id: number | null;
+    created_at: string;
+    updated_at: string;
+    closed_at: string | null;
+    created_by_principal: string | null;
+    created_by_label: string | null;
+  }[];
+
+  return taskRows.map((t) => {
+    const rawRid = t.release_id;
+    const releaseId =
+      rawRid != null && releaseIdSet.has(rawRid) ? rawRid : null;
+    return {
+      taskId: t.id,
+      listId: t.list_id,
+      title: t.title,
+      body: t.body,
+      groupId: t.group_id,
+      priorityId: t.priority_id,
+      status: t.status_id as Task["status"],
+      order: t.sort_order,
+      color: t.color ?? undefined,
+      emoji:
+        t.emoji != null && String(t.emoji).trim() !== ""
+          ? String(t.emoji).trim()
+          : null,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+      closedAt: t.closed_at ?? undefined,
+      createdByPrincipal: normalizeCreatorPrincipal(t.created_by_principal),
+      createdByLabel: t.created_by_label,
+      releaseId,
+    };
+  });
+}
+
+export function loadBoard(boardId: number, options?: LoadBoardOptions): Board | null {
+  // Split load: `loadBoardWithoutTasks` keeps describe and stats paths from scanning every task row.
+  const shell = loadBoardWithoutTasks(boardId);
+  if (!shell) return null;
+  const releaseIdSet = new Set(shell.releases.map((r) => r.releaseId));
+  const tasks = loadBoardTasks(boardId, releaseIdSet, options);
+  return { ...shell, tasks };
+}
+
+/** Agent-oriented board probe: structure and policy without tasks (see `docs/todo.md`). */
+export function loadBoardDescribe(
+  boardId: number,
+  parsed: ParsedBoardDescribeEntities & { ok: true },
+): BoardDescribeResponse | null {
+  const shell = loadBoardWithoutTasks(boardId);
+  if (!shell) return null;
+  return buildBoardDescribeResponse(shell, listStatuses(), parsed);
 }
 
 export async function generateSlug(

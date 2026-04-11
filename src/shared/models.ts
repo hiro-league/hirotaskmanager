@@ -280,7 +280,7 @@ export function taskDisplayTitle(task: Task): string {
 
 /** Row in the board list API — lightweight sidebar entries. */
 export interface BoardIndexEntry {
-  /** Board id; use with `boards show`, `tasks list --board`, etc. */
+  /** Board id; use with `boards describe`, `tasks list --board`, etc. */
   boardId: number;
   slug: string;
   name: string;

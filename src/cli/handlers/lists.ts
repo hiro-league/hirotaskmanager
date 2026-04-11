@@ -1,12 +1,36 @@
 import { parsePortOption } from "../lib/command-helpers";
+import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runListsPurge, runListsRestore } from "../lib/trashCommands";
 import {
   runListsAdd,
   runListsDelete,
+  runListsList,
   runListsMove,
   runListsUpdate,
 } from "../lib/writeCommands";
 import type { CliContext } from "./context";
+
+export async function handleListsList(
+  ctx: CliContext,
+  options: {
+    port?: string;
+    board: string;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
+  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await runListsList({
+    port,
+    board: options.board,
+    limit: options.limit,
+    offset: options.offset,
+    pageAll: options.pageAll,
+    fields: options.fields,
+  });
+}
 
 export async function handleListsAdd(
   ctx: CliContext,
@@ -51,9 +75,16 @@ export async function handleListsUpdate(
 export async function handleListsDelete(
   ctx: CliContext,
   listId: string,
-  options: { port?: string; board: string },
+  options: { port?: string; board: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `lists delete: move list ${listId} on board "${options.board}" to Trash.`,
+      "Restore later with: hirotm lists restore <list-id>",
+    ],
+  });
   await runListsDelete({
     port,
     board: options.board,
@@ -64,18 +95,31 @@ export async function handleListsDelete(
 export async function handleListsRestore(
   ctx: CliContext,
   listId: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `lists restore: restore list ${listId} from Trash (the board must be active).`,
+    ],
+  });
   await runListsRestore({ port, listId });
 }
 
 export async function handleListsPurge(
   ctx: CliContext,
   listId: string,
-  options: { port?: string },
+  options: { port?: string; yes?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  await confirmMutableAction({
+    yes: options.yes === true,
+    impactLines: [
+      `lists purge: permanently delete list ${listId} from Trash.`,
+      "This cannot be undone.",
+    ],
+  });
   await runListsPurge({ port, listId });
 }
 

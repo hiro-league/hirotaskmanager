@@ -1,15 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { Status } from "../../shared/models";
+import { resetCliOutputFormat } from "../lib/output";
 import { handleStatusesList } from "./statuses";
 import type { CliContext } from "./context";
 
 describe("handleStatusesList", () => {
-  test("fetches /statuses and prints JSON", async () => {
+  afterEach(() => {
+    resetCliOutputFormat();
+  });
+
+  test("fetches /statuses and prints NDJSON lines", async () => {
     const rows: Status[] = [
       { statusId: "open", label: "Open", sortOrder: 0, isClosed: false },
     ];
     let path = "";
-    let printed: unknown;
     const ctx: CliContext = {
       resolvePort: () => 3010,
       resolveDataDir: () => "/tmp",
@@ -17,10 +21,7 @@ describe("handleStatusesList", () => {
         path = p;
         return rows;
       }) as CliContext["fetchApi"],
-      printJson: (d) => {
-        printed = d;
-      },
-      printSearchTable: () => {},
+      printJson: () => {},
       startServer: async () => {
         throw new Error("unused");
       },
@@ -30,9 +31,25 @@ describe("handleStatusesList", () => {
       readServerStatus: async () => ({ running: false }),
     };
 
-    await handleStatusesList(ctx, {});
+    let out = "";
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    try {
+      await handleStatusesList(ctx, {});
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
     expect(path).toBe("/statuses");
-    expect(printed).toEqual(rows);
+    const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!)).toEqual(rows[0]);
   });
 });

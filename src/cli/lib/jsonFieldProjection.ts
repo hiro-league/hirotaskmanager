@@ -47,6 +47,17 @@ export const FIELDS_RELEASE = new Set([
   "createdAt",
 ]);
 
+/** `lists list` → each board list row (`List` in `src/shared/models.ts`). */
+export const FIELDS_LIST = new Set([
+  "listId",
+  "name",
+  "order",
+  "color",
+  "emoji",
+  "createdByPrincipal",
+  "createdByLabel",
+]);
+
 /** `query search` (JSON) → {@link SearchHit}. */
 export const FIELDS_SEARCH_HIT = new Set([
   "taskId",

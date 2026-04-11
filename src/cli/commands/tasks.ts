@@ -12,6 +12,7 @@ import {
 } from "../handlers/tasks";
 import {
   addPortOption,
+  addYesOption,
   CLI_FIELDS_OPTION_DESC,
   collectMultiValue,
   withCliErrors,
@@ -69,7 +70,7 @@ export function registerTaskCommands(
       .option("--offset <n>", "Skip this many tasks after server sort (default 0)")
       .option(
         "--page-all",
-        "Fetch every page with --limit (or 500) and merge into one envelope",
+        "Fetch every page with --limit (or 500) and merge into one result set",
       )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
@@ -214,34 +215,43 @@ export function registerTaskCommands(
   );
 
   addPortOption(
-    tasksCommand
-      .command("delete")
-      .description(
-        "Move a task to Trash (tasks restore / purge use the task id only)",
-      )
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
-      .argument("<task-id>", "Numeric task id"),
+    addYesOption(
+      tasksCommand
+        .command("delete")
+        .description(
+          "Move a task to Trash (tasks restore / purge use the task id only)",
+        )
+        .requiredOption("--board <id-or-slug>", "Board id or slug")
+        .argument("<task-id>", "Numeric task id"),
+    ),
   ).action(
-    async (taskId: string, options: { port?: string; board: string }) => {
+    async (
+      taskId: string,
+      options: { port?: string; board: string; yes?: boolean },
+    ) => {
       await withCliErrors(() => handleTasksDelete(ctx, taskId, options));
     },
   );
 
   addPortOption(
-    tasksCommand
-      .command("restore")
-      .description("Restore a task from Trash (board and list must allow it)")
-      .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
-  ).action(async (taskId: string, options: { port?: string }) => {
+    addYesOption(
+      tasksCommand
+        .command("restore")
+        .description("Restore a task from Trash (board and list must allow it)")
+        .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
+    ),
+  ).action(async (taskId: string, options: { port?: string; yes?: boolean }) => {
     await withCliErrors(() => handleTasksRestore(ctx, taskId, options));
   });
 
   addPortOption(
-    tasksCommand
-      .command("purge")
-      .description("Permanently delete a task from Trash (cannot be undone)")
-      .argument("<task-id>", "Numeric task id"),
-  ).action(async (taskId: string, options: { port?: string }) => {
+    addYesOption(
+      tasksCommand
+        .command("purge")
+        .description("Permanently delete a task from Trash (cannot be undone)")
+        .argument("<task-id>", "Numeric task id"),
+    ),
+  ).action(async (taskId: string, options: { port?: string; yes?: boolean }) => {
     await withCliErrors(() => handleTasksPurge(ctx, taskId, options));
   });
 

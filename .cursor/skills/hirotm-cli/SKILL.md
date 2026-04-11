@@ -5,11 +5,13 @@ description: Use the hirotm CLI to inspect and mutate TaskManager boards, tasks,
 
 # hirotm CLI
 
-**Repository dev (`npm run dev`, API on 3002):** add **`--profile dev`** immediately after `hirotm` on each invocation, or set **`TASKMANAGER_PROFILE=dev`** in the environment. Omit for an installed app on port 3001.
+**Repository dev (`npm run dev`, API on 3002):** append **`--profile dev`** to each command (for example **`hirotm boards list --profile dev`**), or set **`TASKMANAGER_PROFILE=dev`** in the environment. Omit for an installed app on port 3001.
 
-**JSON output:** stdout and stderr JSON are **compact (single-line)** by default. Use **`--pretty`** when you want indented JSON for reading in a terminal.
+**Output:** global **`--format ndjson|human`** (default **`ndjson`**). **`ndjson`:** list/search reads → one JSON object per line; other successes → one compact JSON line; errors → JSON on stderr. **`human`:** list reads and **`query search`** → fixed-width tables (with a short pagination footer where applicable); other successes → labeled lines; errors → plain text on stderr.
 
-**Field projection:** On list-style reads (`boards list`, `tasks list`, `releases list|show`, `query search` JSON, `trash list …`, `statuses list`), pass **`--fields <keys>`** (comma-separated keys matching API JSON, e.g. **`boardId`**, **`taskId`**, **`releaseId`**, **`statusId`**) to shrink each row; unknown keys exit **2**. Not on **`boards show`** (deferred). Not with **`query search --format table`**.
+**Quiet lists:** **`-q` / `--quiet`** on those same list reads prints **one identifier per line** (plain text, not JSON); requires **`--format ndjson`**. Defaults: boards → **`slug`** then **`boardId`**; tasks and search hits → **`taskId`**; releases → **`releaseId`**; **`lists list`** and trashed lists → **`listId`**; statuses → **`statusId`**. With **`--quiet`**, **`--fields`** allows **at most one** key.
+
+**Field projection:** On list-style reads (`boards list`, `tasks list`, `lists list`, `releases list`, `query search`, `trash list …`, `statuses list`), pass **`--fields <keys>`** (comma-separated API keys) to shrink each row; unknown keys exit **2**. Requires **`--format ndjson`** (not compatible with human tables). **`boards describe`** does not use **`--fields`**; it uses **`--entities`** (`list`, `group`, `priority`, `release`, `status`, `meta`; order controls stdout); **ndjson** prints **`kind: "board"`**, then **`kind: "policy"`**, then row lines and optional **`kind: "meta"`**—not one nested JSON blob on stdout.
 
 ## When To Use
 
@@ -26,26 +28,27 @@ Use this skill when:
 - For agent-driven writes, include `--client-name "Cursor Agent"` so notifications identify the writer clearly.
 - Prefer CLI JSON output as the source of truth for current board/task data.
 - Do not write SQL or edit database files unless the user explicitly asks for database-level work.
-- If a query command fails with `Server not reachable`, run the exact `hirotm server start ...` hint from the error output and retry (insert `--profile dev` after `hirotm` when using the dev server on 3002).
+- If a query command fails with `Server not reachable`, run the exact `hirotm server start ...` hint from the error output and retry (append `--profile dev` when using the dev server on 3002).
 
 ## Common Commands
 
 ```bash
 hirotm server status
 hirotm boards list
-hirotm boards show <id-or-slug>
-hirotm boards add --client-name "Cursor Agent" [name] [--emoji <text>]
-hirotm lists add --client-name "Cursor Agent" --board <id-or-slug> [name] [--emoji <text>]
-hirotm tasks add --client-name "Cursor Agent" --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--release <name>|none|--release-id <id>] [--title ...] [--body|--body-file|--body-stdin ...]
-hirotm tasks update --client-name "Cursor Agent" --board <id-or-slug> <task-id> [--title ...] [--list ...] [--status ...] [--release ...] [--body|--body-file|--body-stdin ...]
+hirotm boards describe <id-or-slug> [--entities list,group,priority,release,status,meta]
+hirotm boards add [name] [--emoji <text>] --client-name "Cursor Agent"
+hirotm lists list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm lists add --board <id-or-slug> [name] [--emoji <text>] --client-name "Cursor Agent"
+hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--release <name>|none|--release-id <id>] [--title ...] [--body|--body-file|--body-stdin ...] --client-name "Cursor Agent"
+hirotm tasks update --board <id-or-slug> [--title ...] [--list ...] [--status ...] [--release ...] [--body|--body-file|--body-stdin ...] <task-id> [--client-name "Cursor Agent"]
 hirotm tasks list --board <id-or-slug> [--release-id <id> ...] [--untagged]
 hirotm releases list --board <id-or-slug>
 hirotm releases add --board <id-or-slug> --name <text>
-hirotm tasks move --client-name "Cursor Agent" --board <id-or-slug> <task-id> --to-list <id> [--to-status <id>]
+hirotm tasks move --board <id-or-slug> --to-list <id> [--to-status <id>] [--first|--last|--before-task <id>|--after-task <id>] <task-id> [--client-name "Cursor Agent"]
 hirotm statuses list
 hirotm query search "<query>"
 hirotm query search "<query>" --board <id-or-slug>
-hirotm query search "<query>" --format table
+hirotm query search "<query>" --format human
 hirotm trash list boards   # trashed boards (JSON)
 hirotm trash list lists
 hirotm trash list tasks
@@ -59,27 +62,28 @@ hirotm server stop
 ## Usage Pattern
 
 1. Check server availability with `hirotm server status` or a read command (with `--profile dev` when on repo dev).
-2. If the server is not reachable, run the hinted `hirotm server start ...` command (add `--profile dev` for dev API).
+2. If the server is not reachable, run the hinted `hirotm server start ...` command (append `--profile dev` for dev API).
 3. Use read commands to inspect current state.
-4. Keep outputs in JSON when reporting or making follow-up decisions.
+4. Prefer **`--format ndjson`** (default) when parsing output programmatically.
 5. When performing writes as an automated agent, add `--client-name "Cursor Agent"` unless the user asked for a different writer label.
 
 ## Task priority
 
-Every task has a priority row on the board (builtin **`none`**, value `0`, is the default). Omit `--priority` on `tasks add` for that default; pass `--priority <id>` with a row id from `boards show` to set or change priority (including resetting to `none` on `tasks update`).
+Every task has a priority row on the board (builtin **`none`**, value `0`, is the default). Omit `--priority` on `tasks add` for that default; pass `--priority <id>` with a row id from **`boards describe`** to set or change priority (including resetting to `none` on `tasks update`).
 
 ## Output Expectations
 
-- Read commands print valid JSON to `stdout`.
-- Errors print JSON to `stderr` with `error` and usually `code` (and sometimes `retryable`, `hint`, `status`, `url`).
+- Default **`ndjson`:** machine-readable JSON (line-oriented for lists); stderr errors are JSON with `error` and usually `code` (and sometimes `retryable`, `hint`, `status`, `url`).
+- **`human`:** tables or labeled text on stdout; stderr errors are plain text (same detail keys, not JSON).
 - Non-zero exit codes are meaningful: **2** usage, **3** not found, **4** forbidden, **5** conflict, **6** unreachable, **7** timeout, **9** bad request, **10** unauthenticated, **1** generic/internal. Repo: `docs/cli-error-handling.md`, `AGENTS.md`. Published `code` catalog: Hiro docs → Task Manager → Errors & exit codes (`/task-manager/cli/hirotm-error-codes`).
 
 ## Examples
 
 ```bash
 hirotm boards list
-hirotm boards show my-project
+hirotm boards describe my-project
+hirotm tasks list --board my-project --page-all
 hirotm statuses list
 hirotm query search "fts5" --board my-project
-hirotm --profile dev server start --background
+hirotm server start --background --profile dev
 ```

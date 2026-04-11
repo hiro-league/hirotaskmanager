@@ -13,7 +13,7 @@ This document proposes storage, API, shared types, filtering, keyboard handling,
 - Extend **`Board`** payloads with `releases: ReleaseDefinition[]` (or equivalent) and board-level settings: `defaultReleaseId`, `autoAssignReleaseOnCreateUi`, `autoAssignReleaseOnCreateCli` (exact names TBD in implementation).
 - Apply **auto-assign** in the **server** on task **create** when the client omits an explicit release and the matching toggle is on; use **`createdByPrincipal`** (`web` vs `cli`) already present on tasks to decide UI vs CLI behavior—no new “channel” field required if create endpoints set it consistently.
 - Extend **shared board filter** helpers (`boardFilters.ts` pattern) with **active release ids** + **untagged** flag, and **OR** semantics consistent with group/priority.
-- **CLI** resolves `--release <name>` to id server-side or in CLI after `boards show` / `releases list`; storage remains id-based.
+- **CLI** resolves `--release <name>` to id server-side or in CLI after `boards describe` / `releases list`; storage remains id-based.
 
 ## Data model
 

@@ -34,7 +34,7 @@ function spawnHirotm(
 }
 
 describe("hirotm subprocess smoke (aspect 4)", () => {
-  test("boards list hits stub API and prints paginated JSON on stdout (exit 0)", async () => {
+  test("boards list hits stub API and prints NDJSON stdout (empty page → no lines) (exit 0)", async () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
@@ -68,20 +68,14 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
       expect(code).toBe(0);
       expect(stderr.trim()).toBe("");
-      expect(stdout.trimEnd().split("\n").length).toBe(1);
-      const parsed: unknown = JSON.parse(stdout.trim());
-      expect(parsed).toEqual({
-        items: [],
-        total: 0,
-        limit: 0,
-        offset: 0,
-      });
+      // Default list output is NDJSON; empty page emits no lines.
+      expect(stdout.trim()).toBe("");
     } finally {
       server.stop();
     }
   });
 
-  test("boards list --pretty → multi-line stdout JSON (exit 0)", async () => {
+  test("boards list --format human → fixed-width table stdout (exit 0)", async () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
@@ -89,7 +83,14 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
         if (u.pathname === "/api/boards" && req.method === "GET") {
           return new Response(
             JSON.stringify({
-              items: [{ id: 1, name: "A" }],
+              items: [
+                {
+                  boardId: 1,
+                  slug: "a",
+                  name: "Alpha",
+                  emoji: null,
+                },
+              ],
               total: 1,
               limit: 1,
               offset: 0,
@@ -109,9 +110,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
       const proc = spawnHirotm([
         "boards",
         "list",
+        "--format",
+        "human",
         "-p",
         String(port),
-        "--pretty",
       ]);
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -121,13 +123,96 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
       expect(code).toBe(0);
       expect(stderr.trim()).toBe("");
-      expect(stdout.trim().split("\n").length).toBeGreaterThan(1);
-      expect(JSON.parse(stdout.trim())).toEqual({
-        items: [{ id: 1, name: "A" }],
-        total: 1,
-        limit: 1,
-        offset: 0,
-      });
+      expect(stdout).toContain("Slug");
+      expect(stdout).toContain("Alpha");
+      expect(stdout).toContain("total 1");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("boards list --quiet → one slug per line (exit 0)", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const u = new URL(req.url);
+        if (u.pathname === "/api/boards" && req.method === "GET") {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  boardId: 1,
+                  slug: "a",
+                  name: "Alpha",
+                  emoji: null,
+                },
+              ],
+              total: 1,
+              limit: 1,
+              offset: 0,
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    try {
+      const port = server.port;
+      const proc = spawnHirotm([
+        "--quiet",
+        "boards",
+        "list",
+        "-p",
+        String(port),
+      ]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+
+      expect(code).toBe(0);
+      expect(stderr.trim()).toBe("");
+      expect(stdout.trimEnd()).toBe("a");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("boards list --quiet --format human → exit 2 (stdout not JSON)", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return new Response("unused", { status: 500 });
+      },
+    });
+
+    try {
+      const proc = spawnHirotm([
+        "--quiet",
+        "--format",
+        "human",
+        "boards",
+        "list",
+        "-p",
+        String(server.port),
+      ]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+
+      expect(code).toBe(2);
+      expect(stdout.trim()).toBe("");
+      // Global --format human → stderr is plain text, not JSON (same as other human-mode errors).
+      expect(stderr).toContain("--quiet");
+      expect(stderr).toContain("ndjson");
     } finally {
       server.stop();
     }
@@ -159,7 +244,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("Usage:");
     expect(stdout.toLowerCase()).toContain("hirotm");
-    expect(stdout).toContain("--pretty");
+    expect(stdout).toContain("--format");
+    expect(stdout).toContain("--quiet");
   });
 
   test("boards --help and query search --help (aspect 3 discoverability spot-check)", async () => {
@@ -191,8 +277,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(err.code).toBe("missing_required");
   });
 
-  test("Commander missing required argument → exit 1 (boards show)", async () => {
-    const proc = spawnHirotm(["boards", "show"]);
+  test("Commander missing required argument → exit 1 (boards describe)", async () => {
+    const proc = spawnHirotm(["boards", "describe"]);
     const [stdout, stderr] = await Promise.all([
       readSubprocessStream(proc.stdout),
       readSubprocessStream(proc.stderr),
@@ -203,6 +289,94 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(stdout.trim()).toBe("");
     // Commander prints plain text; project contract prefers exit 2 for usage (see docs/cli-error-handling.md).
     expect(stderr).toContain("missing required argument");
+  });
+
+  test("boards delete without --yes (piped stdin) → exit 2 confirmation_required", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return new Response("unused", { status: 500 });
+      },
+    });
+
+    try {
+      const proc = spawnHirotm([
+        "boards",
+        "delete",
+        "x",
+        "-p",
+        String(server.port),
+      ]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+
+      expect(code).toBe(2);
+      expect(stdout.trim()).toBe("");
+      expect(stderr).toContain("boards delete");
+      expect(stderr).toContain("Trash");
+      const lines = stderr.trim().split("\n").filter((l) => l.length > 0);
+      const jsonLine = lines[lines.length - 1]!;
+      const err = JSON.parse(jsonLine) as Record<string, unknown>;
+      expect(err.code).toBe("confirmation_required");
+      expect(String(err.hint ?? "")).toContain("--yes");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("boards delete --yes with stub API → exit 0 and stdout JSON", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const u = new URL(req.url);
+        if (u.pathname === "/api/boards/x" && req.method === "GET") {
+          return new Response(
+            JSON.stringify({
+              boardId: 1,
+              slug: "x",
+              name: "X",
+              emoji: null,
+              description: "",
+              lists: [],
+              tasks: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u.pathname === "/api/boards/x" && req.method === "DELETE") {
+          return new Response(null, { status: 204 });
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    try {
+      const proc = spawnHirotm([
+        "boards",
+        "delete",
+        "x",
+        "--yes",
+        "-p",
+        String(server.port),
+      ]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+
+      expect(code).toBe(0);
+      expect(stderr.trim()).toBe("");
+      const line = stdout.trim().split("\n").filter((l) => l.length > 0);
+      expect(line.length).toBeGreaterThanOrEqual(1);
+      const row = JSON.parse(line[0]!) as Record<string, unknown>;
+      expect(row.ok).toBe(true);
+    } finally {
+      server.stop();
+    }
   });
 
   test("boards list with stub 403 → exit 4 and stderr JSON (aspect 3 + 6)", async () => {

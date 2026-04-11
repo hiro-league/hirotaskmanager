@@ -40,7 +40,7 @@ These are **not** planned for the CLI: they exist for the web app and are not ne
 | 1.4 | Implement `src/cli/lib/api-client.ts` | `fetchApi(path)` → calls `http://localhost:{port}/api/{path}`, returns parsed JSON, handles connection refused |
 | 1.5 | Implement `src/cli/lib/output.ts` | `printJson(data)` to stdout, `printError(msg)` to stderr, set exit code |
 | 1.6 | Implement `hirotm boards list` | Calls `GET /api/boards`, prints result |
-| 1.7 | Implement `hirotm boards show` | Calls `GET /api/boards/:id`, prints **full** board (all tasks); filtered board task output is planned in [Phase 4b](#phase-4b--api-backed-board-task-filtering--server-owned-move-semantics) |
+| 1.7 | ~~`hirotm boards show`~~ **removed** | Use `boards describe` + `tasks list --board` (and `--page-all`); `GET /api/boards/:id` remains for the web app |
 | 1.8 | Implement `hirotm statuses list` | Calls `GET /api/statuses`, prints result |
 | 1.9 | Implement `hirotm start` | Foreground: runs existing server startup. Background: `Bun.spawn` detached child |
 | 1.10 | Implement `hirotm status` | Check PID file + health endpoint |
@@ -120,7 +120,7 @@ This phase moves two areas out of CLI-side compensation and into cleaner API-bac
 | Area | Implemented work | Notes |
 |------|------------------|-------|
 | Board tasks API | Added filtered board task endpoint | `GET /api/boards/:id/tasks` supports `listId`, `groupId`, repeated `priorityId`, repeated `status`, `dateMode`, `from`, `to` |
-| CLI | Added `hirotm boards tasks <id-or-slug> ...` | Dedicated filtered task query; `boards show` remains the full unfiltered board |
+| CLI | Added `hirotm boards tasks <id-or-slug> ...` | Dedicated filtered task query; full task sets via `tasks list --board` |
 | UI / shared semantics | Kept board header filtering aligned with the shared predicate | Server filtering reuses the shared board filter semantics instead of inventing a second ruleset |
 | Lists API | Added relative move endpoint for lists | `PUT /api/boards/:id/lists/move` with `listId` + `beforeListId` / `afterListId` / `position` |
 | Tasks API | Added relative move endpoint for tasks | `PUT /api/boards/:id/tasks/move` accepts task destination and relative placement; UI drag flows provide visible-order context when filters hide some tasks |

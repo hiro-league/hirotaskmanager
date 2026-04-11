@@ -1,12 +1,67 @@
 import { Command } from "commander";
 import { CLI_ERR } from "./cli-error-codes";
+import { getCliOutputFormat, getCliQuiet } from "./cliFormat";
 import { CliError, exitWithError } from "./output";
 
 /** Shared Commander option helpers — Phase 1 CLI split from monolithic index.ts. */
 
 /** Help text for read/list `--fields` (subset projection; see `jsonFieldProjection.ts` allowlists). */
 export const CLI_FIELDS_OPTION_DESC =
-  "Comma-separated JSON keys per row (API names only; unknown keys exit 2). Paginated output keeps total, limit, offset.";
+  "Comma-separated API keys per row (unknown keys exit 2); use with global --format ndjson, not human tables.";
+
+/** `boards describe --entities`: list,group,priority,release,status,meta — order controls CLI stdout (and HTTP when subset). */
+export const CLI_BOARD_DESCRIBE_ENTITIES_DESC =
+  "Comma-separated: list,group,priority,release,status,meta (omit for default five sections, no meta). Board + cliPolicy always in JSON; duplicate or unknown tokens exit 2; board is not a token.";
+
+/** Guarded deletes / structure replaces: paired with `confirmMutableAction` in handlers. */
+export const CLI_YES_OPTION_DESC = "Skip the confirmation prompt";
+
+/** Attach `-y` / `--yes` for commands that call `confirmMutableAction`. */
+export function addYesOption(command: Command): Command {
+  return command.option("-y, --yes", CLI_YES_OPTION_DESC);
+}
+
+/** Human tables cannot apply arbitrary `--fields`; enforce before fetch. */
+export function requireNdjsonWhenUsingFields(
+  fieldKeys: string[] | undefined,
+): void {
+  if (
+    fieldKeys != null &&
+    fieldKeys.length > 0 &&
+    getCliOutputFormat() === "human"
+  ) {
+    throw new CliError("--fields requires global --format ndjson", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+}
+
+/** Pipe-friendly `--quiet` stdout is not JSON; same constraint as `--fields` vs human tables. */
+export function requireNdjsonWhenQuiet(): void {
+  if (getCliQuiet() && getCliOutputFormat() === "human") {
+    throw new CliError("--quiet requires global --format ndjson", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+}
+
+/**
+ * With global `--quiet`, `--fields` may supply exactly one key (that column per line).
+ * Multiple keys are ambiguous for single-column output.
+ */
+export function resolveQuietExplicitField(
+  fieldKeys: string[] | undefined,
+): string | undefined {
+  if (!getCliQuiet() || fieldKeys == null || fieldKeys.length === 0) {
+    return undefined;
+  }
+  if (fieldKeys.length > 1) {
+    throw new CliError("--quiet allows at most one --fields key", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+  return fieldKeys[0];
+}
 
 export function addPortOption(command: Command): Command {
   return command

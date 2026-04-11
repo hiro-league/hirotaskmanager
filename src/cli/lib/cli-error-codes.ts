@@ -5,6 +5,10 @@
 export const CLI_ERR = {
   badRequest: "bad_request",
   conflictingClearWithInput: "conflicting_clear_with_input",
+  /** User answered “no” at an interactive confirmation prompt. */
+  confirmationDeclined: "confirmation_declined",
+  /** Non-interactive stdin (or missing TTY) without `-y` / `--yes` on a guarded mutation. */
+  confirmationRequired: "confirmation_required",
   conflict: "conflict",
   fileNotFound: "file_not_found",
   conflictingInputSources: "conflicting_input_sources",

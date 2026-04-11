@@ -13,7 +13,6 @@ function baseCtx(overrides: Partial<CliContext> = {}): CliContext {
       throw new Error("unused");
     },
     printJson: () => {},
-    printSearchTable: () => {},
     startServer: async () => {
       throw new Error("unused");
     },

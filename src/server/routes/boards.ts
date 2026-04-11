@@ -28,6 +28,7 @@ import {
   computeBoardStats,
   parseBoardStatsFilter,
 } from "../../shared/boardStats";
+import { parseBoardDescribeEntities } from "../../shared/boardDescribe";
 import {
   BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS,
   BOARD_FETCH_SLIM_TASK_BODY_CHARS,
@@ -46,6 +47,7 @@ import {
   generateSlug,
   listStatuses,
   loadBoard,
+  loadBoardDescribe,
   patchBoard,
   patchBoardTaskPriorities,
   patchBoardTaskGroupConfig,
@@ -416,9 +418,13 @@ boardsRoute.post("/:id/releases", async (c) => {
     releaseDate,
   });
   if (!created) {
+    // Duplicate `(board_id, name)` or rare DB failure — treat as conflict for agents (HTTP 409 → hirotm exit 5).
     return c.json(
-      { error: "Could not create release (duplicate name?)" },
-      400,
+      {
+        error:
+          "A release with this name already exists on this board.",
+      },
+      409,
     );
   }
   const board = loadBoard(entry.boardId);
@@ -479,8 +485,20 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
     return c.json({ error: "No changes" }, 400);
   }
   const updated = updateBoardRelease(entry.boardId, releaseId, input);
-  if (!updated) {
-    return c.json({ error: "Release not found or duplicate name" }, 400);
+  if (!updated.ok) {
+    if (updated.reason === "not_found") {
+      return c.json({ error: "Release not found" }, 404);
+    }
+    if (updated.reason === "duplicate_name") {
+      return c.json(
+        {
+          error:
+            "A release with this name already exists on this board.",
+        },
+        409,
+      );
+    }
+    return c.json({ error: "Invalid release update" }, 400);
   }
   const board = loadBoard(entry.boardId);
   if (board) {
@@ -488,10 +506,10 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
       kind: "release-upserted",
       boardId: entry.boardId,
       boardUpdatedAt: board.updatedAt,
-      release: updated,
+      release: updated.release,
     });
   }
-  return c.json(updated);
+  return c.json(updated.release);
 });
 
 boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
@@ -648,6 +666,26 @@ boardsRoute.put("/:id/lists/move", async (c) => {
     recordListMoved(c, entry, saved, listId);
   }
   return c.json(saved);
+});
+
+// List collection read for CLI/agents: same readBoard gate as GET /boards/:id; ordered like the board UI.
+boardsRoute.get("/:id/lists", async (c) => {
+  const entry = await entryByIdOrSlug(c.req.param("id"));
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blockedRead = cliBoardReadError(c, entry);
+  if (blockedRead) return blockedRead;
+  const board = loadBoard(entry.boardId);
+  if (!board) return c.json({ error: "Board not found" }, 404);
+  const page = parseListPagination(new URL(c.req.url).searchParams, {
+    defaultLimit: null,
+  });
+  if (!page.ok) {
+    return c.json({ error: page.error }, 400);
+  }
+  const ordered = [...board.lists].sort(
+    (a, b) => a.order - b.order || a.listId - b.listId,
+  );
+  return c.json(paginateInMemory(ordered, page.offset, page.limit));
 });
 
 boardsRoute.get("/:id/lists/:listId", async (c) => {
@@ -1402,7 +1440,27 @@ boardsRoute.patch("/:id", async (c) => {
   return c.json(saved);
 });
 
-// Registered before `GET /:id` so `:id` does not capture the literal `stats`.
+// Registered before `GET /:id` so `:id` does not capture literals like `describe` or `stats`.
+boardsRoute.get("/:id/describe", async (c) => {
+  const param = c.req.param("id");
+  const entry = await entryByIdOrSlug(param);
+  if (!entry) return c.json({ error: "Board not found" }, 404);
+  const blocked = cliBoardReadError(c, entry);
+  if (blocked) return blocked;
+  const rawEntities = c.req.query("entities");
+  const parsed = parseBoardDescribeEntities(
+    rawEntities === null || rawEntities === undefined
+      ? undefined
+      : rawEntities,
+  );
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+  const body = loadBoardDescribe(entry.boardId, parsed);
+  if (!body) return c.json({ error: "Board not found" }, 404);
+  return c.json(body);
+});
+
 boardsRoute.get("/:id/stats", async (c) => {
   const param = c.req.param("id");
   const entry = await entryByIdOrSlug(param);

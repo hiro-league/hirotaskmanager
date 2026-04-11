@@ -5,6 +5,8 @@ export {
   entryByIdOrSlug,
   boardIndexEntryById,
   loadBoard,
+  loadBoardWithoutTasks,
+  loadBoardDescribe,
   generateSlug,
   trashBoardById,
   restoreBoardById,
@@ -20,6 +22,7 @@ export {
   updateBoardRelease,
   deleteBoardRelease,
   listReleasesForBoard,
+  type UpdateBoardReleaseResult,
 } from "./releases";
 export {
   createListOnBoard,

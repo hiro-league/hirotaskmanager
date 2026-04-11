@@ -134,9 +134,17 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     }
   });
 
-  test("boards list returns paginated JSON via real GET /api/boards", async () => {
+  test("boards list returns NDJSON (empty DB → no stdout lines) via real GET /api/boards", async () => {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, "boards", "list", "-p", String(port)],
+      cmd: [
+        "bun",
+        "run",
+        hirotmEntry,
+        "boards",
+        "list",
+        "-p",
+        String(port),
+      ],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -154,9 +162,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
     expect(code).toBe(0);
     expect(stderr.trim()).toBe("");
-    const parsed = JSON.parse(stdout.trim()) as Record<string, unknown>;
-    expect(parsed.items).toEqual([]);
-    expect(parsed.total).toBe(0);
+    expect(stdout.trim()).toBe("");
   });
 
   test("statuses list returns seeded workflow rows", async () => {
@@ -179,9 +185,10 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
     expect(code).toBe(0);
     expect(stderr.trim()).toBe("");
-    const rows = JSON.parse(stdout.trim()) as { id: string }[];
+    const lines = stdout.trimEnd().split("\n").filter((l) => l.length > 0);
+    const rows = lines.map((l) => JSON.parse(l) as { statusId: string });
     expect(rows.length).toBeGreaterThanOrEqual(3);
-    const ids = new Set(rows.map((r) => r.id));
+    const ids = new Set(rows.map((r) => r.statusId));
     expect(ids.has("open")).toBe(true);
     expect(ids.has("in-progress")).toBe(true);
     expect(ids.has("closed")).toBe(true);

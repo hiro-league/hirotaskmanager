@@ -8,8 +8,10 @@ import {
   exitWithError,
   printError,
   printJson,
-  resetCliJsonFormatForRun,
-  syncCliJsonFormatFromGlobals,
+  printPaginatedListRead,
+  printQuietListLines,
+  resetCliOutputFormat,
+  syncCliOutputFormatFromGlobals,
 } from "./output";
 
 describe("printError / stderr JSON (aspect 3)", () => {
@@ -20,7 +22,7 @@ describe("printError / stderr JSON (aspect 3)", () => {
     // Restore so other tests see the real streams.
     process.stderr.write = origStderrWrite;
     process.exit = origExit;
-    resetCliJsonFormatForRun();
+    resetCliOutputFormat();
   });
 
   function capturePrintError(
@@ -94,7 +96,7 @@ describe("printError / stderr JSON (aspect 3)", () => {
     expect(stderrJson.other).toBe(1);
   });
 
-  test("default stderr JSON is single-line (compact)", () => {
+  test("default ndjson stderr is single-line (compact JSON)", () => {
     let stderrOut = "";
     let exitCode = -1;
     process.stderr.write = (chunk: string | Uint8Array): boolean => {
@@ -123,7 +125,7 @@ describe("printError / stderr JSON (aspect 3)", () => {
     });
   });
 
-  test("pretty mode emits multi-line stderr JSON", () => {
+  test("human format stderr is plain text (not JSON)", () => {
     let stderrOut = "";
     let exitCode = -1;
     process.stderr.write = (chunk: string | Uint8Array): boolean => {
@@ -138,7 +140,7 @@ describe("printError / stderr JSON (aspect 3)", () => {
       throw new Error("__test_exit__");
     }) as typeof process.exit;
 
-    syncCliJsonFormatFromGlobals({ pretty: true });
+    syncCliOutputFormatFromGlobals({ format: "human" });
     try {
       printError("e", 3, { code: CLI_ERR.notFound });
       expect.unreachable();
@@ -146,11 +148,10 @@ describe("printError / stderr JSON (aspect 3)", () => {
       expect((e as Error).message).toBe("__test_exit__");
     }
     expect(exitCode).toBe(3);
-    expect(stderrOut.trim().split("\n").length).toBeGreaterThan(1);
-    expect(JSON.parse(stderrOut.trim())).toMatchObject({
-      error: "e",
-      code: CLI_ERR.notFound,
-    });
+    expect(stderrOut).toContain("Error:");
+    expect(stderrOut).toContain("e");
+    expect(stderrOut).toContain("code:");
+    expect(() => JSON.parse(stderrOut.trim())).toThrow();
   });
 });
 
@@ -161,7 +162,7 @@ describe("exitWithError (aspect 3)", () => {
   afterEach(() => {
     process.stderr.write = origStderrWrite;
     process.exit = origExit;
-    resetCliJsonFormatForRun();
+    resetCliOutputFormat();
   });
 
   function captureExitWithError(err: unknown): {
@@ -232,15 +233,15 @@ describe("exitWithError (aspect 3)", () => {
   });
 });
 
-describe("printJson / default compact vs --pretty (#4)", () => {
+describe("printJson / single-document ndjson vs human", () => {
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
 
   afterEach(() => {
     process.stdout.write = origStdoutWrite;
-    resetCliJsonFormatForRun();
+    resetCliOutputFormat();
   });
 
-  test("default is compact (single line for nested object)", () => {
+  test("ndjson is single-line JSON for nested object (no indentation)", () => {
     let out = "";
     process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
       out +=
@@ -255,7 +256,7 @@ describe("printJson / default compact vs --pretty (#4)", () => {
     expect(JSON.parse(out.trim())).toEqual({ board: { id: 1 } });
   });
 
-  test("syncCliJsonFormatFromGlobals({ pretty: true }) prints indented JSON", () => {
+  test("human format prints labeled lines", () => {
     let out = "";
     process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
       out +=
@@ -265,9 +266,77 @@ describe("printJson / default compact vs --pretty (#4)", () => {
       void args;
       return true;
     };
-    syncCliJsonFormatFromGlobals({ pretty: true });
+    syncCliOutputFormatFromGlobals({ format: "human" });
     printJson({ board: { id: 1 } });
-    expect(out.trim().split("\n").length).toBeGreaterThan(1);
-    expect(JSON.parse(out.trim())).toEqual({ board: { id: 1 } });
+    expect(out).toContain("board.id:");
+    expect(out).toContain("1");
+    expect(() => JSON.parse(out.trim())).toThrow();
+  });
+});
+
+describe("printQuietListLines / --quiet list reads", () => {
+  const origStdoutWrite = process.stdout.write.bind(process.stdout);
+
+  afterEach(() => {
+    process.stdout.write = origStdoutWrite;
+    resetCliOutputFormat();
+  });
+
+  test("defaultKeys prefer non-empty slug then boardId", () => {
+    let out = "";
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    printQuietListLines(
+      [
+        { boardId: 1, slug: "a", name: "A" },
+        { boardId: 2, slug: "", name: "B" },
+      ],
+      { defaultKeys: ["slug", "boardId"] },
+    );
+    const lines = out.trimEnd().split("\n");
+    expect(lines).toEqual(["a", "2"]);
+  });
+
+  test("explicitField prints that column even when empty string", () => {
+    let out = "";
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    printQuietListLines([{ slug: "x", name: "" }], {
+      defaultKeys: ["slug", "boardId"],
+      explicitField: "name",
+    });
+    expect(out.trimEnd().split("\n")).toEqual([""]);
+  });
+
+  test("printPaginatedListRead uses quiet lines when global --quiet is set", () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    let out = "";
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    printPaginatedListRead(
+      { items: [{ taskId: 7, title: "T" }], total: 1, limit: 10, offset: 0 },
+      [{ taskId: 7, title: "T" }],
+      [{ key: "taskId", header: "Id", width: 4 }],
+      { defaultKeys: ["taskId"] },
+    );
+    expect(out.trimEnd()).toBe("7");
   });
 });

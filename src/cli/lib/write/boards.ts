@@ -1,10 +1,12 @@
 import { parseBoardColor } from "../../../shared/boardColor";
 import type { Board } from "../../../shared/models";
 import { parsePatchBoardTaskGroupConfigBody } from "../../../shared/taskGroupConfig";
-import { fetchApi, fetchApiMutate } from "../api-client";
-import { CLI_ERR } from "../cli-error-codes";
+import type { CliContext } from "../../types/context";
+import { CLI_ERR } from "../../types/errors";
+import { enrichNotFoundError } from "../cli-http-errors";
 import { parseOptionalEmojiFlag } from "../emoji-cli";
-import { CliError, printJson } from "../output";
+import { CliError } from "../output";
+import { assertMutuallyExclusive } from "../validation";
 import {
   loadJsonArrayInput,
   loadJsonObjectInput,
@@ -18,14 +20,17 @@ import {
   writeTrashMove,
 } from "../write-result";
 
-export async function runBoardsAdd(opts: {
-  port?: number;
-  name?: string;
-  emoji?: string;
-  description?: string;
-  descriptionFile?: string;
-  descriptionStdin?: boolean;
-}): Promise<void> {
+export async function runBoardsAdd(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    name?: string;
+    emoji?: string;
+    description?: string;
+    descriptionFile?: string;
+    descriptionStdin?: boolean;
+  },
+): Promise<void> {
   const port = opts.port;
   const nameTrim = opts.name?.trim() ?? "";
   const emojiOpt = parseOptionalEmojiFlag(opts.emoji);
@@ -45,45 +50,45 @@ export async function runBoardsAdd(opts: {
     ).trim();
   }
 
-  const board = await fetchApiMutate<Board>(
+  const board = await ctx.fetchApiMutate<Board>(
     "/boards",
     { method: "POST", body: Object.keys(body).length ? body : {} },
     { port },
   );
-  printJson(writeSuccess(board, compactBoardEntity(board)));
+  ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
 }
 
-export async function runBoardsUpdate(opts: {
-  port?: number;
-  board: string | undefined;
-  name?: string;
-  emoji?: string;
-  clearEmoji?: boolean;
-  boardColor?: string;
-  clearBoardColor?: boolean;
-  description?: string;
-  descriptionFile?: string;
-  descriptionStdin?: boolean;
-  clearDescription?: boolean;
-}): Promise<void> {
+export async function runBoardsUpdate(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    name?: string;
+    emoji?: string;
+    clearEmoji?: boolean;
+    boardColor?: string;
+    clearBoardColor?: boolean;
+    description?: string;
+    descriptionFile?: string;
+    descriptionStdin?: boolean;
+    clearDescription?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
       code: CLI_ERR.missingRequired,
     });
   }
-  if (opts.clearEmoji && opts.emoji !== undefined) {
-    throw new CliError("Cannot use --emoji together with --clear-emoji", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
-  if (opts.clearBoardColor && opts.boardColor !== undefined) {
-    throw new CliError(
-      "Cannot use --board-color together with --clear-board-color",
-      2,
-      { code: CLI_ERR.mutuallyExclusiveOptions },
-    );
-  }
+  assertMutuallyExclusive([
+    ["--emoji", opts.emoji, "--clear-emoji", opts.clearEmoji],
+    [
+      "--board-color",
+      opts.boardColor,
+      "--clear-board-color",
+      opts.clearBoardColor,
+    ],
+  ]);
   if (opts.clearDescription) {
     const hasDescriptionInput =
       opts.description !== undefined ||
@@ -136,24 +141,24 @@ export async function runBoardsUpdate(opts: {
   }
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const board = await ctx.fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}`,
       { method: "PATCH", body: patch },
       { port: opts.port },
     );
-    printJson(writeSuccess(board, compactBoardEntity(board)));
+    ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runBoardsDelete(opts: {
-  port?: number;
-  board: string | undefined;
-}): Promise<void> {
+export async function runBoardsDelete(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
@@ -162,36 +167,36 @@ export async function runBoardsDelete(opts: {
   }
 
   try {
-    const board = await fetchApi<Board>(
+    const board = await ctx.fetchApi<Board>(
       `/boards/${encodeURIComponent(boardId)}`,
       { port: opts.port },
     );
-    await fetchApiMutate<void>(
+    await ctx.fetchApiMutate<void>(
       `/boards/${encodeURIComponent(boardId)}`,
       { method: "DELETE" },
       { port: opts.port },
     );
-    printJson(
+    ctx.printJson(
       writeTrashMove(
         { boardId: board.boardId, slug: board.slug },
         trashedEntity("board", board.boardId, board.slug),
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runBoardsGroups(opts: {
-  port?: number;
-  board: string | undefined;
-  json?: string;
-  file?: string;
-  stdin?: boolean;
-}): Promise<void> {
+export async function runBoardsGroups(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
@@ -206,27 +211,27 @@ export async function runBoardsGroups(opts: {
   }
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const board = await ctx.fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}/groups`,
       { method: "PATCH", body: parsed.value },
       { port: opts.port },
     );
-    printJson(writeSuccess(board, compactBoardEntity(board)));
+    ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runBoardsPriorities(opts: {
-  port?: number;
-  board: string | undefined;
-  json?: string;
-  file?: string;
-  stdin?: boolean;
-}): Promise<void> {
+export async function runBoardsPriorities(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    json?: string;
+    file?: string;
+    stdin?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
@@ -240,16 +245,13 @@ export async function runBoardsPriorities(opts: {
   );
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const board = await ctx.fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}/priorities`,
       { method: "PATCH", body: { taskPriorities } },
       { port: opts.port },
     );
-    printJson(writeSuccess(board, compactBoardEntity(board)));
+    ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }

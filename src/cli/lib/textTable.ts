@@ -1,5 +1,6 @@
-/** Fixed-width column for `human` list output. */
-export type TableColumn = { key: string; header: string; width: number };
+import type { TableColumn } from "../types/output";
+
+export type { TableColumn } from "../types/output";
 
 function cellRaw(row: Record<string, unknown>, key: string): string {
   if (!Object.prototype.hasOwnProperty.call(row, key)) return "";

@@ -1,15 +1,13 @@
 import { createInterface } from "node:readline/promises";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
+import { canPromptInteractively } from "./tty";
+import type { ConfirmMutableActionArgs } from "../types/options";
 
 /**
  * Destructive / high-impact `hirotm` mutations require explicit consent: interactive
  * prompt on a TTY, or `--yes` when stdin/stdout are not both TTY (scripts, CI, agents).
  */
-
-function canPromptInteractively(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
-}
 
 function writeImpactToStderr(lines: readonly string[]): void {
   process.stderr.write(`${lines.join("\n")}\n\n`);
@@ -35,17 +33,7 @@ async function promptYesNoDefaultNo(): Promise<boolean> {
   }
 }
 
-export type ConfirmMutableActionArgs = {
-  /** Set when the user passed `-y` / `--yes`. */
-  yes: boolean;
-  /** Human-readable lines printed to stderr before prompt or before the non-interactive error. */
-  impactLines: readonly string[];
-  /**
-   * When true, stdin is reserved for payload data (`--stdin`); never prompt on stdin.
-   * Without `--yes`, prints impact and exits 2 (same code as non-TTY).
-   */
-  stdinReservedForPayload?: boolean;
-};
+export type { ConfirmMutableActionArgs } from "../types/options";
 
 /**
  * Unless `yes` is true: print `impactLines` to stderr, then either prompt on a TTY

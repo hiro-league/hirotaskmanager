@@ -13,9 +13,11 @@ import {
   type CliConfigFile,
 } from "../lib/config";
 import { parsePortOption } from "../lib/command-helpers";
-import { CLI_ERR } from "../lib/cli-error-codes";
+import { CLI_ERR } from "../types/errors";
+import { CLI_DEFAULTS } from "../lib/constants";
 import { CliError, exitWithError } from "../lib/output";
 import { startServer } from "../lib/process";
+import { canPromptInteractively } from "../lib/tty";
 
 /** Phase 3: installed-app launcher logic (formerly all of app.ts). */
 
@@ -60,7 +62,7 @@ function resolveLauncherDefaults(overrides: {
   const configScope = { profile: overrides.profile, kind: "installed" as const };
   const existing = readConfigFile(configScope);
   return {
-    port: overrides.port ?? existing.port ?? 3001,
+    port: overrides.port ?? existing.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT,
     data_dir: path.resolve(
       overrides.dataDir ??
         existing.data_dir ??
@@ -71,10 +73,6 @@ function resolveLauncherDefaults(overrides: {
     ),
     open_browser: overrides.openBrowser ?? existing.open_browser ?? true,
   };
-}
-
-function canPromptInteractively(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
 async function promptWithDefault(
@@ -228,7 +226,10 @@ export function createHirotaskmanagerProgram(): Command {
             })
           : readConfigFile({ profile: selectedProfile, kind: "installed" });
 
-        const port = overridePort ?? launcherConfig.port ?? 3001;
+        const port =
+          overridePort ??
+          launcherConfig.port ??
+          CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
         const dataDir = path.resolve(
           overrideDataDir ??
             launcherConfig.data_dir ??

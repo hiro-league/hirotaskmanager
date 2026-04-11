@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 import {
   handleBoardsAdd,
   handleBoardsDelete,
@@ -16,8 +16,9 @@ import {
   addYesOption,
   CLI_BOARD_DESCRIBE_ENTITIES_DESC,
   CLI_FIELDS_OPTION_DESC,
-  withCliErrors,
+  cliAction,
 } from "../lib/command-helpers";
+import { CLI_DEFAULTS } from "../lib/constants";
 
 export function registerBoardCommands(
   program: Command,
@@ -40,19 +41,17 @@ export function registerBoardCommands(
       .option("--offset <n>", "Skip this many boards (default 0)")
       .option(
         "--page-all",
-        "Fetch every page with --limit (or 500) and merge into one result set",
+        `Fetch every page with --limit (or ${CLI_DEFAULTS.MAX_PAGE_LIMIT}) and merge into one result set`,
       )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
       fields?: string;
-    }) => {
-      await withCliErrors(() => handleBoardsList(ctx, options));
-    },
+    }) => handleBoardsList(ctx, options)),
   );
 
   addPortOption(
@@ -64,12 +63,12 @@ export function registerBoardCommands(
       .argument("<id-or-slug>", "Board id or slug")
       .option("--entities <csv>", CLI_BOARD_DESCRIBE_ENTITIES_DESC),
   ).action(
-    async (
-      idOrSlug: string,
-      options: { port?: string; entities?: string },
-    ) => {
-      await withCliErrors(() => handleBoardsDescribe(ctx, idOrSlug, options));
-    },
+    cliAction(
+      (
+        idOrSlug: string,
+        options: { port?: string; entities?: string },
+      ) => handleBoardsDescribe(ctx, idOrSlug, options),
+    ),
   );
 
   addPortOption(
@@ -82,18 +81,18 @@ export function registerBoardCommands(
       .option("--description-file <path>", "Read description from a UTF-8 file")
       .option("--description-stdin", "Read description from stdin until EOF"),
   ).action(
-    async (
-      name: string | undefined,
-      options: {
-        port?: string;
-        emoji?: string;
-        description?: string;
-        descriptionFile?: string;
-        descriptionStdin?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleBoardsAdd(ctx, name, options));
-    },
+    cliAction(
+      (
+        name: string | undefined,
+        options: {
+          port?: string;
+          emoji?: string;
+          description?: string;
+          descriptionFile?: string;
+          descriptionStdin?: boolean;
+        },
+      ) => handleBoardsAdd(ctx, name, options),
+    ),
   );
 
   addPortOption(
@@ -114,23 +113,23 @@ export function registerBoardCommands(
       )
       .option("--clear-board-color", "Clear board color preset"),
   ).action(
-    async (
-      idOrSlug: string,
-      options: {
-        port?: string;
-        name?: string;
-        emoji?: string;
-        clearEmoji?: boolean;
-        description?: string;
-        descriptionFile?: string;
-        descriptionStdin?: boolean;
-        clearDescription?: boolean;
-        boardColor?: string;
-        clearBoardColor?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleBoardsUpdate(ctx, idOrSlug, options));
-    },
+    cliAction(
+      (
+        idOrSlug: string,
+        options: {
+          port?: string;
+          name?: string;
+          emoji?: string;
+          clearEmoji?: boolean;
+          description?: string;
+          descriptionFile?: string;
+          descriptionStdin?: boolean;
+          clearDescription?: boolean;
+          boardColor?: string;
+          clearBoardColor?: boolean;
+        },
+      ) => handleBoardsUpdate(ctx, idOrSlug, options),
+    ),
   );
 
   addPortOption(
@@ -143,9 +142,9 @@ export function registerBoardCommands(
         .argument("<id-or-slug>", "Board id or slug"),
     ),
   ).action(
-    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
-      await withCliErrors(() => handleBoardsDelete(ctx, idOrSlug, options));
-    },
+    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+      handleBoardsDelete(ctx, idOrSlug, options),
+    ),
   );
 
   addPortOption(
@@ -159,9 +158,9 @@ export function registerBoardCommands(
         ),
     ),
   ).action(
-    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
-      await withCliErrors(() => handleBoardsRestore(ctx, idOrSlug, options));
-    },
+    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+      handleBoardsRestore(ctx, idOrSlug, options),
+    ),
   );
 
   addPortOption(
@@ -175,9 +174,9 @@ export function registerBoardCommands(
         ),
     ),
   ).action(
-    async (idOrSlug: string, options: { port?: string; yes?: boolean }) => {
-      await withCliErrors(() => handleBoardsPurge(ctx, idOrSlug, options));
-    },
+    cliAction((idOrSlug: string, options: { port?: string; yes?: boolean }) =>
+      handleBoardsPurge(ctx, idOrSlug, options),
+    ),
   );
 
   const configure = boardsCommand
@@ -200,18 +199,18 @@ export function registerBoardCommands(
         .option("--stdin", "Read JSON from stdin until EOF"),
     ),
   ).action(
-    async (
-      idOrSlug: string,
-      options: {
-        port?: string;
-        json?: string;
-        file?: string;
-        stdin?: boolean;
-        yes?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleBoardsGroups(ctx, idOrSlug, options));
-    },
+    cliAction(
+      (
+        idOrSlug: string,
+        options: {
+          port?: string;
+          json?: string;
+          file?: string;
+          stdin?: boolean;
+          yes?: boolean;
+        },
+      ) => handleBoardsGroups(ctx, idOrSlug, options),
+    ),
   );
 
   addPortOption(
@@ -225,17 +224,17 @@ export function registerBoardCommands(
         .option("--stdin", "Read JSON from stdin until EOF"),
     ),
   ).action(
-    async (
-      idOrSlug: string,
-      options: {
-        port?: string;
-        json?: string;
-        file?: string;
-        stdin?: boolean;
-        yes?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleBoardsPriorities(ctx, idOrSlug, options));
-    },
+    cliAction(
+      (
+        idOrSlug: string,
+        options: {
+          port?: string;
+          json?: string;
+          file?: string;
+          stdin?: boolean;
+          yes?: boolean;
+        },
+      ) => handleBoardsPriorities(ctx, idOrSlug, options),
+    ),
   );
 }

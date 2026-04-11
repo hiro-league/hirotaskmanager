@@ -22,7 +22,7 @@ export async function handleListsList(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runListsList({
+  await runListsList(ctx, {
     port,
     board: options.board,
     limit: options.limit,
@@ -38,7 +38,7 @@ export async function handleListsAdd(
   options: { port?: string; board: string; emoji?: string },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runListsAdd({
+  await runListsAdd(ctx, {
     port,
     board: options.board,
     name,
@@ -60,7 +60,7 @@ export async function handleListsUpdate(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runListsUpdate({
+  await runListsUpdate(ctx, {
     port,
     board: options.board,
     listId,
@@ -85,7 +85,7 @@ export async function handleListsDelete(
       "Restore later with: hirotm lists restore <list-id>",
     ],
   });
-  await runListsDelete({
+  await runListsDelete(ctx, {
     port,
     board: options.board,
     listId,
@@ -104,7 +104,7 @@ export async function handleListsRestore(
       `lists restore: restore list ${listId} from Trash (the board must be active).`,
     ],
   });
-  await runListsRestore({ port, listId });
+  await runListsRestore(ctx, { port, listId });
 }
 
 export async function handleListsPurge(
@@ -120,7 +120,7 @@ export async function handleListsPurge(
       "This cannot be undone.",
     ],
   });
-  await runListsPurge({ port, listId });
+  await runListsPurge(ctx, { port, listId });
 }
 
 export async function handleListsMove(
@@ -136,7 +136,7 @@ export async function handleListsMove(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runListsMove({
+  await runListsMove(ctx, {
     port,
     board: options.board,
     listId,

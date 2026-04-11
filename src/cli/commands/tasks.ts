@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 // Board-scoped task listing lives in boards handlers (shared GET /boards/:id/tasks); `tasks list` is the CLI home for that API.
 import { handleBoardsTasks } from "../handlers/boards";
 import {
@@ -14,9 +14,10 @@ import {
   addPortOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
+  cliAction,
   collectMultiValue,
-  withCliErrors,
 } from "../lib/command-helpers";
+import { CLI_DEFAULTS } from "../lib/constants";
 
 export function registerTaskCommands(
   program: Command,
@@ -70,11 +71,11 @@ export function registerTaskCommands(
       .option("--offset <n>", "Skip this many tasks after server sort (default 0)")
       .option(
         "--page-all",
-        "Fetch every page with --limit (or 500) and merge into one result set",
+        `Fetch every page with --limit (or ${CLI_DEFAULTS.MAX_PAGE_LIMIT}) and merge into one result set`,
       )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       board: string;
       list?: string;
@@ -90,26 +91,23 @@ export function registerTaskCommands(
       offset?: string;
       pageAll?: boolean;
       fields?: string;
-    }) => {
-      await withCliErrors(() =>
-        handleBoardsTasks(ctx, options.board, {
-          port: options.port,
-          list: options.list,
-          group: options.group,
-          priority: options.priority,
-          status: options.status,
-          releaseId: options.releaseId,
-          untagged: options.untagged,
-          dateMode: options.dateMode,
-          from: options.from,
-          to: options.to,
-          limit: options.limit,
-          offset: options.offset,
-          pageAll: options.pageAll,
-          fields: options.fields,
-        }),
-      );
-    },
+    }) =>
+      handleBoardsTasks(ctx, options.board, {
+        port: options.port,
+        list: options.list,
+        group: options.group,
+        priority: options.priority,
+        status: options.status,
+        releaseId: options.releaseId,
+        untagged: options.untagged,
+        dateMode: options.dateMode,
+        from: options.from,
+        to: options.to,
+        limit: options.limit,
+        offset: options.offset,
+        pageAll: options.pageAll,
+        fields: options.fields,
+      })),
   );
 
   addPortOption(
@@ -139,7 +137,7 @@ export function registerTaskCommands(
       .option("--body-file <path>", "Read body from a UTF-8 file")
       .option("--body-stdin", "Read body from stdin until EOF"),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       board: string;
       list: string;
@@ -154,9 +152,7 @@ export function registerTaskCommands(
       body?: string;
       bodyFile?: string;
       bodyStdin?: boolean;
-    }) => {
-      await withCliErrors(() => handleTasksAdd(ctx, options));
-    },
+    }) => handleTasksAdd(ctx, options)),
   );
 
   addPortOption(
@@ -189,29 +185,29 @@ export function registerTaskCommands(
       .option("--emoji <text>", "Emoji before the title")
       .option("--clear-emoji", "Clear emoji"),
   ).action(
-    async (
-      taskId: string,
-      options: {
-        port?: string;
-        board: string;
-        title?: string;
-        body?: string;
-        bodyFile?: string;
-        bodyStdin?: boolean;
-        status?: string;
-        list?: string;
-        group?: string;
-        priority?: string;
-        release?: string;
-        releaseId?: string;
-        color?: string;
-        clearColor?: boolean;
-        emoji?: string;
-        clearEmoji?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleTasksUpdate(ctx, taskId, options));
-    },
+    cliAction(
+      (
+        taskId: string,
+        options: {
+          port?: string;
+          board: string;
+          title?: string;
+          body?: string;
+          bodyFile?: string;
+          bodyStdin?: boolean;
+          status?: string;
+          list?: string;
+          group?: string;
+          priority?: string;
+          release?: string;
+          releaseId?: string;
+          color?: string;
+          clearColor?: boolean;
+          emoji?: string;
+          clearEmoji?: boolean;
+        },
+      ) => handleTasksUpdate(ctx, taskId, options),
+    ),
   );
 
   addPortOption(
@@ -225,12 +221,12 @@ export function registerTaskCommands(
         .argument("<task-id>", "Numeric task id"),
     ),
   ).action(
-    async (
-      taskId: string,
-      options: { port?: string; board: string; yes?: boolean },
-    ) => {
-      await withCliErrors(() => handleTasksDelete(ctx, taskId, options));
-    },
+    cliAction(
+      (
+        taskId: string,
+        options: { port?: string; board: string; yes?: boolean },
+      ) => handleTasksDelete(ctx, taskId, options),
+    ),
   );
 
   addPortOption(
@@ -240,9 +236,11 @@ export function registerTaskCommands(
         .description("Restore a task from Trash (board and list must allow it)")
         .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
     ),
-  ).action(async (taskId: string, options: { port?: string; yes?: boolean }) => {
-    await withCliErrors(() => handleTasksRestore(ctx, taskId, options));
-  });
+  ).action(
+    cliAction((taskId: string, options: { port?: string; yes?: boolean }) =>
+      handleTasksRestore(ctx, taskId, options),
+    ),
+  );
 
   addPortOption(
     addYesOption(
@@ -251,9 +249,11 @@ export function registerTaskCommands(
         .description("Permanently delete a task from Trash (cannot be undone)")
         .argument("<task-id>", "Numeric task id"),
     ),
-  ).action(async (taskId: string, options: { port?: string; yes?: boolean }) => {
-    await withCliErrors(() => handleTasksPurge(ctx, taskId, options));
-  });
+  ).action(
+    cliAction((taskId: string, options: { port?: string; yes?: boolean }) =>
+      handleTasksPurge(ctx, taskId, options),
+    ),
+  );
 
   addPortOption(
     tasksCommand
@@ -277,20 +277,20 @@ export function registerTaskCommands(
       .option("--first", "Move to the first position in the destination band")
       .option("--last", "Move to the last position in the destination band"),
   ).action(
-    async (
-      taskId: string,
-      options: {
-        port?: string;
-        board: string;
-        toList: string;
-        toStatus?: string;
-        beforeTask?: string;
-        afterTask?: string;
-        first?: boolean;
-        last?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleTasksMove(ctx, taskId, options));
-    },
+    cliAction(
+      (
+        taskId: string,
+        options: {
+          port?: string;
+          board: string;
+          toList: string;
+          toStatus?: string;
+          beforeTask?: string;
+          afterTask?: string;
+          first?: boolean;
+          last?: boolean;
+        },
+      ) => handleTasksMove(ctx, taskId, options),
+    ),
   );
 }

@@ -16,11 +16,12 @@ import {
   setRuntimeConfigSelection,
   writeProfileConfig,
   type RuntimeConfigFile,
-  type RuntimeConfigOverrides,
   type RuntimeKind,
 } from "../../shared/runtimeConfig";
 
-export type ConfigOverrides = RuntimeConfigOverrides;
+import type { ConfigOverrides } from "../types/config";
+
+export type { ConfigOverrides } from "../types/config";
 export type CliConfigFile = RuntimeConfigFile;
 
 export function setRuntimeProfile(profile: string | undefined): void {

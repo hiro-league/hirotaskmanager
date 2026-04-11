@@ -3,16 +3,19 @@ import type {
   TaskDeleteMutationResult,
   TaskMutationResult,
 } from "../../../shared/mutationResults";
-import { fetchApiMutate } from "../api-client";
-import { CLI_ERR } from "../cli-error-codes";
+import type { CliContext } from "../../types/context";
+import { CLI_ERR } from "../../types/errors";
+import { enrichNotFoundError } from "../cli-http-errors";
 import { parseOptionalEmojiFlag } from "../emoji-cli";
-import { CliError, printJson } from "../output";
-import { loadBodyText, resolveExclusiveBody } from "../task-body";
+import { CliError } from "../output";
+import { assertMutuallyExclusive } from "../validation";
 import {
+  loadTextInput,
   parseCliReleaseFlags,
   parsePositiveInt,
   parseTaskId,
   resolveCliReleaseToApiValue,
+  resolveExclusiveTextInput,
 } from "./helpers";
 import {
   compactTaskEntity,
@@ -21,24 +24,27 @@ import {
   writeTrashMove,
 } from "../write-result";
 
-export async function runTasksAdd(opts: {
-  port?: number;
-  board: string | undefined;
-  list?: string;
-  group?: string;
-  title?: string;
-  status?: string;
-  priority?: string;
-  /** Release name, or `none` for untagged. Omit both this and `releaseId` for server auto-assign when enabled. */
-  release?: string;
-  /** Numeric release id (mutually exclusive with `release`). */
-  releaseId?: string;
-  emoji?: string;
-  clearEmoji?: boolean;
-  body?: string;
-  bodyFile?: string;
-  bodyStdin?: boolean;
-}): Promise<void> {
+export async function runTasksAdd(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    list?: string;
+    group?: string;
+    title?: string;
+    status?: string;
+    priority?: string;
+    /** Release name, or `none` for untagged. Omit both this and `releaseId` for server auto-assign when enabled. */
+    release?: string;
+    /** Numeric release id (mutually exclusive with `release`). */
+    releaseId?: string;
+    emoji?: string;
+    clearEmoji?: boolean;
+    body?: string;
+    bodyFile?: string;
+    bodyStdin?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -57,20 +63,17 @@ export async function runTasksAdd(opts: {
       code: CLI_ERR.missingRequired,
     });
   }
-  if (opts.clearEmoji && opts.emoji !== undefined) {
-    throw new CliError(
-      "Cannot use --emoji together with --clear-emoji",
-      2,
-      { code: CLI_ERR.mutuallyExclusiveOptions },
-    );
-  }
+  assertMutuallyExclusive([
+    ["--emoji", opts.emoji, "--clear-emoji", opts.clearEmoji],
+  ]);
 
-  const bodyResolved = resolveExclusiveBody({
-    body: opts.body,
-    bodyFile: opts.bodyFile,
-    bodyStdin: opts.bodyStdin,
+  // Task flags use body/bodyFile/bodyStdin; shared helpers take generic text/file/stdin.
+  const bodyResolved = resolveExclusiveTextInput("body", {
+    text: opts.body,
+    file: opts.bodyFile,
+    stdin: opts.bodyStdin,
   });
-  const bodyText = bodyResolved ? await loadBodyText(bodyResolved) : "";
+  const bodyText = bodyResolved ? await loadTextInput("body", bodyResolved) : "";
 
   const titleRaw = opts.title?.trim() ?? "";
   const title = titleRaw || "Untitled";
@@ -101,6 +104,7 @@ export async function runTasksAdd(opts: {
   });
   if (relInput.mode !== "omit") {
     payload.releaseId = await resolveCliReleaseToApiValue(
+      ctx,
       boardId,
       relInput,
       port,
@@ -115,12 +119,12 @@ export async function runTasksAdd(opts: {
   }
 
   try {
-    const result = await fetchApiMutate<TaskMutationResult>(
+    const result = await ctx.fetchApiMutate<TaskMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/tasks`,
       { method: "POST", body: payload },
       { port },
     );
-    printJson(
+    ctx.printJson(
       writeSuccess(
         {
           boardId: result.boardId,
@@ -131,14 +135,13 @@ export async function runTasksAdd(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runTasksUpdate(opts: {
+export async function runTasksUpdate(
+  ctx: CliContext,
+  opts: {
   port?: number;
   board: string | undefined;
   taskId: string | undefined;
@@ -156,7 +159,8 @@ export async function runTasksUpdate(opts: {
   body?: string;
   bodyFile?: string;
   bodyStdin?: boolean;
-}): Promise<void> {
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -166,25 +170,20 @@ export async function runTasksUpdate(opts: {
   const taskId = parseTaskId(opts.taskId);
   const port = opts.port;
 
-  if (opts.clearColor && opts.color !== undefined) {
-    throw new CliError("Cannot use --color together with --clear-color", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
-  if (opts.clearEmoji && opts.emoji !== undefined) {
-    throw new CliError(
-      "Cannot use --emoji together with --clear-emoji",
-      2,
-      { code: CLI_ERR.mutuallyExclusiveOptions },
-    );
-  }
+  assertMutuallyExclusive([
+    ["--color", opts.color, "--clear-color", opts.clearColor],
+    ["--emoji", opts.emoji, "--clear-emoji", opts.clearEmoji],
+  ]);
 
-  const bodyResolved = resolveExclusiveBody({
-    body: opts.body,
-    bodyFile: opts.bodyFile,
-    bodyStdin: opts.bodyStdin,
+  // Task flags use body/bodyFile/bodyStdin; shared helpers take generic text/file/stdin.
+  const bodyResolved = resolveExclusiveTextInput("body", {
+    text: opts.body,
+    file: opts.bodyFile,
+    stdin: opts.bodyStdin,
   });
-  const bodyText = bodyResolved ? await loadBodyText(bodyResolved) : undefined;
+  const bodyText = bodyResolved
+    ? await loadTextInput("body", bodyResolved)
+    : undefined;
 
   const patch: Record<string, unknown> = {};
   if (opts.title !== undefined) patch.title = opts.title;
@@ -225,6 +224,7 @@ export async function runTasksUpdate(opts: {
   });
   if (relInput.mode !== "omit") {
     patch.releaseId = await resolveCliReleaseToApiValue(
+      ctx,
       boardId,
       relInput,
       port,
@@ -246,12 +246,12 @@ export async function runTasksUpdate(opts: {
   }
 
   try {
-    const result = await fetchApiMutate<TaskMutationResult>(
+    const result = await ctx.fetchApiMutate<TaskMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
       { method: "PATCH", body: patch },
       { port },
     );
-    printJson(
+    ctx.printJson(
       writeSuccess(
         {
           boardId: result.boardId,
@@ -262,25 +262,18 @@ export async function runTasksUpdate(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "Task not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        taskId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, taskId });
   }
 }
 
-export async function runTasksDelete(opts: {
-  port?: number;
-  board: string | undefined;
-  taskId: string | undefined;
-}): Promise<void> {
+export async function runTasksDelete(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    taskId: string | undefined;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -290,12 +283,12 @@ export async function runTasksDelete(opts: {
   const taskId = parseTaskId(opts.taskId);
 
   try {
-    const result = await fetchApiMutate<TaskDeleteMutationResult>(
+    const result = await ctx.fetchApiMutate<TaskDeleteMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
       { method: "DELETE" },
       { port: opts.port },
     );
-    printJson(
+    ctx.printJson(
       writeTrashMove(
         {
           boardId: result.boardId,
@@ -306,31 +299,24 @@ export async function runTasksDelete(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "Task not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        taskId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, taskId });
   }
 }
 
-export async function runTasksMove(opts: {
-  port?: number;
-  board: string | undefined;
-  taskId: string | undefined;
-  toList?: string;
-  toStatus?: string;
-  beforeTask?: string;
-  afterTask?: string;
-  first?: boolean;
-  last?: boolean;
-}): Promise<void> {
+export async function runTasksMove(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    taskId: string | undefined;
+    toList?: string;
+    toStatus?: string;
+    beforeTask?: string;
+    afterTask?: string;
+    first?: boolean;
+    last?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -362,7 +348,7 @@ export async function runTasksMove(opts: {
   const port = opts.port;
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const board = await ctx.fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}/tasks/move`,
       {
         method: "PUT",
@@ -385,20 +371,10 @@ export async function runTasksMove(opts: {
         taskId,
       });
     }
-    printJson(
+    ctx.printJson(
       writeSuccess(board, compactTaskEntity(moved)),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "Task not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        taskId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, taskId });
   }
 }

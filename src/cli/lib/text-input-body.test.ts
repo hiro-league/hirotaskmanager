@@ -2,11 +2,33 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadBodyText, resolveExclusiveBody } from "./task-body";
-import { CLI_ERR } from "./cli-error-codes";
+import {
+  loadTextInput,
+  resolveExclusiveTextInput,
+} from "./write/helpers";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
-describe("resolveExclusiveBody", () => {
+/** Maps task CLI flags to shared `{ text, file, stdin }` (see P0 unified text-input). */
+function resolveExclusiveBody(options: {
+  body?: string;
+  bodyFile?: string;
+  bodyStdin?: boolean;
+}) {
+  return resolveExclusiveTextInput("body", {
+    text: options.body,
+    file: options.bodyFile,
+    stdin: options.bodyStdin,
+  });
+}
+
+async function loadBodyText(
+  resolved: NonNullable<ReturnType<typeof resolveExclusiveBody>>,
+) {
+  return loadTextInput("body", resolved);
+}
+
+describe("resolveExclusiveBody (via resolveExclusiveTextInput)", () => {
   test("returns undefined when no source", () => {
     expect(resolveExclusiveBody({})).toBeUndefined();
   });
@@ -46,7 +68,7 @@ describe("resolveExclusiveBody", () => {
   });
 });
 
-describe("loadBodyText", () => {
+describe("loadBodyText (via loadTextInput)", () => {
   test("returns flag text directly", async () => {
     await expect(
       loadBodyText({ source: "flag", text: "plain" }),
@@ -60,7 +82,10 @@ describe("loadBodyText", () => {
       loadBodyText({ source: "file", text: missing }),
     ).rejects.toMatchObject({
       exitCode: 3,
-      details: expect.objectContaining({ code: CLI_ERR.fileNotFound, path: missing }),
+      details: expect.objectContaining({
+        code: CLI_ERR.fileNotFound,
+        path: missing,
+      }),
     });
   });
 

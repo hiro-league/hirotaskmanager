@@ -1,4 +1,4 @@
-import type { Board, List, Task } from "../../shared/models";
+import type { Board, List, ReleaseDefinition, Task } from "../../shared/models";
 
 /** Compact shapes for Phase 3 write command stdout (see docs/ai-cli.md). */
 export type WriteBoardEntity = {
@@ -36,6 +36,22 @@ export type WriteTaskEntity = {
   closedAt: string | null | undefined;
 };
 
+export type WriteReleaseEntity = {
+  type: "release";
+  releaseId: number;
+  name: string;
+  color?: string | null;
+  releaseDate?: string | null;
+  createdAt: string;
+};
+
+/** Release row removed from the board (not Trash). */
+export type WriteReleaseDeletedEntity = {
+  type: "release";
+  releaseId: number;
+  deleted: true;
+};
+
 /** Board/list/task was moved to Trash (soft delete), not permanently removed. */
 export type WriteTrashedEntity =
   | { type: "board"; boardId: number; slug?: string; trashed: true }
@@ -46,7 +62,9 @@ export type WriteEntity =
   | WriteBoardEntity
   | WriteListEntity
   | WriteTaskEntity
-  | WriteTrashedEntity;
+  | WriteTrashedEntity
+  | WriteReleaseEntity
+  | WriteReleaseDeletedEntity;
 
 export type WriteSuccessEnvelope = {
   ok: true;
@@ -103,6 +121,29 @@ export function compactTaskEntity(task: Task): WriteTaskEntity {
     updatedAt: task.updatedAt,
     closedAt: task.closedAt ?? null,
   };
+}
+
+export function compactReleaseEntity(r: ReleaseDefinition): WriteReleaseEntity {
+  return {
+    type: "release",
+    releaseId: r.releaseId,
+    name: r.name,
+    color: r.color,
+    releaseDate: r.releaseDate,
+    createdAt: r.createdAt,
+  };
+}
+
+/** Stdout envelope for `releases delete` (structure delete, not Trash). */
+export function writeReleaseDelete(
+  board: Pick<Board, "boardId" | "updatedAt"> & { slug?: string },
+  deletedReleaseId: number,
+): WriteSuccessEnvelope {
+  return writeSuccess(board, {
+    type: "release",
+    releaseId: deletedReleaseId,
+    deleted: true,
+  });
 }
 
 export function writeSuccess(

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { CLI_ERR } from "./cli-error-codes";
-import { mapHttpStatusToCliFailure } from "./cli-http-errors";
+import { CLI_ERR } from "../types/errors";
+import { enrichNotFoundError, mapHttpStatusToCliFailure } from "./cli-http-errors";
+import { CliError } from "./output";
 
 describe("mapHttpStatusToCliFailure", () => {
   test.each([
@@ -55,5 +56,30 @@ describe("mapHttpStatusToCliFailure", () => {
       status: 404,
     } as Record<string, unknown>);
     expect(details.serverCode).toBeUndefined();
+  });
+});
+
+describe("enrichNotFoundError", () => {
+  test("merges context when details.code is not_found", () => {
+    const err = new CliError("Whatever", 3, { code: CLI_ERR.notFound });
+    try {
+      enrichNotFoundError(err, { board: "my-board", taskId: 9 });
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(CliError);
+      const c = e as CliError;
+      expect(c.message).toBe("Whatever");
+      expect(c.exitCode).toBe(3);
+      expect(c.details).toMatchObject({
+        code: CLI_ERR.notFound,
+        board: "my-board",
+        taskId: 9,
+      });
+    }
+  });
+
+  test("rethrows unchanged when code is not not_found", () => {
+    const err = new CliError("Nope", 4, { code: CLI_ERR.forbidden });
+    expect(() => enrichNotFoundError(err, { board: "x" })).toThrow(err);
   });
 });

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createDefaultCliContext } from "../handlers/context";
 import { resetCliOutputFormat } from "./output";
 import { runTrashBoards } from "./trashCommands";
+
+const ctx = createDefaultCliContext();
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
   let buf = "";
@@ -68,7 +71,7 @@ describe("trashCommands fetch smoke (mock fetch)", () => {
       });
     });
 
-    const out = await captureStdout(() => runTrashBoards({ port: 21100 }));
+    const out = await captureStdout(() => runTrashBoards(ctx, { port: 21100 }));
     const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBe(1);
     expect(JSON.parse(lines[0]!)).toEqual(rows[0]);

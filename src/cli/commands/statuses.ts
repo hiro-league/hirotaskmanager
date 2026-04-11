@@ -1,10 +1,10 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 import { handleStatusesList } from "../handlers/statuses";
 import {
   addPortOption,
   CLI_FIELDS_OPTION_DESC,
-  withCliErrors,
+  cliAction,
 } from "../lib/command-helpers";
 
 export function registerStatusCommands(
@@ -20,7 +20,9 @@ export function registerStatusCommands(
       .command("list")
       .description("List all statuses")
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
-  ).action(async (options: { port?: string; fields?: string }) => {
-    await withCliErrors(() => handleStatusesList(ctx, options));
-  });
+  ).action(
+    cliAction((options: { port?: string; fields?: string }) =>
+      handleStatusesList(ctx, options),
+    ),
+  );
 }

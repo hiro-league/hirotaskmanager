@@ -2,31 +2,10 @@ import {
   parseBoardDescribeEntities,
   type BoardDescribeResponse,
 } from "../../shared/boardDescribe";
-import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
-import type { PaginatedListBody } from "../../shared/pagination";
-import type { BoardIndexEntry, Task } from "../../shared/models";
-import {
-  parseOptionalListLimit,
-  parseOptionalOffset,
-  parsePortOption,
-  requireNdjsonWhenQuiet,
-  requireNdjsonWhenUsingFields,
-  resolveQuietExplicitField,
-} from "../lib/command-helpers";
+import { parsePortOption, requireNdjsonWhenQuiet } from "../lib/command-helpers";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
-import {
-  COLUMNS_BOARDS_LIST,
-  COLUMNS_TASKS_LIST,
-  QUIET_DEFAULT_BOARD_INDEX,
-  QUIET_DEFAULT_TASK,
-} from "../lib/listTableSpecs";
-import { fetchAllPages } from "../lib/paginatedFetch";
-import {
-  FIELDS_BOARD_INDEX,
-  FIELDS_TASK,
-  parseAndValidateFields,
-  projectPaginatedItems,
-} from "../lib/jsonFieldProjection";
+import { runBoardsList } from "../lib/read/boards";
+import { runBoardsTasksList } from "../lib/read/tasks";
 import {
   runBoardsAdd,
   runBoardsDelete,
@@ -39,8 +18,8 @@ import {
   runBoardsRestore,
 } from "../lib/trashCommands";
 import { printBoardDescribeResponse } from "../lib/boardDescribeOutput";
-import { CLI_ERR } from "../lib/cli-error-codes";
-import { CliError, printPaginatedListRead } from "../lib/output";
+import { CLI_ERR } from "../types/errors";
+import { CliError } from "../lib/output";
 import type { CliContext } from "./context";
 
 export async function handleBoardsList(
@@ -53,56 +32,7 @@ export async function handleBoardsList(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  const fieldKeys = parseAndValidateFields(options.fields, FIELDS_BOARD_INDEX);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(options.limit);
-  const offsetOpt = parseOptionalOffset(options.offset);
-  const pageAll = options.pageAll === true;
-  const base = "/boards";
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await ctx.fetchApi<PaginatedListBody<BoardIndexEntry>>(
-      `${base}${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_BOARDS_LIST, {
-      defaultKeys: QUIET_DEFAULT_BOARD_INDEX,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return ctx.fetchApi<PaginatedListBody<BoardIndexEntry>>(
-      `${base}?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_BOARDS_LIST, {
-    defaultKeys: QUIET_DEFAULT_BOARD_INDEX,
-    explicitField: quietExplicit,
-  });
+  await runBoardsList(ctx, options);
 }
 
 export async function handleBoardsDescribe(
@@ -153,77 +83,7 @@ export async function handleBoardsTasks(
     fields?: string;
   },
 ): Promise<void> {
-  const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  const fieldKeys = parseAndValidateFields(options.fields, FIELDS_TASK);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const params = new URLSearchParams();
-  if (options.list?.trim()) params.set("listId", options.list.trim());
-  for (const group of options.group ?? []) {
-    params.append("groupId", group);
-  }
-  for (const priority of options.priority ?? []) {
-    params.append("priorityId", priority);
-  }
-  for (const status of options.status ?? []) {
-    params.append("status", status);
-  }
-  for (const rid of options.releaseId ?? []) {
-    params.append("releaseId", rid);
-  }
-  if (options.untagged) {
-    params.append("releaseId", RELEASE_FILTER_UNTAGGED);
-  }
-  if (options.dateMode?.trim()) {
-    params.set("dateMode", options.dateMode.trim());
-  }
-  if (options.from?.trim()) params.set("from", options.from.trim());
-  if (options.to?.trim()) params.set("to", options.to.trim());
-  const limitOpt = parseOptionalListLimit(options.limit);
-  const offsetOpt = parseOptionalOffset(options.offset);
-  const pageAll = options.pageAll === true;
-  const base = `/boards/${encodeURIComponent(idOrSlug)}/tasks`;
-
-  if (!pageAll) {
-    const q = new URLSearchParams(params);
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const body = await ctx.fetchApi<PaginatedListBody<Task>>(
-      `${base}?${q.toString()}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_TASKS_LIST, {
-      defaultKeys: QUIET_DEFAULT_TASK,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams(params);
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return ctx.fetchApi<PaginatedListBody<Task>>(
-      `${base}?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_TASKS_LIST, {
-    defaultKeys: QUIET_DEFAULT_TASK,
-    explicitField: quietExplicit,
-  });
+  await runBoardsTasksList(ctx, idOrSlug, options);
 }
 
 export async function handleBoardsAdd(
@@ -238,7 +98,7 @@ export async function handleBoardsAdd(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runBoardsAdd({
+  await runBoardsAdd(ctx, {
     port,
     name,
     emoji: options.emoji,
@@ -265,7 +125,7 @@ export async function handleBoardsUpdate(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runBoardsUpdate({
+  await runBoardsUpdate(ctx, {
     port,
     board: idOrSlug,
     name: options.name,
@@ -293,7 +153,7 @@ export async function handleBoardsDelete(
       "You can restore it later with: hirotm boards restore <id-or-slug>",
     ],
   });
-  await runBoardsDelete({ port, board: idOrSlug });
+  await runBoardsDelete(ctx, { port, board: idOrSlug });
 }
 
 export async function handleBoardsRestore(
@@ -308,7 +168,7 @@ export async function handleBoardsRestore(
       `boards restore: restore board "${idOrSlug}" from Trash to the active board list.`,
     ],
   });
-  await runBoardsRestore({ port, board: idOrSlug });
+  await runBoardsRestore(ctx, { port, board: idOrSlug });
 }
 
 export async function handleBoardsPurge(
@@ -324,7 +184,7 @@ export async function handleBoardsPurge(
       "This cannot be undone.",
     ],
   });
-  await runBoardsPurge({ port, board: idOrSlug });
+  await runBoardsPurge(ctx, { port, board: idOrSlug });
 }
 
 export async function handleBoardsGroups(
@@ -347,7 +207,7 @@ export async function handleBoardsGroups(
       "Creates, updates, and deletes in the payload apply; groups not listed may be removed — data loss is possible.",
     ],
   });
-  await runBoardsGroups({
+  await runBoardsGroups(ctx, {
     port,
     board: idOrSlug,
     json: options.json,
@@ -376,7 +236,7 @@ export async function handleBoardsPriorities(
       "This overwrites priority definitions; omitted priorities may be removed — data loss is possible.",
     ],
   });
-  await runBoardsPriorities({
+  await runBoardsPriorities(ctx, {
     port,
     board: idOrSlug,
     json: options.json,

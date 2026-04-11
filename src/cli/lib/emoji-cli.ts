@@ -1,5 +1,5 @@
 import { parseEmojiField } from "../../shared/emojiField";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
 /** Optional `--emoji` flag: omit key when undefined, send null when cleared. */

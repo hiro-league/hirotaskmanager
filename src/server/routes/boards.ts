@@ -17,6 +17,8 @@ import {
   TASK_MANAGER_MUTATION_RESPONSE_HEADER,
   type ListDeleteMutationResult,
   type ListMutationResult,
+  type ReleaseDeleteMutationResult,
+  type ReleaseMutationResult,
   type TaskDeleteMutationResult,
   type TaskMutationResult,
 } from "../../shared/mutationResults";
@@ -166,6 +168,28 @@ function listMutationResponse(
 }
 
 function listDeleteResponse(c: Context, result: ListDeleteMutationResult) {
+  if (wantsGranularMutationResponse(c)) {
+    return c.json(result);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved);
+}
+
+function releaseMutationResponse(
+  c: Context,
+  result: ReleaseMutationResult,
+  status: 200 | 201,
+) {
+  if (wantsGranularMutationResponse(c)) {
+    return c.json(result, status);
+  }
+  const saved = loadBoardAfterGranularWrite(result.boardId);
+  if (!saved) return c.json({ error: "Board not found" }, 404);
+  return c.json(saved, status);
+}
+
+function releaseDeleteResponse(c: Context, result: ReleaseDeleteMutationResult) {
   if (wantsGranularMutationResponse(c)) {
     return c.json(result);
   }
@@ -437,7 +461,16 @@ boardsRoute.post("/:id/releases", async (c) => {
       release: created,
     });
   }
-  return c.json(created, 201);
+  return releaseMutationResponse(
+    c,
+    {
+      boardId: entry.boardId,
+      boardSlug: entry.slug,
+      boardUpdatedAt: board?.updatedAt ?? created.createdAt,
+      entity: created,
+    },
+    201,
+  );
 });
 
 boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
@@ -509,7 +542,16 @@ boardsRoute.patch("/:id/releases/:releaseId", async (c) => {
       release: updated.release,
     });
   }
-  return c.json(updated.release);
+  return releaseMutationResponse(
+    c,
+    {
+      boardId: entry.boardId,
+      boardSlug: entry.slug,
+      boardUpdatedAt: board?.updatedAt ?? updated.release.createdAt,
+      entity: updated.release,
+    },
+    200,
+  );
 });
 
 boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
@@ -537,7 +579,12 @@ boardsRoute.delete("/:id/releases/:releaseId", async (c) => {
   if (!ok) return c.json({ error: "Release not found or invalid move target" }, 400);
   const board = loadBoard(entry.boardId);
   if (board) publishBoardChanged(entry.boardId, board.updatedAt);
-  return c.body(null, 204);
+  return releaseDeleteResponse(c, {
+    boardId: entry.boardId,
+    boardSlug: entry.slug,
+    boardUpdatedAt: board?.updatedAt ?? new Date().toISOString(),
+    deletedReleaseId: releaseId,
+  });
 });
 
 boardsRoute.post("/:id/lists", async (c) => {

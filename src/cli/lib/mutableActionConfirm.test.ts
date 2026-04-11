@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { confirmMutableAction } from "./mutableActionConfirm";
 import { CliError } from "./output";
 

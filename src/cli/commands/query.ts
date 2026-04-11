@@ -1,11 +1,12 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 import { handleSearch } from "../handlers/search";
 import {
   addPortOption,
   CLI_FIELDS_OPTION_DESC,
-  withCliErrors,
+  cliAction,
 } from "../lib/command-helpers";
+import { CLI_DEFAULTS } from "../lib/constants";
 
 export function registerQueryCommands(
   program: Command,
@@ -23,7 +24,10 @@ export function registerQueryCommands(
       )
       .argument("<query...>", "Search query (quote phrases with spaces)")
       .option("--board <id-or-slug>", "Limit results to one board")
-      .option("--limit <n>", "Page size (default 20, max 500)")
+      .option(
+        "--limit <n>",
+        `Page size (default ${CLI_DEFAULTS.DEFAULT_SEARCH_LIMIT}, max ${CLI_DEFAULTS.MAX_PAGE_LIMIT})`,
+      )
       .option("--offset <n>", "Skip this many hits (default 0)")
       .option(
         "--page-all",
@@ -35,19 +39,19 @@ export function registerQueryCommands(
       )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (
-      queryParts: string[],
-      options: {
-        port?: string;
-        board?: string;
-        limit?: string;
-        offset?: string;
-        pageAll?: boolean;
-        noPrefix?: boolean;
-        fields?: string;
-      },
-    ) => {
-      await withCliErrors(() => handleSearch(ctx, queryParts, options));
-    },
+    cliAction(
+      (
+        queryParts: string[],
+        options: {
+          port?: string;
+          board?: string;
+          limit?: string;
+          offset?: string;
+          pageAll?: boolean;
+          noPrefix?: boolean;
+          fields?: string;
+        },
+      ) => handleSearch(ctx, queryParts, options),
+    ),
   );
 }

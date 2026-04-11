@@ -3,7 +3,24 @@
  * Contract: docs/cli-error-handling.md
  */
 
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR, CliError } from "../types/errors";
+
+/**
+ * Re-throws HTTP 404 mapped to `not_found` with extra CLI context (board ref, entity ids).
+ * Uses stable `details.code` instead of matching `message` (API wording can change).
+ */
+export function enrichNotFoundError(
+  error: unknown,
+  context: Record<string, unknown>,
+): never {
+  if (error instanceof CliError && error.details?.code === CLI_ERR.notFound) {
+    throw new CliError(error.message, error.exitCode, {
+      ...error.details,
+      ...context,
+    });
+  }
+  throw error;
+}
 
 export function mapHttpStatusToCliFailure(
   status: number,

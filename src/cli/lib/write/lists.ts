@@ -4,24 +4,15 @@ import type {
   ListDeleteMutationResult,
   ListMutationResult,
 } from "../../../shared/mutationResults";
-import { fetchApi, fetchApiMutate } from "../api-client";
-import { CLI_ERR } from "../cli-error-codes";
-import {
-  parseOptionalListLimit,
-  parseOptionalOffset,
-  requireNdjsonWhenQuiet,
-  requireNdjsonWhenUsingFields,
-  resolveQuietExplicitField,
-} from "../command-helpers";
+import type { CliContext } from "../../types/context";
+import { CLI_ERR } from "../../types/errors";
+import { enrichNotFoundError } from "../cli-http-errors";
 import { parseOptionalEmojiFlag } from "../emoji-cli";
-import {
-  FIELDS_LIST,
-  parseAndValidateFields,
-  projectPaginatedItems,
-} from "../jsonFieldProjection";
+import { FIELDS_LIST } from "../jsonFieldProjection";
 import { COLUMNS_LISTS_LIST, QUIET_DEFAULT_LIST } from "../listTableSpecs";
-import { fetchAllPages } from "../paginatedFetch";
-import { CliError, printJson, printPaginatedListRead } from "../output";
+import { executePaginatedListRead } from "../paginatedListRead";
+import { CliError } from "../output";
+import { assertMutuallyExclusive } from "../validation";
 import { parsePositiveInt } from "./helpers";
 import {
   compactListEntity,
@@ -30,78 +21,52 @@ import {
   writeTrashMove,
 } from "../write-result";
 
-export async function runListsList(opts: {
-  port?: number;
-  board: string | undefined;
-  limit?: string;
-  offset?: string;
-  pageAll?: boolean;
-  fields?: string;
-}): Promise<void> {
+export async function runListsList(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
       code: CLI_ERR.missingRequired,
     });
   }
-  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_LIST);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(opts.limit);
-  const offsetOpt = parseOptionalOffset(opts.offset);
-  const pageAll = opts.pageAll === true;
-  const base = `/boards/${encodeURIComponent(boardId)}/lists`;
   const port = opts.port;
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await fetchApi<PaginatedListBody<List>>(
-      `${base}${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_LISTS_LIST, {
-      defaultKeys: QUIET_DEFAULT_LIST,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return fetchApi<PaginatedListBody<List>>(
-      `${base}?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_LISTS_LIST, {
-    defaultKeys: QUIET_DEFAULT_LIST,
-    explicitField: quietExplicit,
-  });
+  await executePaginatedListRead(
+    {
+      kind: "optionalLimit",
+      basePath: `/boards/${encodeURIComponent(boardId)}/lists`,
+      fieldAllowlist: FIELDS_LIST,
+      columns: COLUMNS_LISTS_LIST,
+      quietDefaults: QUIET_DEFAULT_LIST,
+      fetchPage: (path) =>
+        ctx.fetchApi<PaginatedListBody<List>>(path, { port }),
+    },
+    {
+      limit: opts.limit,
+      offset: opts.offset,
+      pageAll: opts.pageAll,
+      fields: opts.fields,
+    },
+  );
 }
 
-export async function runListsAdd(opts: {
-  port?: number;
-  board: string | undefined;
-  name?: string;
-  emoji?: string;
-}): Promise<void> {
+export async function runListsAdd(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    name?: string;
+    emoji?: string;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -116,12 +81,12 @@ export async function runListsAdd(opts: {
   if (!emojiOpt.omit) body.emoji = emojiOpt.value;
 
   try {
-    const result = await fetchApiMutate<ListMutationResult>(
+    const result = await ctx.fetchApiMutate<ListMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/lists`,
       { method: "POST", body: Object.keys(body).length ? body : {} },
       { port },
     );
-    printJson(
+    ctx.printJson(
       writeSuccess(
         {
           boardId: result.boardId,
@@ -132,23 +97,23 @@ export async function runListsAdd(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runListsUpdate(opts: {
-  port?: number;
-  board: string | undefined;
-  listId: string | undefined;
-  name?: string;
-  color?: string;
-  clearColor?: boolean;
-  emoji?: string;
-  clearEmoji?: boolean;
-}): Promise<void> {
+export async function runListsUpdate(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    listId: string | undefined;
+    name?: string;
+    color?: string;
+    clearColor?: boolean;
+    emoji?: string;
+    clearEmoji?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -162,16 +127,10 @@ export async function runListsUpdate(opts: {
       listId: opts.listId,
     });
   }
-  if (opts.clearColor && opts.color !== undefined) {
-    throw new CliError("Cannot use --color together with --clear-color", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
-  if (opts.clearEmoji && opts.emoji !== undefined) {
-    throw new CliError("Cannot use --emoji together with --clear-emoji", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
+  assertMutuallyExclusive([
+    ["--color", opts.color, "--clear-color", opts.clearColor],
+    ["--emoji", opts.emoji, "--clear-emoji", opts.clearEmoji],
+  ]);
 
   const patch: Record<string, unknown> = {};
   if (opts.name !== undefined) patch.name = opts.name;
@@ -190,12 +149,12 @@ export async function runListsUpdate(opts: {
   }
 
   try {
-    const result = await fetchApiMutate<ListMutationResult>(
+    const result = await ctx.fetchApiMutate<ListMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
       { method: "PATCH", body: patch },
       { port: opts.port },
     );
-    printJson(
+    ctx.printJson(
       writeSuccess(
         {
           boardId: result.boardId,
@@ -206,25 +165,18 @@ export async function runListsUpdate(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "List not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        listId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, listId });
   }
 }
 
-export async function runListsDelete(opts: {
-  port?: number;
-  board: string | undefined;
-  listId: string | undefined;
-}): Promise<void> {
+export async function runListsDelete(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    listId: string | undefined;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -240,12 +192,12 @@ export async function runListsDelete(opts: {
   }
 
   try {
-    const result = await fetchApiMutate<ListDeleteMutationResult>(
+    const result = await ctx.fetchApiMutate<ListDeleteMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
       { method: "DELETE" },
       { port: opts.port },
     );
-    printJson(
+    ctx.printJson(
       writeTrashMove(
         {
           boardId: result.boardId,
@@ -256,29 +208,22 @@ export async function runListsDelete(opts: {
       ),
     );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "List not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        listId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, listId });
   }
 }
 
-export async function runListsMove(opts: {
-  port?: number;
-  board: string | undefined;
-  listId: string | undefined;
-  before?: string;
-  after?: string;
-  first?: boolean;
-  last?: boolean;
-}): Promise<void> {
+export async function runListsMove(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    listId: string | undefined;
+    before?: string;
+    after?: string;
+    first?: boolean;
+    last?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -309,7 +254,7 @@ export async function runListsMove(opts: {
   }
 
   try {
-    const board = await fetchApiMutate<Board>(
+    const board = await ctx.fetchApiMutate<Board>(
       `/boards/${encodeURIComponent(boardId)}/lists/move`,
       {
         method: "PUT",
@@ -330,18 +275,8 @@ export async function runListsMove(opts: {
         listId,
       });
     }
-    printJson(writeSuccess(board, compactListEntity(moved)));
+    ctx.printJson(writeSuccess(board, compactListEntity(moved)));
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    if (e instanceof CliError && e.message === "List not found") {
-      throw new CliError(e.message, e.exitCode, {
-        ...e.details,
-        board: boardId,
-        listId,
-      });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, listId });
   }
 }

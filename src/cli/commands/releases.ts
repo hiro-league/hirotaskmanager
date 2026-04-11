@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 import {
   handleReleasesAdd,
   handleReleasesDelete,
@@ -11,8 +11,9 @@ import {
   addPortOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
-  withCliErrors,
+  cliAction,
 } from "../lib/command-helpers";
+import { CLI_DEFAULTS } from "../lib/constants";
 
 export function registerReleaseCommands(
   program: Command,
@@ -31,19 +32,20 @@ export function registerReleaseCommands(
       .requiredOption("--board <id-or-slug>", "Board id or slug")
       .option("--limit <n>", "Page size (omit for one full response)")
       .option("--offset <n>", "Skip this many releases (default 0)")
-      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option(
+        "--page-all",
+        `Merge all pages (uses --limit or ${CLI_DEFAULTS.MAX_PAGE_LIMIT} per request)`,
+      )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       board: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
       fields?: string;
-    }) => {
-      await withCliErrors(() => handleReleasesList(ctx, options));
-    },
+    }) => handleReleasesList(ctx, options)),
   );
 
   addPortOption(
@@ -54,12 +56,12 @@ export function registerReleaseCommands(
       .argument("<release-id>", "Numeric release id")
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (
-      releaseId: string,
-      options: { port?: string; board: string; fields?: string },
-    ) => {
-      await withCliErrors(() => handleReleasesShow(ctx, releaseId, options));
-    },
+    cliAction(
+      (
+        releaseId: string,
+        options: { port?: string; board: string; fields?: string },
+      ) => handleReleasesShow(ctx, releaseId, options),
+    ),
   );
 
   addPortOption(
@@ -73,7 +75,7 @@ export function registerReleaseCommands(
       .option("--release-date <text>", "Optional date label (e.g. YYYY-MM-DD)")
       .option("--clear-release-date", "Clear release date"),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       board: string;
       name: string;
@@ -81,9 +83,7 @@ export function registerReleaseCommands(
       clearColor?: boolean;
       releaseDate?: string;
       clearReleaseDate?: boolean;
-    }) => {
-      await withCliErrors(() => handleReleasesAdd(ctx, options));
-    },
+    }) => handleReleasesAdd(ctx, options)),
   );
 
   addPortOption(
@@ -98,20 +98,20 @@ export function registerReleaseCommands(
       .option("--release-date <text>", "Release date")
       .option("--clear-release-date", "Clear release date"),
   ).action(
-    async (
-      releaseId: string,
-      options: {
-        port?: string;
-        board: string;
-        name?: string;
-        color?: string;
-        clearColor?: boolean;
-        releaseDate?: string;
-        clearReleaseDate?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleReleasesUpdate(ctx, releaseId, options));
-    },
+    cliAction(
+      (
+        releaseId: string,
+        options: {
+          port?: string;
+          board: string;
+          name?: string;
+          color?: string;
+          clearColor?: boolean;
+          releaseDate?: string;
+          clearReleaseDate?: boolean;
+        },
+      ) => handleReleasesUpdate(ctx, releaseId, options),
+    ),
   );
 
   addPortOption(
@@ -129,16 +129,16 @@ export function registerReleaseCommands(
         ),
     ),
   ).action(
-    async (
-      releaseId: string,
-      options: {
-        port?: string;
-        board: string;
-        moveTasksTo?: string;
-        yes?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleReleasesDelete(ctx, releaseId, options));
-    },
+    cliAction(
+      (
+        releaseId: string,
+        options: {
+          port?: string;
+          board: string;
+          moveTasksTo?: string;
+          yes?: boolean;
+        },
+      ) => handleReleasesDelete(ctx, releaseId, options),
+    ),
   );
 }

@@ -29,7 +29,7 @@ export async function handleTasksAdd(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTasksAdd({
+  await runTasksAdd(ctx, {
     port,
     board: options.board,
     list: options.list,
@@ -70,7 +70,7 @@ export async function handleTasksUpdate(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTasksUpdate({
+  await runTasksUpdate(ctx, {
     port,
     board: options.board,
     taskId,
@@ -104,7 +104,7 @@ export async function handleTasksDelete(
       "Restore later with: hirotm tasks restore <task-id>",
     ],
   });
-  await runTasksDelete({
+  await runTasksDelete(ctx, {
     port,
     board: options.board,
     taskId,
@@ -123,7 +123,7 @@ export async function handleTasksRestore(
       `tasks restore: restore task ${taskId} from Trash (board and list must allow it).`,
     ],
   });
-  await runTasksRestore({ port, taskId });
+  await runTasksRestore(ctx, { port, taskId });
 }
 
 export async function handleTasksPurge(
@@ -139,7 +139,7 @@ export async function handleTasksPurge(
       "This cannot be undone.",
     ],
   });
-  await runTasksPurge({ port, taskId });
+  await runTasksPurge(ctx, { port, taskId });
 }
 
 export async function handleTasksMove(
@@ -157,7 +157,7 @@ export async function handleTasksMove(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTasksMove({
+  await runTasksMove(ctx, {
     port,
     board: options.board,
     taskId,

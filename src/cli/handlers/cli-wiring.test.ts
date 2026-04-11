@@ -4,6 +4,8 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ConfigOverrides } from "../lib/config";
+import { createTestCliRuntime } from "../lib/runtime";
+import { createDefaultCliContext } from "./context";
 import { handleBoardsUpdate } from "./boards";
 import type { CliContext } from "./context";
 import { handleListsAdd, handleListsList } from "./lists";
@@ -39,20 +41,10 @@ function reqUrl(input: RequestInfo | URL): string {
 /** `resolvePort` must honor `-p` / `--port` like createDefaultCliContext. */
 function wiringContext(): CliContext {
   return {
+    ...createDefaultCliContext(),
     resolvePort: (o?: ConfigOverrides) =>
       typeof o?.port === "number" ? o.port : 31999,
-    resolveDataDir: () => "/tmp",
-    fetchApi: async () => {
-      throw new Error("fetchApi unused in wiring tests");
-    },
-    printJson: () => {},
-    startServer: async () => {
-      throw new Error("unused");
-    },
-    stopServer: async () => {
-      throw new Error("unused");
-    },
-    readServerStatus: async () => ({ running: false }),
+    getRuntime: () => createTestCliRuntime({ port: 31999 }),
   };
 }
 
@@ -160,8 +152,17 @@ describe("CLI handler → writeCommands wiring", () => {
     setMockFetch(async (input) => {
       sawPort = new URL(reqUrl(input)).port;
       return new Response(
-        JSON.stringify({ id: 1, name: "R", createdAt: "2026-01-01T00:00:00.000Z" }),
-        { status: 200, headers: { "content-type": "application/json" } },
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "rb",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            releaseId: 1,
+            name: "R",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
       );
     });
     await captureStdout(() =>

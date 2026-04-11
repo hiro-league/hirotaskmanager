@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { Board, List, Task } from "../../shared/models";
+import type { Board, List, ReleaseDefinition, Task } from "../../shared/models";
 import {
   compactBoardEntity,
   compactListEntity,
+  compactReleaseEntity,
   compactTaskEntity,
   trashedEntity,
+  writeReleaseDelete,
   writeSuccess,
   writeTrashMove,
 } from "./write-result";
@@ -43,6 +45,24 @@ describe("compact*Entity", () => {
       name: "L",
       order: 0,
       emoji: null,
+    });
+  });
+
+  test("compactReleaseEntity maps release fields", () => {
+    const r: ReleaseDefinition = {
+      releaseId: 9,
+      name: "v1",
+      color: "#fff",
+      releaseDate: "2026-04-01",
+      createdAt: "c",
+    };
+    expect(compactReleaseEntity(r)).toEqual({
+      type: "release",
+      releaseId: 9,
+      name: "v1",
+      color: "#fff",
+      releaseDate: "2026-04-01",
+      createdAt: "c",
     });
   });
 
@@ -99,6 +119,21 @@ describe("writeSuccess / trashedEntity / writeTrashMove", () => {
         createdAt: "c",
         updatedAt: "u",
       },
+    });
+  });
+
+  test("writeReleaseDelete", () => {
+    expect(
+      writeReleaseDelete(
+        { boardId: 2, slug: "brd", updatedAt: "u" },
+        88,
+      ),
+    ).toEqual({
+      ok: true,
+      boardId: 2,
+      boardSlug: "brd",
+      boardUpdatedAt: "u",
+      entity: { type: "release", releaseId: 88, deleted: true },
     });
   });
 

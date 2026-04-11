@@ -1,25 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import type { ConfigOverrides } from "../lib/config";
+import { createTestCliRuntime } from "../lib/runtime";
+import { createDefaultCliContext } from "./context";
 import { handleServerStart, handleServerStatus, handleServerStop } from "./server";
 import type { CliContext } from "./context";
 
 function baseCtx(overrides: Partial<CliContext> = {}): CliContext {
   return {
+    ...createDefaultCliContext(),
     resolvePort: (o?: ConfigOverrides) =>
       typeof o?.port === "number" ? o.port : 3020,
     resolveDataDir: (o?: ConfigOverrides) =>
       (o?.dataDir as string | undefined) ?? "/tmp/data",
-    fetchApi: async () => {
-      throw new Error("unused");
-    },
-    printJson: () => {},
-    startServer: async () => {
-      throw new Error("unused");
-    },
-    stopServer: async () => {
-      throw new Error("unused");
-    },
-    readServerStatus: async () => ({ running: false }),
+    getRuntime: () => createTestCliRuntime({ port: 3020 }),
     ...overrides,
   };
 }

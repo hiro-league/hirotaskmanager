@@ -1,27 +1,29 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PaginatedListBody } from "../../shared/pagination";
 import type { SearchHit } from "../../shared/models";
-import { CLI_ERR } from "../lib/cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
+import { createTestCliRuntime } from "../lib/runtime";
 import { resetCliOutputFormat } from "../lib/output";
+import { createDefaultCliContext } from "./context";
 import { handleSearch } from "./search";
 import type { CliContext } from "./context";
 
 function mockContext(overrides: Partial<CliContext> = {}): CliContext {
   return {
+    ...createDefaultCliContext(),
     resolvePort: () => 3002,
-    resolveDataDir: () => "/tmp",
     fetchApi: async () => {
       throw new Error("fetchApi not stubbed");
     },
+    fetchApiMutate: async () => {
+      throw new Error("fetchApiMutate not stubbed");
+    },
+    fetchApiTrashMutate: async () => {
+      throw new Error("fetchApiTrashMutate not stubbed");
+    },
     printJson: () => {},
-    startServer: async () => {
-      throw new Error("unused");
-    },
-    stopServer: async () => {
-      throw new Error("unused");
-    },
-    readServerStatus: async () => ({ running: false }),
+    getRuntime: () => createTestCliRuntime({ port: 3002 }),
     ...overrides,
   };
 }

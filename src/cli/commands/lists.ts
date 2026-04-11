@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { CliContext } from "../handlers/context";
+import type { CliContext } from "../types/context";
 import {
   handleListsAdd,
   handleListsDelete,
@@ -13,8 +13,9 @@ import {
   addPortOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
-  withCliErrors,
+  cliAction,
 } from "../lib/command-helpers";
+import { CLI_DEFAULTS } from "../lib/constants";
 
 export function registerListCommands(
   program: Command,
@@ -31,19 +32,20 @@ export function registerListCommands(
       .requiredOption("--board <id-or-slug>", "Board id or slug")
       .option("--limit <n>", "Page size (omit for one full response)")
       .option("--offset <n>", "Skip this many lists (default 0)")
-      .option("--page-all", "Merge all pages (uses --limit or 500 per request)")
+      .option(
+        "--page-all",
+        `Merge all pages (uses --limit or ${CLI_DEFAULTS.MAX_PAGE_LIMIT} per request)`,
+      )
       .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
   ).action(
-    async (options: {
+    cliAction((options: {
       port?: string;
       board: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
       fields?: string;
-    }) => {
-      await withCliErrors(() => handleListsList(ctx, options));
-    },
+    }) => handleListsList(ctx, options)),
   );
 
   addPortOption(
@@ -54,12 +56,12 @@ export function registerListCommands(
       .argument("[name]", "List name (default from server)")
       .option("--emoji <text>", "Optional emoji before the list name"),
   ).action(
-    async (
-      name: string | undefined,
-      options: { port?: string; board: string; emoji?: string },
-    ) => {
-      await withCliErrors(() => handleListsAdd(ctx, name, options));
-    },
+    cliAction(
+      (
+        name: string | undefined,
+        options: { port?: string; board: string; emoji?: string },
+      ) => handleListsAdd(ctx, name, options),
+    ),
   );
 
   addPortOption(
@@ -74,20 +76,20 @@ export function registerListCommands(
       .option("--emoji <text>", "Optional emoji before the list name")
       .option("--clear-emoji", "Clear list emoji"),
   ).action(
-    async (
-      listId: string,
-      options: {
-        port?: string;
-        board: string;
-        name?: string;
-        color?: string;
-        clearColor?: boolean;
-        emoji?: string;
-        clearEmoji?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleListsUpdate(ctx, listId, options));
-    },
+    cliAction(
+      (
+        listId: string,
+        options: {
+          port?: string;
+          board: string;
+          name?: string;
+          color?: string;
+          clearColor?: boolean;
+          emoji?: string;
+          clearEmoji?: boolean;
+        },
+      ) => handleListsUpdate(ctx, listId, options),
+    ),
   );
 
   addPortOption(
@@ -101,12 +103,12 @@ export function registerListCommands(
         .argument("<list-id>", "Numeric list id"),
     ),
   ).action(
-    async (
-      listId: string,
-      options: { port?: string; board: string; yes?: boolean },
-    ) => {
-      await withCliErrors(() => handleListsDelete(ctx, listId, options));
-    },
+    cliAction(
+      (
+        listId: string,
+        options: { port?: string; board: string; yes?: boolean },
+      ) => handleListsDelete(ctx, listId, options),
+    ),
   );
 
   addPortOption(
@@ -116,9 +118,11 @@ export function registerListCommands(
         .description("Restore a list from Trash (board must be active)")
         .argument("<list-id>", "Numeric list id (see: hirotm trash list lists)"),
     ),
-  ).action(async (listId: string, options: { port?: string; yes?: boolean }) => {
-    await withCliErrors(() => handleListsRestore(ctx, listId, options));
-  });
+  ).action(
+    cliAction((listId: string, options: { port?: string; yes?: boolean }) =>
+      handleListsRestore(ctx, listId, options),
+    ),
+  );
 
   addPortOption(
     addYesOption(
@@ -127,9 +131,11 @@ export function registerListCommands(
         .description("Permanently delete a list from Trash (cannot be undone)")
         .argument("<list-id>", "Numeric list id"),
     ),
-  ).action(async (listId: string, options: { port?: string; yes?: boolean }) => {
-    await withCliErrors(() => handleListsPurge(ctx, listId, options));
-  });
+  ).action(
+    cliAction((listId: string, options: { port?: string; yes?: boolean }) =>
+      handleListsPurge(ctx, listId, options),
+    ),
+  );
 
   addPortOption(
     listsCommand
@@ -142,18 +148,18 @@ export function registerListCommands(
       .option("--first", "Move to the first position")
       .option("--last", "Move to the last position"),
   ).action(
-    async (
-      listId: string,
-      options: {
-        port?: string;
-        board: string;
-        before?: string;
-        after?: string;
-        first?: boolean;
-        last?: boolean;
-      },
-    ) => {
-      await withCliErrors(() => handleListsMove(ctx, listId, options));
-    },
+    cliAction(
+      (
+        listId: string,
+        options: {
+          port?: string;
+          board: string;
+          before?: string;
+          after?: string;
+          first?: boolean;
+          last?: boolean;
+        },
+      ) => handleListsMove(ctx, listId, options),
+    ),
   );
 }

@@ -1,27 +1,13 @@
 import type { PaginatedListBody } from "../../shared/pagination";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR, CliError } from "../types/errors";
+import type { QuietListPlan, TableColumn } from "../types/output";
 import { getCliOutputFormat, getCliQuiet } from "./cliFormat";
 import { writeHumanStderrError, writeHumanStdoutObject } from "./humanText";
-import type { TableColumn } from "./textTable";
 import { renderRecordsTable } from "./textTable";
 
 export { resetCliOutputFormat, syncCliOutputFormatFromGlobals } from "./cliFormat";
-
-export class CliError extends Error {
-  details?: Record<string, unknown>;
-  exitCode: number;
-
-  constructor(
-    message: string,
-    exitCode = 1,
-    details?: Record<string, unknown>,
-  ) {
-    super(message);
-    this.name = "CliError";
-    this.exitCode = exitCode;
-    this.details = details;
-  }
-}
+export { CliError };
+export type { QuietListPlan };
 
 /** Single-document success (writes, `releases show`, server status, …). `boards describe` uses `printBoardDescribeResponse(body, parsed)` (multi-line ndjson or human tables). */
 export function printJson(data: unknown): void {
@@ -39,12 +25,6 @@ export function printNdjsonLines(items: readonly unknown[] | undefined): void {
     process.stdout.write(`${JSON.stringify(item)}\n`);
   }
 }
-
-/** Plan for global `--quiet`: one plain-text cell per row (docs: recommendation #8). */
-export type QuietListPlan = {
-  defaultKeys: readonly string[];
-  explicitField?: string;
-};
 
 function formatQuietCell(value: unknown): string {
   if (value === null || value === undefined) {

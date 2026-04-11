@@ -1,4 +1,4 @@
-import type { List, Task } from "./models";
+import type { List, ReleaseDefinition, Task } from "./models";
 
 /** Opt-in header for granular mutation responses while older clients still expect full boards. */
 export const TASK_MANAGER_MUTATION_RESPONSE_HEADER =
@@ -19,6 +19,14 @@ export type TaskMutationResult = MutationResponseMeta & {
 
 export type ListMutationResult = MutationResponseMeta & {
   entity: List;
+};
+
+export type ReleaseMutationResult = MutationResponseMeta & {
+  entity: ReleaseDefinition;
+};
+
+export type ReleaseDeleteMutationResult = MutationResponseMeta & {
+  deletedReleaseId: number;
 };
 
 export type TaskDeleteMutationResult = MutationResponseMeta & {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
-import { CLI_ERR } from "./cli-error-codes";
+import { createDefaultCliContext } from "../handlers/context";
+import { CLI_ERR } from "../types/errors";
 import { resetCliOutputFormat } from "./output";
 import {
   runBoardsAdd,
@@ -8,6 +9,8 @@ import {
   runReleasesList,
   runReleasesShow,
 } from "./writeCommands";
+
+const ctx = createDefaultCliContext();
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
   let buf = "";
@@ -65,7 +68,7 @@ describe("writeCommands smoke (mock fetch)", () => {
     });
 
     const out = await captureStdout(() =>
-      runReleasesList({ port: 21001, board: "brd" }),
+      runReleasesList(ctx, { port: 21001, board: "brd" }),
     );
     const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBe(1);
@@ -73,7 +76,7 @@ describe("writeCommands smoke (mock fetch)", () => {
   });
 
   test("runReleasesList throws when board missing", async () => {
-    await expect(runReleasesList({ port: 1, board: undefined })).rejects.toMatchObject({
+    await expect(runReleasesList(ctx, { port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
@@ -100,7 +103,7 @@ describe("writeCommands smoke (mock fetch)", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsList({ port: 21002, board: "brd" }),
+      runListsList(ctx, { port: 21002, board: "brd" }),
     );
     const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBe(1);
@@ -132,7 +135,7 @@ describe("writeCommands smoke (mock fetch)", () => {
     );
 
     const out = await captureStdout(() =>
-      runReleasesShow({ port: 21002, board: "b", releaseId: "2" }),
+      runReleasesShow(ctx, { port: 21002, board: "b", releaseId: "2" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({
       releaseId: 2,
@@ -157,7 +160,7 @@ describe("writeCommands smoke (mock fetch)", () => {
     );
 
     await expect(
-      runReleasesShow({ port: 21003, board: "b", releaseId: "99" }),
+      runReleasesShow(ctx, { port: 21003, board: "b", releaseId: "99" }),
     ).rejects.toMatchObject({
       exitCode: 3,
       details: expect.objectContaining({ code: CLI_ERR.notFound }),
@@ -185,7 +188,7 @@ describe("writeCommands smoke (mock fetch)", () => {
     });
 
     const out = await captureStdout(() =>
-      runBoardsAdd({ port: 21004, name: "MyBoard" }),
+      runBoardsAdd(ctx, { port: 21004, name: "MyBoard" }),
     );
     const parsed = JSON.parse(out.trim()) as Record<string, unknown>;
     expect(parsed.ok).toBe(true);

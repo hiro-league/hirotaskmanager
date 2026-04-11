@@ -2,9 +2,10 @@
  * Shared parsing / IO helpers for CLI write paths (split from monolithic writeCommands).
  */
 import type { Board } from "../../../shared/models";
-import { fetchApi } from "../api-client";
-import { CLI_ERR } from "../cli-error-codes";
+import type { CliContext } from "../../types/context";
+import { CLI_ERR } from "../../types/errors";
 import { CliError } from "../output";
+import type { TextInputSource } from "../../types/options";
 
 export function parsePositiveInt(
   label: string,
@@ -68,6 +69,7 @@ export function parseCliReleaseFlags(opts: {
 }
 
 export async function resolveCliReleaseToApiValue(
+  ctx: Pick<CliContext, "fetchApi">,
   boardId: string,
   input: CliReleaseFlagInput,
   port: number | undefined,
@@ -80,7 +82,7 @@ export async function resolveCliReleaseToApiValue(
     case "id":
       return input.id;
     case "name": {
-      const board = await fetchApi<Board>(
+      const board = await ctx.fetchApi<Board>(
         `/boards/${encodeURIComponent(boardId)}`,
         { port },
       );
@@ -97,7 +99,8 @@ export async function resolveCliReleaseToApiValue(
   }
 }
 
-type TextInputSource = "flag" | "file" | "stdin";
+/** Resolved exclusive text input: flag value, file path string, or stdin (empty placeholder). */
+export type { TextInputSource } from "../../types/options";
 
 export function resolveExclusiveTextInput(
   label: string,

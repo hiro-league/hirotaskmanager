@@ -1,4 +1,4 @@
-import type { TableColumn } from "./textTable";
+import type { TableColumn } from "../types/output";
 
 /**
  * Default API keys for global `--quiet` on list reads (first present non-empty wins).

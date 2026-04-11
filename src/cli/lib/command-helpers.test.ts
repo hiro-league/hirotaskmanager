@@ -4,11 +4,12 @@ import {
   addPortOption,
   addProfileOption,
   addYesOption,
+  cliAction,
   collectMultiValue,
   parseLimitOption,
   parsePortOption,
 } from "./command-helpers";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
 describe("parsePortOption", () => {
@@ -58,6 +59,17 @@ describe("parseLimitOption", () => {
   test("rejects non-integer or < 1", () => {
     expect(() => parseLimitOption("0")).toThrow(CliError);
     expect(() => parseLimitOption("x")).toThrow(CliError);
+  });
+});
+
+describe("cliAction", () => {
+  test("forwards arguments and awaits the handler", async () => {
+    const calls: unknown[][] = [];
+    const wrapped = cliAction(async (a: number, b: string) => {
+      calls.push([a, b]);
+    });
+    await wrapped(1, "x");
+    expect(calls).toEqual([[1, "x"]]);
   });
 });
 

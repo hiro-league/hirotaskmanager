@@ -4,7 +4,8 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
-import { CLI_ERR } from "./cli-error-codes";
+import { createDefaultCliContext } from "../handlers/context";
+import { CLI_ERR } from "../types/errors";
 import {
   runBoardsDelete,
   runBoardsGroups,
@@ -23,6 +24,8 @@ import {
   runTasksMove,
   runTasksUpdate,
 } from "./writeCommands";
+
+const ctx = createDefaultCliContext();
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
   let buf = "";
@@ -51,14 +54,14 @@ function reqUrl(input: RequestInfo | URL): string {
 
 describe("writeCommands breadth — validation", () => {
   test("runListsAdd throws without --board", async () => {
-    await expect(runListsAdd({ port: 1, board: undefined })).rejects.toMatchObject({
+    await expect(runListsAdd(ctx, { port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
   });
 
   test("runListsList throws without --board", async () => {
-    await expect(runListsList({ port: 1, board: undefined })).rejects.toMatchObject({
+    await expect(runListsList(ctx, { port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
@@ -66,13 +69,13 @@ describe("writeCommands breadth — validation", () => {
 
   test("runTasksAdd throws without --list / --group", async () => {
     await expect(
-      runTasksAdd({ port: 1, board: "b", list: undefined, group: "1" }),
+      runTasksAdd(ctx, { port: 1, board: "b", list: undefined, group: "1" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
     await expect(
-      runTasksAdd({ port: 1, board: "b", list: "1", group: undefined }),
+      runTasksAdd(ctx, { port: 1, board: "b", list: "1", group: undefined }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
@@ -80,14 +83,14 @@ describe("writeCommands breadth — validation", () => {
   });
 
   test("runBoardsUpdate throws without board id", async () => {
-    await expect(runBoardsUpdate({ port: 1, board: undefined })).rejects.toMatchObject({
+    await expect(runBoardsUpdate(ctx, { port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
   });
 
   test("runBoardsUpdate throws when no update fields", async () => {
-    await expect(runBoardsUpdate({ port: 1, board: "b" })).rejects.toMatchObject({
+    await expect(runBoardsUpdate(ctx, { port: 1, board: "b" })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.noUpdateFields }),
     });
@@ -95,7 +98,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runListsUpdate throws without patch fields", async () => {
     await expect(
-      runListsUpdate({ port: 1, board: "b", listId: "1" }),
+      runListsUpdate(ctx, { port: 1, board: "b", listId: "1" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.noUpdateFields }),
@@ -104,7 +107,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runTasksUpdate throws without patch fields", async () => {
     await expect(
-      runTasksUpdate({ port: 1, board: "b", taskId: "9" }),
+      runTasksUpdate(ctx, { port: 1, board: "b", taskId: "9" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.noUpdateFields }),
@@ -113,7 +116,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runReleasesAdd throws without name", async () => {
     await expect(
-      runReleasesAdd({ port: 1, board: "b", name: "" }),
+      runReleasesAdd(ctx, { port: 1, board: "b", name: "" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
@@ -122,7 +125,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runReleasesUpdate throws without patch fields", async () => {
     await expect(
-      runReleasesUpdate({ port: 1, board: "b", releaseId: "1" }),
+      runReleasesUpdate(ctx, { port: 1, board: "b", releaseId: "1" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.noUpdateFields }),
@@ -131,7 +134,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runListsMove throws on multiple placement flags", async () => {
     await expect(
-      runListsMove({
+      runListsMove(ctx, {
         port: 1,
         board: "b",
         listId: "1",
@@ -146,7 +149,7 @@ describe("writeCommands breadth — validation", () => {
 
   test("runTasksMove throws without --to-list", async () => {
     await expect(
-      runTasksMove({ port: 1, board: "b", taskId: "1" }),
+      runTasksMove(ctx, { port: 1, board: "b", taskId: "1" }),
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
@@ -206,7 +209,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsList({ port: 22009, board: "lb" }),
+      runListsList(ctx, { port: 22009, board: "lb" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ listId: 9, name: "Todo" });
   });
@@ -226,7 +229,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsAdd({ port: 22010, board: "my", name: "Backlog" }),
+      runListsAdd(ctx, { port: 22010, board: "my", name: "Backlog" }),
     );
     const p = JSON.parse(out.trim()) as { ok: boolean; entity: { type: string } };
     expect(p.ok).toBe(true);
@@ -250,7 +253,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsUpdate({
+      runListsUpdate(ctx, {
         port: 22011,
         board: "b1",
         listId: "2",
@@ -275,7 +278,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsDelete({ port: 22012, board: "b1", listId: "3" }),
+      runListsDelete(ctx, { port: 22012, board: "b1", listId: "3" }),
     );
     const p = JSON.parse(out.trim()) as { trashed: { type: string } };
     expect(p.trashed.type).toBe("list");
@@ -300,7 +303,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       });
     });
     const out = await captureStdout(() =>
-      runListsMove({
+      runListsMove(ctx, {
         port: 22013,
         board: "b",
         listId: "5",
@@ -340,7 +343,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runTasksAdd({
+      runTasksAdd(ctx, {
         port: 22014,
         board: "brd",
         list: "1",
@@ -378,7 +381,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runTasksUpdate({
+      runTasksUpdate(ctx, {
         port: 22015,
         board: "brd",
         taskId: "9",
@@ -403,7 +406,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runTasksDelete({ port: 22016, board: "brd", taskId: "8" }),
+      runTasksDelete(ctx, { port: 22016, board: "brd", taskId: "8" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({
       trashed: { type: "task" },
@@ -442,7 +445,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       });
     });
     const out = await captureStdout(() =>
-      runTasksMove({
+      runTasksMove(ctx, {
         port: 22017,
         board: "brd",
         taskId: "7",
@@ -467,7 +470,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       });
     });
     const out = await captureStdout(() =>
-      runBoardsUpdate({ port: 22018, board: "x", name: "Patched" }),
+      runBoardsUpdate(ctx, { port: 22018, board: "x", name: "Patched" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
   });
@@ -481,7 +484,11 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
         phase += 1;
         return new Response(null, { status: 204 });
       }
-      if (url.includes("/boards/del") && !init?.method) {
+      // api-client uses explicit GET for reads (not fetch default omitting method).
+      if (
+        url.includes("/boards/del") &&
+        (!init?.method || init.method === "GET")
+      ) {
         phase += 1;
         return new Response(JSON.stringify(board), {
           status: 200,
@@ -491,7 +498,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       return new Response("nope", { status: 404 });
     });
     const out = await captureStdout(() =>
-      runBoardsDelete({ port: 22019, board: "del" }),
+      runBoardsDelete(ctx, { port: 22019, board: "del" }),
     );
     expect(phase).toBe(2);
     expect(JSON.parse(out.trim())).toMatchObject({
@@ -518,7 +525,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       deletedGroupFallbackId: 1,
     });
     const out = await captureStdout(() =>
-      runBoardsGroups({ port: 22020, board: "g", json: payload }),
+      runBoardsGroups(ctx, { port: 22020, board: "g", json: payload }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
   });
@@ -536,7 +543,7 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       });
     });
     const out = await captureStdout(() =>
-      runBoardsPriorities({ port: 22021, board: "p", json: "[]" }),
+      runBoardsPriorities(ctx, { port: 22021, board: "p", json: "[]" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
   });
@@ -547,17 +554,27 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       expect(init?.method).toBe("POST");
       return new Response(
         JSON.stringify({
-          releaseId: 3,
-          name: "1.0",
-          createdAt: "2026-01-01T00:00:00.000Z",
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            releaseId: 3,
+            name: "1.0",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
         }),
-        { status: 200, headers: { "content-type": "application/json" } },
+        { status: 201, headers: { "content-type": "application/json" } },
       );
     });
     const out = await captureStdout(() =>
-      runReleasesAdd({ port: 22022, board: "b", name: "1.0" }),
+      runReleasesAdd(ctx, { port: 22022, board: "b", name: "1.0" }),
     );
-    expect(JSON.parse(out.trim())).toMatchObject({ releaseId: 3, name: "1.0" });
+    expect(JSON.parse(out.trim())).toMatchObject({
+      ok: true,
+      boardId: 1,
+      boardSlug: "b",
+      entity: { type: "release", releaseId: 3, name: "1.0" },
+    });
   });
 
   test("runReleasesUpdate PATCHes release", async () => {
@@ -566,32 +583,50 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       expect(init?.method).toBe("PATCH");
       return new Response(
         JSON.stringify({
-          releaseId: 3,
-          name: "1.1",
-          createdAt: "2026-01-01T00:00:00.000Z",
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-03T00:00:00.000Z",
+          entity: {
+            releaseId: 3,
+            name: "1.1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     });
     const out = await captureStdout(() =>
-      runReleasesUpdate({ port: 22023, board: "b", releaseId: "3", name: "1.1" }),
+      runReleasesUpdate(ctx, { port: 22023, board: "b", releaseId: "3", name: "1.1" }),
     );
-    expect(JSON.parse(out.trim())).toMatchObject({ name: "1.1" });
+    expect(JSON.parse(out.trim())).toMatchObject({
+      ok: true,
+      entity: { type: "release", name: "1.1" },
+    });
   });
 
-  test("runReleasesDelete returns ok envelope on 204", async () => {
+  test("runReleasesDelete returns writeSuccess-style envelope", async () => {
     setMockFetch(async (input, init) => {
       expect(reqUrl(input)).toContain("/api/boards/b/releases/2");
       expect(init?.method).toBe("DELETE");
-      return new Response(null, { status: 204 });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-04T00:00:00.000Z",
+          deletedReleaseId: 2,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
     });
     const out = await captureStdout(() =>
-      runReleasesDelete({ port: 22024, board: "b", releaseId: "2" }),
+      runReleasesDelete(ctx, { port: 22024, board: "b", releaseId: "2" }),
     );
     expect(JSON.parse(out.trim())).toEqual({
       ok: true,
-      board: "b",
-      deletedReleaseId: 2,
+      boardId: 1,
+      boardSlug: "b",
+      boardUpdatedAt: "2026-01-04T00:00:00.000Z",
+      entity: { type: "release", releaseId: 2, deleted: true },
     });
   });
 });

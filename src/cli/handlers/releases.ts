@@ -21,7 +21,7 @@ export async function handleReleasesList(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runReleasesList({
+  await runReleasesList(ctx, {
     port,
     board: options.board,
     limit: options.limit,
@@ -37,7 +37,7 @@ export async function handleReleasesShow(
   options: { port?: string; board: string; fields?: string },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runReleasesShow({
+  await runReleasesShow(ctx, {
     port,
     board: options.board,
     releaseId,
@@ -58,7 +58,7 @@ export async function handleReleasesAdd(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runReleasesAdd({
+  await runReleasesAdd(ctx, {
     port,
     board: options.board,
     name: options.name,
@@ -83,7 +83,7 @@ export async function handleReleasesUpdate(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runReleasesUpdate({
+  await runReleasesUpdate(ctx, {
     port,
     board: options.board,
     releaseId,
@@ -112,7 +112,7 @@ export async function handleReleasesDelete(
       moveLine,
     ],
   });
-  await runReleasesDelete({
+  await runReleasesDelete(ctx, {
     port,
     board: options.board,
     releaseId,

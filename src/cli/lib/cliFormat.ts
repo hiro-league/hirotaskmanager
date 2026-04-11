@@ -2,7 +2,9 @@
  * Global `--format ndjson|human` is the only stdout/stderr shaping switch (see `program.ts` preAction).
  */
 
-export type CliOutputFormat = "ndjson" | "human";
+import type { CliOutputFormat } from "../types/output";
+
+export type { CliOutputFormat } from "../types/output";
 
 let cliOutputFormat: CliOutputFormat = "ndjson";
 let cliQuiet = false;

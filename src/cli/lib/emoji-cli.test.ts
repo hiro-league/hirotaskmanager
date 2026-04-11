@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseOptionalEmojiFlag } from "./emoji-cli";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
 describe("parseOptionalEmojiFlag", () => {

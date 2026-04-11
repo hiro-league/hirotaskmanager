@@ -19,16 +19,15 @@ import {
   resolveRuntimeKind,
   type ConfigOverrides,
 } from "./config";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_DEFAULTS } from "./constants";
+import { CLI_ERR } from "../types/errors";
 import { mapHttpStatusToCliFailure } from "./cli-http-errors";
 import { CliError } from "./output";
 
-/** Default API request timeout for hirotm fetch calls (health polling uses its own short waits). */
+/** Uses `CLI_DEFAULTS.API_FETCH_TIMEOUT_MS`; health polling uses short waits in `process.ts`. */
 // Aligns with docs/cli-error-handling.md: timeouts surface as exit 7 + code request_timeout.
-const DEFAULT_CLI_FETCH_TIMEOUT_MS = 120_000;
-
 function apiFetchSignal(): AbortSignal {
-  return AbortSignal.timeout(DEFAULT_CLI_FETCH_TIMEOUT_MS);
+  return AbortSignal.timeout(CLI_DEFAULTS.API_FETCH_TIMEOUT_MS);
 }
 
 function isFetchTimedOut(cause: unknown): boolean {
@@ -95,9 +94,23 @@ async function parseErrorResponse(
   }
 }
 
-export async function fetchApi<T>(
+/**
+ * Single implementation for GET reads, JSON mutations, and trash POST/DELETE.
+ * Keeps timeout/unreachable/HTTP error handling in one place (see docs/cli-architecture-review.md #1).
+ */
+type ApiRequestSpec =
+  | { kind: "read" }
+  | {
+      kind: "mutate";
+      method: "POST" | "PATCH" | "PUT" | "DELETE";
+      body?: unknown;
+    }
+  | { kind: "trash"; method: "POST" | "DELETE" };
+
+async function apiRequest<T>(
   endpoint: string,
-  overrides: ConfigOverrides = {},
+  overrides: ConfigOverrides,
+  spec: ApiRequestSpec,
 ): Promise<T> {
   const baseUrl = buildBaseUrl(overrides);
   const apiKey = resolveApiKey(overrides);
@@ -109,10 +122,29 @@ export async function fetchApi<T>(
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
+  let method: string;
+  let body: string | undefined;
+
+  if (spec.kind === "read") {
+    method = "GET";
+    body = undefined;
+  } else if (spec.kind === "mutate") {
+    method = spec.method;
+    headers["Content-Type"] = "application/json";
+    headers[TASK_MANAGER_MUTATION_RESPONSE_HEADER] =
+      TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1;
+    body = spec.body !== undefined ? JSON.stringify(spec.body) : undefined;
+  } else {
+    method = spec.method;
+    body = undefined;
+  }
+
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/api${endpoint}`, {
+      method,
       headers,
+      body,
       signal: apiFetchSignal(),
     });
   } catch (cause: unknown) {
@@ -141,7 +173,18 @@ export async function fetchApi<T>(
     throw new CliError(message, exitCode, details);
   }
 
+  if (spec.kind !== "read" && response.status === 204) {
+    return undefined as T;
+  }
+
   return (await response.json()) as T;
+}
+
+export async function fetchApi<T>(
+  endpoint: string,
+  overrides: ConfigOverrides = {},
+): Promise<T> {
+  return apiRequest<T>(endpoint, overrides, { kind: "read" });
 }
 
 export async function fetchApiMutate<T>(
@@ -149,57 +192,11 @@ export async function fetchApiMutate<T>(
   init: { method: "POST" | "PATCH" | "PUT" | "DELETE"; body?: unknown },
   overrides: ConfigOverrides = {},
 ): Promise<T> {
-  const baseUrl = buildBaseUrl(overrides);
-  const apiKey = resolveApiKey();
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    [TASK_MANAGER_MUTATION_RESPONSE_HEADER]: TASK_MANAGER_MUTATION_RESPONSE_ENTITY_V1,
-    ...taskManagerClientHeaders(),
-  };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api${endpoint}`, {
-      method: init.method,
-      headers,
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-      signal: apiFetchSignal(),
-    });
-  } catch (cause: unknown) {
-    if (isFetchTimedOut(cause)) {
-      throw new CliError("Request timed out", 7, {
-        code: CLI_ERR.requestTimeout,
-        retryable: true,
-        url: baseUrl,
-      });
-    }
-    throw new CliError("Server not reachable", 6, {
-      code: CLI_ERR.serverUnreachable,
-      hint: `Run: ${buildStartCommand(overrides)}`,
-      url: baseUrl,
-      retryable: true,
-    });
-  }
-
-  if (!response.ok) {
-    const { message, extra } = await parseErrorResponse(response);
-    const { exitCode, details } = mapHttpStatusToCliFailure(response.status, {
-      ...extra,
-      status: response.status,
-      url: `${baseUrl}/api${endpoint}`,
-    });
-    throw new CliError(message, exitCode, details);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
+  return apiRequest<T>(endpoint, overrides, {
+    kind: "mutate",
+    method: init.method,
+    body: init.body,
+  });
 }
 
 /**
@@ -211,54 +208,10 @@ export async function fetchApiTrashMutate<T>(
   init: { method: "POST" | "DELETE" },
   overrides: ConfigOverrides = {},
 ): Promise<T> {
-  const baseUrl = buildBaseUrl(overrides);
-  const apiKey = resolveApiKey();
-
-  const headers: Record<string, string> = {
-    ...taskManagerClientHeaders(),
-  };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api${endpoint}`, {
-      method: init.method,
-      headers,
-      signal: apiFetchSignal(),
-    });
-  } catch (cause: unknown) {
-    if (isFetchTimedOut(cause)) {
-      throw new CliError("Request timed out", 7, {
-        code: CLI_ERR.requestTimeout,
-        retryable: true,
-        url: baseUrl,
-      });
-    }
-    throw new CliError("Server not reachable", 6, {
-      code: CLI_ERR.serverUnreachable,
-      hint: `Run: ${buildStartCommand(overrides)}`,
-      url: baseUrl,
-      retryable: true,
-    });
-  }
-
-  if (!response.ok) {
-    const { message, extra } = await parseErrorResponse(response);
-    const { exitCode, details } = mapHttpStatusToCliFailure(response.status, {
-      ...extra,
-      status: response.status,
-      url: `${baseUrl}/api${endpoint}`,
-    });
-    throw new CliError(message, exitCode, details);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
+  return apiRequest<T>(endpoint, overrides, {
+    kind: "trash",
+    method: init.method,
+  });
 }
 
 export async function fetchHealth(overrides: ConfigOverrides = {}): Promise<boolean> {

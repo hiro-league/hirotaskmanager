@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_DEFAULTS } from "./constants";
+import { CLI_ERR } from "../types/errors";
 import { getCliOutputFormat, getCliQuiet } from "./cliFormat";
 import { CliError, exitWithError } from "./output";
 
@@ -103,14 +104,14 @@ export function collectMultiValue(
   ];
 }
 
-/** Search: default 20 hits per page, cap 500 (matches `MAX_PAGE_LIMIT`). */
+/** Search: default and cap from `CLI_DEFAULTS` (same max as optional list page-all). */
 export function parseLimitOption(limit: string | undefined): number {
-  if (limit == null || limit === "") return 20;
+  if (limit == null || limit === "") return CLI_DEFAULTS.DEFAULT_SEARCH_LIMIT;
   const n = Number(limit);
   if (!Number.isInteger(n) || n < 1) {
     throw new CliError("Invalid limit", 2, { code: CLI_ERR.invalidValue, limit });
   }
-  return Math.min(500, n);
+  return Math.min(CLI_DEFAULTS.MAX_PAGE_LIMIT, n);
 }
 
 /** Optional list limit for tasks/trash/boards/releases; omit = no `limit` param (one full page). */
@@ -122,7 +123,7 @@ export function parseOptionalListLimit(
   if (!Number.isInteger(n) || n < 1) {
     throw new CliError("Invalid limit", 2, { code: CLI_ERR.invalidValue, limit });
   }
-  return Math.min(500, n);
+  return Math.min(CLI_DEFAULTS.MAX_PAGE_LIMIT, n);
 }
 
 export function parseOptionalOffset(offset: string | undefined): number {
@@ -141,4 +142,14 @@ export async function withCliErrors(fn: () => Promise<void>): Promise<void> {
   } catch (error) {
     exitWithError(error);
   }
+}
+
+/**
+ * Commander `.action()` helper: runs the handler inside {@link withCliErrors} so
+ * subcommands cannot forget the shared exit path (see cli-architecture-review item 14).
+ */
+export function cliAction<A extends unknown[]>(
+  fn: (...args: A) => Promise<void>,
+): (...args: A) => Promise<void> {
+  return (...args: A) => withCliErrors(() => fn(...args));
 }

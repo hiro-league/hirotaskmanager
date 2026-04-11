@@ -1,7 +1,8 @@
 /**
- * Stable `code` strings on stderr JSON for agents and scripts.
- * User-facing reference: Hiro docs → Task Manager → hirotm errors (Mintlify).
+ * CLI error contract: stable `code` strings and `CliError` for stderr JSON / exit codes.
+ * User-facing catalog: Hiro docs → Task Manager → hirotm errors.
  */
+
 export const CLI_ERR = {
   badRequest: "bad_request",
   conflictingClearWithInput: "conflicting_clear_with_input",
@@ -36,3 +37,19 @@ export const CLI_ERR = {
   unauthenticated: "unauthenticated",
   versionMismatch: "version_mismatch",
 } as const;
+
+export class CliError extends Error {
+  details?: Record<string, unknown>;
+  exitCode: number;
+
+  constructor(
+    message: string,
+    exitCode = 1,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "CliError";
+    this.exitCode = exitCode;
+    this.details = details;
+  }
+}

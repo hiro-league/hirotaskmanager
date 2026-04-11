@@ -1,5 +1,5 @@
 import type { PaginatedListBody } from "../../shared/pagination";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
 /**

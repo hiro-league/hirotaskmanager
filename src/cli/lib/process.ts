@@ -16,7 +16,9 @@ import {
   type ConfigOverrides,
 } from "./config";
 import { fetchHealth } from "./api-client";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_DEFAULTS, CLI_POLLING } from "./constants";
+import { CLI_ERR } from "../types/errors";
+import type { ServerStatus } from "../types/config";
 import { CliError } from "./output";
 
 interface ManagedServerRecord {
@@ -25,12 +27,7 @@ interface ManagedServerRecord {
   startedAt: string;
 }
 
-export interface ServerStatus {
-  pid?: number;
-  port?: number;
-  running: boolean;
-  url?: string;
-}
+export type { ServerStatus };
 
 type ServerReadyCallback = (status: ServerStatus) => void | Promise<void>;
 
@@ -78,7 +75,7 @@ async function waitForHealth(port: number, timeoutMs: number): Promise<boolean> 
 
   while (Date.now() - startedAt < timeoutMs) {
     if (await fetchHealth({ port })) return true;
-    await Bun.sleep(250);
+    await Bun.sleep(CLI_POLLING.HEALTH_INTERVAL_MS);
   }
 
   return false;
@@ -169,7 +166,7 @@ export async function startServer(
   if (background) {
     child.unref();
 
-    const healthy = await waitForHealth(port, 8000);
+    const healthy = await waitForHealth(port, CLI_DEFAULTS.SERVER_START_WAIT_MS);
     if (!healthy) {
       throw new CliError("Server failed to start", 7, {
         code: CLI_ERR.serverStartTimeout,
@@ -205,7 +202,7 @@ export async function startServer(
 
   // Wait for health before handing control back to the launcher so first-run
   // browser open can happen without hiding the server logs users need.
-  const healthy = await waitForHealth(port, 8000);
+  const healthy = await waitForHealth(port, CLI_DEFAULTS.SERVER_START_WAIT_MS);
   if (!healthy) {
     child.kill("SIGTERM");
     throw new CliError("Server failed to start", 7, {
@@ -296,12 +293,12 @@ export async function stopServer(
   }
 
   const waitPort = record.port;
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + CLI_DEFAULTS.SERVER_STOP_WAIT_MS;
   while (Date.now() < deadline) {
     if (!(await fetchHealth({ ...overrides, port: waitPort }))) {
       break;
     }
-    await Bun.sleep(200);
+    await Bun.sleep(CLI_POLLING.FOREGROUND_PROGRESS_MS);
   }
 
   if (await fetchHealth({ ...overrides, port: waitPort })) {
@@ -310,7 +307,7 @@ export async function stopServer(
     } catch {
       /* ignore */
     }
-    await Bun.sleep(300);
+    await Bun.sleep(CLI_POLLING.BACKGROUND_WAIT_MS);
   }
 
   removeManagedServerRecord(overrides);

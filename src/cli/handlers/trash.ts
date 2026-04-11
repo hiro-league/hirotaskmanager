@@ -17,7 +17,7 @@ export async function handleTrashBoards(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTrashBoards({
+  await runTrashBoards(ctx, {
     port,
     limit: options.limit,
     offset: options.offset,
@@ -37,7 +37,7 @@ export async function handleTrashLists(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTrashLists({
+  await runTrashLists(ctx, {
     port,
     limit: options.limit,
     offset: options.offset,
@@ -57,7 +57,7 @@ export async function handleTrashTasks(
   },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
-  await runTrashTasks({
+  await runTrashTasks(ctx, {
     port,
     limit: options.limit,
     offset: options.offset,

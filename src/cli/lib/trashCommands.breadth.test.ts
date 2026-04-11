@@ -3,7 +3,8 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
-import { CLI_ERR } from "./cli-error-codes";
+import { createDefaultCliContext } from "../handlers/context";
+import { CLI_ERR } from "../types/errors";
 import { resetCliOutputFormat } from "./output";
 import {
   runBoardsPurge,
@@ -15,6 +16,8 @@ import {
   runTrashLists,
   runTrashTasks,
 } from "./trashCommands";
+
+const ctx = createDefaultCliContext();
 
 async function captureStdout(run: () => Promise<void>): Promise<string> {
   let buf = "";
@@ -43,14 +46,14 @@ function reqUrl(input: RequestInfo | URL): string {
 
 describe("trashCommands breadth — validation", () => {
   test("runBoardsRestore throws without board ref", async () => {
-    await expect(runBoardsRestore({ port: 1, board: undefined })).rejects.toMatchObject({
+    await expect(runBoardsRestore(ctx, { port: 1, board: undefined })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
   });
 
   test("runListsRestore throws on invalid list id", async () => {
-    await expect(runListsRestore({ port: 1, listId: "x" })).rejects.toMatchObject({
+    await expect(runListsRestore(ctx, { port: 1, listId: "x" })).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
     });
@@ -137,7 +140,7 @@ describe("trashCommands breadth — mock fetch", () => {
         headers: { "content-type": "application/json" },
       });
     });
-    const out = await captureStdout(() => runTrashLists({ port: 22100 }));
+    const out = await captureStdout(() => runTrashLists(ctx, { port: 22100 }));
     const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBe(1);
     expect(JSON.parse(lines[0]!)).toEqual({
@@ -182,7 +185,7 @@ describe("trashCommands breadth — mock fetch", () => {
         headers: { "content-type": "application/json" },
       });
     });
-    const out = await captureStdout(() => runTrashTasks({ port: 22101 }));
+    const out = await captureStdout(() => runTrashTasks(ctx, { port: 22101 }));
     const lines = out.trimEnd().split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBe(1);
     expect(JSON.parse(lines[0]!)).toEqual({
@@ -230,7 +233,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response("not found", { status: 404 });
     });
     const out = await captureStdout(() =>
-      runBoardsRestore({ port: 22102, board: "7" }),
+      runBoardsRestore(ctx, { port: 22102, board: "7" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true, entity: { type: "board" } });
   });
@@ -242,7 +245,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response(null, { status: 204 });
     });
     const out = await captureStdout(() =>
-      runBoardsPurge({ port: 22103, board: "7" }),
+      runBoardsPurge(ctx, { port: 22103, board: "7" }),
     );
     expect(JSON.parse(out.trim())).toEqual({
       ok: true,
@@ -274,7 +277,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response("not found", { status: 404 });
     });
     const out = await captureStdout(() =>
-      runListsRestore({ port: 22104, listId: "3" }),
+      runListsRestore(ctx, { port: 22104, listId: "3" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true, entity: { type: "list" } });
   });
@@ -286,7 +289,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response(null, { status: 204 });
     });
     const out = await captureStdout(() =>
-      runListsPurge({ port: 22105, listId: "3" }),
+      runListsPurge(ctx, { port: 22105, listId: "3" }),
     );
     expect(JSON.parse(out.trim())).toEqual({
       ok: true,
@@ -318,7 +321,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response("not found", { status: 404 });
     });
     const out = await captureStdout(() =>
-      runTasksRestore({ port: 22106, taskId: "9" }),
+      runTasksRestore(ctx, { port: 22106, taskId: "9" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true, entity: { type: "task" } });
   });
@@ -330,7 +333,7 @@ describe("trashCommands breadth — mock fetch", () => {
       return new Response(null, { status: 204 });
     });
     const out = await captureStdout(() =>
-      runTasksPurge({ port: 22107, taskId: "9" }),
+      runTasksPurge(ctx, { port: 22107, taskId: "9" }),
     );
     expect(JSON.parse(out.trim())).toEqual({
       ok: true,

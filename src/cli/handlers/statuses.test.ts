@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Status } from "../../shared/models";
+import { createTestCliRuntime } from "../lib/runtime";
 import { resetCliOutputFormat } from "../lib/output";
+import { createDefaultCliContext } from "./context";
 import { handleStatusesList } from "./statuses";
 import type { CliContext } from "./context";
 
@@ -15,20 +17,14 @@ describe("handleStatusesList", () => {
     ];
     let path = "";
     const ctx: CliContext = {
+      ...createDefaultCliContext(),
       resolvePort: () => 3010,
-      resolveDataDir: () => "/tmp",
       fetchApi: (async (p) => {
         path = p;
         return rows;
       }) as CliContext["fetchApi"],
       printJson: () => {},
-      startServer: async () => {
-        throw new Error("unused");
-      },
-      stopServer: async () => {
-        throw new Error("unused");
-      },
-      readServerStatus: async () => ({ running: false }),
+      getRuntime: () => createTestCliRuntime({ port: 3010 }),
     };
 
     let out = "";

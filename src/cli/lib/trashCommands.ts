@@ -5,15 +5,14 @@ import type {
   TrashedListItem,
   TrashedTaskItem,
 } from "../../shared/trashApi";
-import { fetchApi, fetchApiTrashMutate } from "./api-client";
-import { CLI_ERR } from "./cli-error-codes";
+import type { CliContext } from "../types/context";
+import { CLI_ERR } from "../types/errors";
+import { CLI_DEFAULTS } from "./constants";
 import {
-  parseOptionalListLimit,
-  parseOptionalOffset,
-  requireNdjsonWhenQuiet,
-  requireNdjsonWhenUsingFields,
-  resolveQuietExplicitField,
-} from "./command-helpers";
+  FIELDS_TRASH_BOARD,
+  FIELDS_TRASH_LIST,
+  FIELDS_TRASH_TASK,
+} from "./jsonFieldProjection";
 import {
   COLUMNS_TRASH_BOARDS,
   COLUMNS_TRASH_LISTS,
@@ -22,36 +21,16 @@ import {
   QUIET_DEFAULT_TRASH_LIST,
   QUIET_DEFAULT_TRASH_TASK,
 } from "./listTableSpecs";
+import { executePaginatedListRead } from "./paginatedListRead";
 import { fetchAllPages } from "./paginatedFetch";
-import {
-  FIELDS_TRASH_BOARD,
-  FIELDS_TRASH_LIST,
-  FIELDS_TRASH_TASK,
-  parseAndValidateFields,
-  projectPaginatedItems,
-} from "./jsonFieldProjection";
-import { CliError, printJson, printPaginatedListRead } from "./output";
+import { CliError } from "./output";
 import {
   compactBoardEntity,
   compactListEntity,
   compactTaskEntity,
   writeSuccess,
 } from "./write-result";
-
-function parsePositiveIntLabel(
-  label: string,
-  raw: string | undefined,
-): number | undefined {
-  if (raw === undefined || raw === "") return undefined;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1) {
-    throw new CliError(`Invalid ${label}`, 2, {
-      code: CLI_ERR.invalidValue,
-      [label]: raw,
-    });
-  }
-  return n;
-}
+import { parsePositiveInt } from "./write/helpers";
 
 /** Numeric board id string, or undefined if the argument looks like a slug. */
 export function parseTrashedBoardNumericId(idOrSlug: string): number | undefined {
@@ -78,16 +57,17 @@ export function resolveTrashedBoardIdFromSlug(
 }
 
 async function fetchAllTrashedBoards(
+  ctx: CliContext,
   port: number | undefined,
 ): Promise<TrashedBoardItem[]> {
-  const pageSize = 500;
+  const pageSize = CLI_DEFAULTS.MAX_PAGE_LIMIT;
   const merged = await fetchAllPages(async (offset) => {
     const q = new URLSearchParams();
     q.set("limit", String(pageSize));
     if (offset > 0) {
       q.set("offset", String(offset));
     }
-    return fetchApi<PaginatedListBody<TrashedBoardItem>>(
+    return ctx.fetchApi<PaginatedListBody<TrashedBoardItem>>(
       `/trash/boards?${q.toString()}`,
       { port },
     );
@@ -96,6 +76,7 @@ async function fetchAllTrashedBoards(
 }
 
 async function resolveTrashedBoardId(
+  ctx: CliContext,
   port: number | undefined,
   idOrSlug: string,
 ): Promise<number> {
@@ -103,188 +84,92 @@ async function resolveTrashedBoardId(
   if (numeric !== undefined) {
     return numeric;
   }
-  const rows = await fetchAllTrashedBoards(port);
+  const rows = await fetchAllTrashedBoards(ctx, port);
   return resolveTrashedBoardIdFromSlug(idOrSlug, rows);
 }
 
-export async function runTrashBoards(opts: {
-  port?: number;
-  limit?: string;
-  offset?: string;
-  pageAll?: boolean;
-  fields?: string;
-}): Promise<void> {
-  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_BOARD);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(opts.limit);
-  const offsetOpt = parseOptionalOffset(opts.offset);
-  const pageAll = opts.pageAll === true;
+export async function runTrashBoards(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
   const port = opts.port;
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await fetchApi<PaginatedListBody<TrashedBoardItem>>(
-      `/trash/boards${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_TRASH_BOARDS, {
-      defaultKeys: QUIET_DEFAULT_TRASH_BOARD,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return fetchApi<PaginatedListBody<TrashedBoardItem>>(
-      `/trash/boards?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_BOARDS, {
-    defaultKeys: QUIET_DEFAULT_TRASH_BOARD,
-    explicitField: quietExplicit,
-  });
+  await executePaginatedListRead(
+    {
+      kind: "optionalLimit",
+      basePath: "/trash/boards",
+      fieldAllowlist: FIELDS_TRASH_BOARD,
+      columns: COLUMNS_TRASH_BOARDS,
+      quietDefaults: QUIET_DEFAULT_TRASH_BOARD,
+      fetchPage: (path) =>
+        ctx.fetchApi<PaginatedListBody<TrashedBoardItem>>(path, { port }),
+    },
+    opts,
+  );
 }
 
-export async function runTrashLists(opts: {
-  port?: number;
-  limit?: string;
-  offset?: string;
-  pageAll?: boolean;
-  fields?: string;
-}): Promise<void> {
-  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_LIST);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(opts.limit);
-  const offsetOpt = parseOptionalOffset(opts.offset);
-  const pageAll = opts.pageAll === true;
+export async function runTrashLists(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
   const port = opts.port;
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await fetchApi<PaginatedListBody<TrashedListItem>>(
-      `/trash/lists${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_TRASH_LISTS, {
-      defaultKeys: QUIET_DEFAULT_TRASH_LIST,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return fetchApi<PaginatedListBody<TrashedListItem>>(
-      `/trash/lists?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_LISTS, {
-    defaultKeys: QUIET_DEFAULT_TRASH_LIST,
-    explicitField: quietExplicit,
-  });
+  await executePaginatedListRead(
+    {
+      kind: "optionalLimit",
+      basePath: "/trash/lists",
+      fieldAllowlist: FIELDS_TRASH_LIST,
+      columns: COLUMNS_TRASH_LISTS,
+      quietDefaults: QUIET_DEFAULT_TRASH_LIST,
+      fetchPage: (path) =>
+        ctx.fetchApi<PaginatedListBody<TrashedListItem>>(path, { port }),
+    },
+    opts,
+  );
 }
 
-export async function runTrashTasks(opts: {
-  port?: number;
-  limit?: string;
-  offset?: string;
-  pageAll?: boolean;
-  fields?: string;
-}): Promise<void> {
-  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_TRASH_TASK);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(opts.limit);
-  const offsetOpt = parseOptionalOffset(opts.offset);
-  const pageAll = opts.pageAll === true;
+export async function runTrashTasks(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
   const port = opts.port;
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await fetchApi<PaginatedListBody<TrashedTaskItem>>(
-      `/trash/tasks${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_TRASH_TASKS, {
-      defaultKeys: QUIET_DEFAULT_TRASH_TASK,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return fetchApi<PaginatedListBody<TrashedTaskItem>>(
-      `/trash/tasks?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_TRASH_TASKS, {
-    defaultKeys: QUIET_DEFAULT_TRASH_TASK,
-    explicitField: quietExplicit,
-  });
+  await executePaginatedListRead(
+    {
+      kind: "optionalLimit",
+      basePath: "/trash/tasks",
+      fieldAllowlist: FIELDS_TRASH_TASK,
+      columns: COLUMNS_TRASH_TASKS,
+      quietDefaults: QUIET_DEFAULT_TRASH_TASK,
+      fetchPage: (path) =>
+        ctx.fetchApi<PaginatedListBody<TrashedTaskItem>>(path, { port }),
+    },
+    opts,
+  );
 }
 
-export async function runBoardsRestore(opts: {
-  port?: number;
-  board: string | undefined;
-}): Promise<void> {
+export async function runBoardsRestore(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+  },
+): Promise<void> {
   const ref = opts.board?.trim();
   if (!ref) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
@@ -292,20 +177,26 @@ export async function runBoardsRestore(opts: {
     });
   }
   const port = opts.port;
-  const boardNumericId = await resolveTrashedBoardId(port, ref);
-  const result = await fetchApiTrashMutate<{ boardId: number; boardUpdatedAt: string }>(
+  const boardNumericId = await resolveTrashedBoardId(ctx, port, ref);
+  const result = await ctx.fetchApiTrashMutate<{
+    boardId: number;
+    boardUpdatedAt: string;
+  }>(
     `/trash/boards/${boardNumericId}/restore`,
     { method: "POST" },
     { port },
   );
-  const board = await fetchApi<Board>(`/boards/${result.boardId}`, { port });
-  printJson(writeSuccess(board, compactBoardEntity(board)));
+  const board = await ctx.fetchApi<Board>(`/boards/${result.boardId}`, { port });
+  ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
 }
 
-export async function runBoardsPurge(opts: {
-  port?: number;
-  board: string | undefined;
-}): Promise<void> {
+export async function runBoardsPurge(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+  },
+): Promise<void> {
   const ref = opts.board?.trim();
   if (!ref) {
     throw new CliError("Missing required argument: <id-or-slug>", 2, {
@@ -313,21 +204,28 @@ export async function runBoardsPurge(opts: {
     });
   }
   const port = opts.port;
-  const boardNumericId = await resolveTrashedBoardId(port, ref);
-  await fetchApiTrashMutate<void>(`/trash/boards/${boardNumericId}`, {
-    method: "DELETE",
-  }, { port });
-  printJson({
+  const boardNumericId = await resolveTrashedBoardId(ctx, port, ref);
+  await ctx.fetchApiTrashMutate<void>(
+    `/trash/boards/${boardNumericId}`,
+    {
+      method: "DELETE",
+    },
+    { port },
+  );
+  ctx.printJson({
     ok: true,
     purged: { type: "board" as const, boardId: boardNumericId },
   });
 }
 
-export async function runListsRestore(opts: {
-  port?: number;
-  listId: string | undefined;
-}): Promise<void> {
-  const listId = parsePositiveIntLabel("listId", opts.listId);
+export async function runListsRestore(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    listId: string | undefined;
+  },
+): Promise<void> {
+  const listId = parsePositiveInt("listId", opts.listId);
   if (listId === undefined) {
     throw new CliError("Invalid list id", 2, {
       code: CLI_ERR.invalidValue,
@@ -335,12 +233,12 @@ export async function runListsRestore(opts: {
     });
   }
   const port = opts.port;
-  const result = await fetchApiTrashMutate<{
+  const result = await ctx.fetchApiTrashMutate<{
     boardId: number;
     boardUpdatedAt: string;
     listId: number;
   }>(`/trash/lists/${listId}/restore`, { method: "POST" }, { port });
-  const board = await fetchApi<Board>(`/boards/${result.boardId}`, { port });
+  const board = await ctx.fetchApi<Board>(`/boards/${result.boardId}`, { port });
   const list = board.lists.find((l) => l.listId === result.listId);
   if (!list) {
     throw new CliError("Restored list missing from board payload", 1, {
@@ -349,7 +247,7 @@ export async function runListsRestore(opts: {
       listId: result.listId,
     });
   }
-  printJson(
+  ctx.printJson(
     writeSuccess(
       {
         boardId: board.boardId,
@@ -361,11 +259,14 @@ export async function runListsRestore(opts: {
   );
 }
 
-export async function runListsPurge(opts: {
-  port?: number;
-  listId: string | undefined;
-}): Promise<void> {
-  const listId = parsePositiveIntLabel("listId", opts.listId);
+export async function runListsPurge(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    listId: string | undefined;
+  },
+): Promise<void> {
+  const listId = parsePositiveInt("listId", opts.listId);
   if (listId === undefined) {
     throw new CliError("Invalid list id", 2, {
       code: CLI_ERR.invalidValue,
@@ -373,20 +274,27 @@ export async function runListsPurge(opts: {
     });
   }
   const port = opts.port;
-  await fetchApiTrashMutate<void>(`/trash/lists/${listId}`, {
-    method: "DELETE",
-  }, { port });
-  printJson({
+  await ctx.fetchApiTrashMutate<void>(
+    `/trash/lists/${listId}`,
+    {
+      method: "DELETE",
+    },
+    { port },
+  );
+  ctx.printJson({
     ok: true,
     purged: { type: "list" as const, listId },
   });
 }
 
-export async function runTasksRestore(opts: {
-  port?: number;
-  taskId: string | undefined;
-}): Promise<void> {
-  const taskId = parsePositiveIntLabel("taskId", opts.taskId);
+export async function runTasksRestore(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    taskId: string | undefined;
+  },
+): Promise<void> {
+  const taskId = parsePositiveInt("taskId", opts.taskId);
   if (taskId === undefined) {
     throw new CliError("Invalid task id", 2, {
       code: CLI_ERR.invalidValue,
@@ -394,12 +302,12 @@ export async function runTasksRestore(opts: {
     });
   }
   const port = opts.port;
-  const result = await fetchApiTrashMutate<{
+  const result = await ctx.fetchApiTrashMutate<{
     boardId: number;
     boardUpdatedAt: string;
     taskId: number;
   }>(`/trash/tasks/${taskId}/restore`, { method: "POST" }, { port });
-  const board = await fetchApi<Board>(`/boards/${result.boardId}`, { port });
+  const board = await ctx.fetchApi<Board>(`/boards/${result.boardId}`, { port });
   const task = board.tasks.find((t) => t.taskId === result.taskId);
   if (!task) {
     throw new CliError("Restored task missing from board payload", 1, {
@@ -408,7 +316,7 @@ export async function runTasksRestore(opts: {
       taskId: result.taskId,
     });
   }
-  printJson(
+  ctx.printJson(
     writeSuccess(
       {
         boardId: board.boardId,
@@ -420,11 +328,14 @@ export async function runTasksRestore(opts: {
   );
 }
 
-export async function runTasksPurge(opts: {
-  port?: number;
-  taskId: string | undefined;
-}): Promise<void> {
-  const taskId = parsePositiveIntLabel("taskId", opts.taskId);
+export async function runTasksPurge(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    taskId: string | undefined;
+  },
+): Promise<void> {
+  const taskId = parsePositiveInt("taskId", opts.taskId);
   if (taskId === undefined) {
     throw new CliError("Invalid task id", 2, {
       code: CLI_ERR.invalidValue,
@@ -432,10 +343,14 @@ export async function runTasksPurge(opts: {
     });
   }
   const port = opts.port;
-  await fetchApiTrashMutate<void>(`/trash/tasks/${taskId}`, {
-    method: "DELETE",
-  }, { port });
-  printJson({
+  await ctx.fetchApiTrashMutate<void>(
+    `/trash/tasks/${taskId}`,
+    {
+      method: "DELETE",
+    },
+    { port },
+  );
+  ctx.printJson({
     ok: true,
     purged: { type: "task" as const, taskId },
   });

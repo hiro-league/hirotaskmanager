@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PaginatedListBody } from "../../shared/pagination";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import {
   FIELDS_TASK,
   parseAndValidateFields,

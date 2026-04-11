@@ -1,30 +1,36 @@
+import type {
+  ReleaseDeleteMutationResult,
+  ReleaseMutationResult,
+} from "../../../shared/mutationResults";
 import type { PaginatedListBody } from "../../../shared/pagination";
 import type { ReleaseDefinition } from "../../../shared/models";
-import { fetchApi, fetchApiMutate } from "../api-client";
-import { CLI_ERR } from "../cli-error-codes";
-import {
-  parseOptionalListLimit,
-  parseOptionalOffset,
-  requireNdjsonWhenQuiet,
-  requireNdjsonWhenUsingFields,
-  resolveQuietExplicitField,
-} from "../command-helpers";
+import type { CliContext } from "../../types/context";
+import { CLI_ERR } from "../../types/errors";
+import { CLI_DEFAULTS } from "../constants";
+import { enrichNotFoundError } from "../cli-http-errors";
 import { COLUMNS_RELEASES_LIST, QUIET_DEFAULT_RELEASE } from "../listTableSpecs";
-import { fetchAllPages } from "../paginatedFetch";
 import {
   FIELDS_RELEASE,
   parseAndValidateFields,
-  projectPaginatedItems,
   projectRecord,
 } from "../jsonFieldProjection";
-import { CliError, printJson, printPaginatedListRead } from "../output";
+import { executePaginatedListRead } from "../paginatedListRead";
+import { fetchAllPages } from "../paginatedFetch";
+import { CliError } from "../output";
+import { assertMutuallyExclusive } from "../validation";
+import {
+  compactReleaseEntity,
+  writeReleaseDelete,
+  writeSuccess,
+} from "../write-result";
 import { parsePositiveInt } from "./helpers";
 
 async function fetchAllBoardReleases(
+  ctx: CliContext,
   port: number | undefined,
   boardId: string,
 ): Promise<ReleaseDefinition[]> {
-  const pageSize = 500;
+  const pageSize = CLI_DEFAULTS.MAX_PAGE_LIMIT;
   const base = `/boards/${encodeURIComponent(boardId)}/releases`;
   const merged = await fetchAllPages(async (offset) => {
     const q = new URLSearchParams();
@@ -32,7 +38,7 @@ async function fetchAllBoardReleases(
     if (offset > 0) {
       q.set("offset", String(offset));
     }
-    return fetchApi<PaginatedListBody<ReleaseDefinition>>(
+    return ctx.fetchApi<PaginatedListBody<ReleaseDefinition>>(
       `${base}?${q.toString()}`,
       { port },
     );
@@ -40,78 +46,52 @@ async function fetchAllBoardReleases(
   return merged.items;
 }
 
-export async function runReleasesList(opts: {
-  port?: number;
-  board: string | undefined;
-  limit?: string;
-  offset?: string;
-  pageAll?: boolean;
-  fields?: string;
-}): Promise<void> {
+export async function runReleasesList(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    limit?: string;
+    offset?: string;
+    pageAll?: boolean;
+    fields?: string;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
       code: CLI_ERR.missingRequired,
     });
   }
-  const fieldKeys = parseAndValidateFields(opts.fields, FIELDS_RELEASE);
-  requireNdjsonWhenUsingFields(fieldKeys);
-  requireNdjsonWhenQuiet();
-  const quietExplicit = resolveQuietExplicitField(fieldKeys);
-  const limitOpt = parseOptionalListLimit(opts.limit);
-  const offsetOpt = parseOptionalOffset(opts.offset);
-  const pageAll = opts.pageAll === true;
-  const base = `/boards/${encodeURIComponent(boardId)}/releases`;
   const port = opts.port;
-
-  if (!pageAll) {
-    const q = new URLSearchParams();
-    if (limitOpt != null) {
-      q.set("limit", String(limitOpt));
-    }
-    if (offsetOpt > 0) {
-      q.set("offset", String(offsetOpt));
-    }
-    const suffix = q.toString() ? `?${q.toString()}` : "";
-    const body = await fetchApi<PaginatedListBody<ReleaseDefinition>>(
-      `${base}${suffix}`,
-      { port },
-    );
-    const rows = fieldKeys ? projectPaginatedItems(body, fieldKeys).items : body.items;
-    printPaginatedListRead(body, rows, COLUMNS_RELEASES_LIST, {
-      defaultKeys: QUIET_DEFAULT_RELEASE,
-      explicitField: quietExplicit,
-    });
-    return;
-  }
-
-  const pageSize = limitOpt ?? 500;
-  const merged = await fetchAllPages(async (offset) => {
-    const q = new URLSearchParams();
-    q.set("limit", String(pageSize));
-    if (offset > 0) {
-      q.set("offset", String(offset));
-    }
-    return fetchApi<PaginatedListBody<ReleaseDefinition>>(
-      `${base}?${q.toString()}`,
-      { port },
-    );
-  }, pageSize);
-  const mergedRows = fieldKeys
-    ? projectPaginatedItems(merged, fieldKeys).items
-    : merged.items;
-  printPaginatedListRead(merged, mergedRows, COLUMNS_RELEASES_LIST, {
-    defaultKeys: QUIET_DEFAULT_RELEASE,
-    explicitField: quietExplicit,
-  });
+  await executePaginatedListRead(
+    {
+      kind: "optionalLimit",
+      basePath: `/boards/${encodeURIComponent(boardId)}/releases`,
+      fieldAllowlist: FIELDS_RELEASE,
+      columns: COLUMNS_RELEASES_LIST,
+      quietDefaults: QUIET_DEFAULT_RELEASE,
+      fetchPage: (path) =>
+        ctx.fetchApi<PaginatedListBody<ReleaseDefinition>>(path, { port }),
+    },
+    {
+      limit: opts.limit,
+      offset: opts.offset,
+      pageAll: opts.pageAll,
+      fields: opts.fields,
+    },
+  );
 }
 
-export async function runReleasesShow(opts: {
-  port?: number;
-  board: string | undefined;
-  releaseId: string | undefined;
-  fields?: string;
-}): Promise<void> {
+export async function runReleasesShow(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    releaseId: string | undefined;
+    fields?: string;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -126,7 +106,7 @@ export async function runReleasesShow(opts: {
       releaseId: opts.releaseId,
     });
   }
-  const rows = await fetchAllBoardReleases(opts.port, boardId);
+  const rows = await fetchAllBoardReleases(ctx, opts.port, boardId);
   const hit = rows.find((r) => r.releaseId === rid);
   if (!hit) {
     throw new CliError("Release not found", 3, {
@@ -135,18 +115,21 @@ export async function runReleasesShow(opts: {
       releaseId: rid,
     });
   }
-  printJson(fieldKeys ? projectRecord(hit, fieldKeys) : hit);
+  ctx.printJson(fieldKeys ? projectRecord(hit, fieldKeys) : hit);
 }
 
-export async function runReleasesAdd(opts: {
-  port?: number;
-  board: string | undefined;
-  name?: string;
-  color?: string;
-  clearColor?: boolean;
-  releaseDate?: string;
-  clearReleaseDate?: boolean;
-}): Promise<void> {
+export async function runReleasesAdd(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    name?: string;
+    color?: string;
+    clearColor?: boolean;
+    releaseDate?: string;
+    clearReleaseDate?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -159,18 +142,15 @@ export async function runReleasesAdd(opts: {
       code: CLI_ERR.missingRequired,
     });
   }
-  if (opts.clearColor && opts.color !== undefined) {
-    throw new CliError("Cannot use --color together with --clear-color", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
-  if (opts.clearReleaseDate && opts.releaseDate !== undefined) {
-    throw new CliError(
-      "Cannot use --release-date together with --clear-release-date",
-      2,
-      { code: CLI_ERR.mutuallyExclusiveOptions },
-    );
-  }
+  assertMutuallyExclusive([
+    ["--color", opts.color, "--clear-color", opts.clearColor],
+    [
+      "--release-date",
+      opts.releaseDate,
+      "--clear-release-date",
+      opts.clearReleaseDate,
+    ],
+  ]);
   const body: Record<string, unknown> = { name };
   if (opts.clearColor) body.color = null;
   else if (opts.color !== undefined) body.color = opts.color.trim();
@@ -180,30 +160,40 @@ export async function runReleasesAdd(opts: {
   }
 
   try {
-    const created = await fetchApiMutate<ReleaseDefinition>(
+    // API returns entity-v1 (same contract as lists/tasks); shape stdout like other mutations.
+    const result = await ctx.fetchApiMutate<ReleaseMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/releases`,
       { method: "POST", body },
       { port: opts.port },
     );
-    printJson(created);
+    ctx.printJson(
+      writeSuccess(
+        {
+          boardId: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactReleaseEntity(result.entity),
+      ),
+    );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId });
   }
 }
 
-export async function runReleasesUpdate(opts: {
-  port?: number;
-  board: string | undefined;
-  releaseId: string | undefined;
-  name?: string;
-  color?: string;
-  clearColor?: boolean;
-  releaseDate?: string;
-  clearReleaseDate?: boolean;
-}): Promise<void> {
+export async function runReleasesUpdate(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    releaseId: string | undefined;
+    name?: string;
+    color?: string;
+    clearColor?: boolean;
+    releaseDate?: string;
+    clearReleaseDate?: boolean;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -217,18 +207,15 @@ export async function runReleasesUpdate(opts: {
       releaseId: opts.releaseId,
     });
   }
-  if (opts.clearColor && opts.color !== undefined) {
-    throw new CliError("Cannot use --color together with --clear-color", 2, {
-      code: CLI_ERR.mutuallyExclusiveOptions,
-    });
-  }
-  if (opts.clearReleaseDate && opts.releaseDate !== undefined) {
-    throw new CliError(
-      "Cannot use --release-date together with --clear-release-date",
-      2,
-      { code: CLI_ERR.mutuallyExclusiveOptions },
-    );
-  }
+  assertMutuallyExclusive([
+    ["--color", opts.color, "--clear-color", opts.clearColor],
+    [
+      "--release-date",
+      opts.releaseDate,
+      "--clear-release-date",
+      opts.clearReleaseDate,
+    ],
+  ]);
   const patch: Record<string, unknown> = {};
   if (opts.name !== undefined) patch.name = opts.name;
   if (opts.clearColor) patch.color = null;
@@ -244,26 +231,35 @@ export async function runReleasesUpdate(opts: {
   }
 
   try {
-    const updated = await fetchApiMutate<ReleaseDefinition>(
+    const result = await ctx.fetchApiMutate<ReleaseMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/releases/${rid}`,
       { method: "PATCH", body: patch },
       { port: opts.port },
     );
-    printJson(updated);
+    ctx.printJson(
+      writeSuccess(
+        {
+          boardId: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        compactReleaseEntity(result.entity),
+      ),
+    );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, releaseId: rid });
   }
 }
 
-export async function runReleasesDelete(opts: {
-  port?: number;
-  board: string | undefined;
-  releaseId: string | undefined;
-  moveTasksTo?: string;
-}): Promise<void> {
+export async function runReleasesDelete(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    releaseId: string | undefined;
+    moveTasksTo?: string;
+  },
+): Promise<void> {
   const boardId = opts.board?.trim();
   if (!boardId) {
     throw new CliError("Missing required option: --board", 2, {
@@ -291,16 +287,22 @@ export async function runReleasesDelete(opts: {
   }
 
   try {
-    await fetchApiMutate<undefined>(
+    const result = await ctx.fetchApiMutate<ReleaseDeleteMutationResult>(
       `/boards/${encodeURIComponent(boardId)}/releases/${rid}${query}`,
       { method: "DELETE" },
       { port: opts.port },
     );
-    printJson({ ok: true, board: boardId, deletedReleaseId: rid });
+    ctx.printJson(
+      writeReleaseDelete(
+        {
+          boardId: result.boardId,
+          slug: result.boardSlug,
+          updatedAt: result.boardUpdatedAt,
+        },
+        result.deletedReleaseId,
+      ),
+    );
   } catch (e) {
-    if (e instanceof CliError && e.message === "Board not found") {
-      throw new CliError(e.message, e.exitCode, { ...e.details, board: boardId });
-    }
-    throw e;
+    enrichNotFoundError(e, { board: boardId, releaseId: rid });
   }
 }

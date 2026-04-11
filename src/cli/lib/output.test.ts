@@ -2,7 +2,7 @@
  * Aspect 3 — stderr JSON shape and exit paths for agents (`docs/cli-error-handling.md`).
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { CLI_ERR } from "./cli-error-codes";
+import { CLI_ERR } from "../types/errors";
 import {
   CliError,
   exitWithError,

@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ConfigOverrides } from "../lib/config";
 import { createTestCliRuntime } from "../lib/runtime";
+import { captureStdout } from "../lib/testHelpers";
 import { createDefaultCliContext } from "./context";
 import { handleBoardsUpdate } from "./boards";
 import type { CliContext } from "./context";
@@ -12,27 +13,6 @@ import { handleListsAdd, handleListsList } from "./lists";
 import { handleReleasesAdd } from "./releases";
 import { handleTasksAdd } from "./tasks";
 import { handleTrashLists } from "./trash";
-
-async function captureStdout(run: () => Promise<void>): Promise<string> {
-  let buf = "";
-  const orig = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (
-    chunk: string | Uint8Array,
-    ..._args: unknown[]
-  ): boolean => {
-    buf +=
-      typeof chunk === "string"
-        ? chunk
-        : new TextDecoder().decode(chunk);
-    return true;
-  };
-  try {
-    await run();
-  } finally {
-    process.stdout.write = orig;
-  }
-  return buf;
-}
 
 function reqUrl(input: RequestInfo | URL): string {
   return typeof input === "string" ? input : (input as Request).url;

@@ -1,82 +1,157 @@
 # TaskManager Agent Guide
 
-Use the `hirotm` CLI for TaskManager board, list, task, server, and **query search** operations (including creating boards, lists, and tasks and updating or moving tasks).
+Use `hirotm` as the **only** channel to read or mutate TaskManager data.
 
-**Dev server (`npm run dev`, API port 3002):** append **`--profile dev`** to each command (e.g. `hirotm boards list --profile dev`), or set **`TASKMANAGER_PROFILE=dev`** once in the shell. Skip this when using an installed app on port 3001.
+## Mandatory flags
 
-**Output:** global **`--format ndjson|human`** (default **`ndjson`**) controls all stdout/stderr shaping. **`ndjson`:** list and search reads emit **one JSON object per line**; other successes are **one compact JSON line**; errors are **JSON on stderr**. **`human`:** list reads use **fixed-width tables** (with a short footer for pagination); **`query search`** uses the same table style; single-object successes use **labeled lines**; errors are **plain text on stderr**. Styling follows **`NO_COLOR`** and TTY when relevant.
-
-**Quiet list output:** global **`-q` / `--quiet`** on **list-style reads** prints **one plain-text value per line** on stdout (not JSON), for pipes and scripts. Requires **`--format ndjson`**. Default column per command: boards (and trashed boards) prefer **`slug`** then **`boardId`**; **`tasks list`**, search hits, and trashed tasks use **`taskId`**; **`releases list`** uses **`releaseId`**; **`lists list`** and **`trash list lists`** use **`listId`**; **`statuses list`** uses **`statusId`**. With **`--fields`**, only **one** key is allowed together with **`--quiet`** (that field per line).
-
-**Field projection:** list-style read commands support **`--fields <keys>`** (comma-separated keys matching API JSON: e.g. **`boardId`**, **`taskId`**, **`listId`**, **`releaseId`**, **`statusId`**). Unknown names exit **2**. **`--fields` requires `--format ndjson`** (human tables cannot trim columns arbitrarily). **Human** list output includes a short footer with **`total`**, **`limit`**, **`offset`**; **ndjson** list output is only one JSON object per row (no envelope on stdout). Not supported on **`boards describe`** (use **`boards describe --entities …`** for a slimmer HTTP response; stdout is multi-line ndjson). For **`boards describe`** stdout: **`--format ndjson`** emits **multiple** lines—**`kind: "board"`** (identity and description only; the HTTP **`board`** object still includes **`cliPolicy`**, but stdout splits it out), next **`kind: "policy"`** (flat booleans), then **`list`**, **`group`**, **`priority`**, **`release`**, **`status`** rows and optional **`kind: "meta"`** in the same order as **`--entities`** (default when omitted: list → group → priority → release → status; **`meta`** is omitted unless requested). **`--format human`** mirrors that block order. **`--quiet`** requires **`--format ndjson`** if you use it with commands that support it; **`boards describe`** with **`--format human`** and **`--quiet`** exits **2**.
+| Context | Flag | When |
+|---------|------|------|
+| Dev server (`npm run dev`, port 3002) | `--profile dev` | Every command (or `export TASKMANAGER_PROFILE=dev` once) |
+| Agent writes (add / update / move / delete) | `--client-name "Cursor Agent"` | Every mutating command |
+| Script / agent deletes & purges | `--yes` | Non-interactive confirmation |
 
 ## Rules
 
-- You must use `hirotm` as your only channel to access TaskManager data.
-- When using `hirotm` for agent-driven writes, include `--client-name "Cursor Agent"` so notifications show the writer clearly.
-- Never attempt accessing HTTP API, sqlite db or running taskmanager repo code directly to access or mutate TaskManager data.
-- Do not modify `data/taskmanager.db` directly.
-- Do not change CLI access policy by calling the HTTP API or editing the database directly unless the user explicitly asks; in normal use, the human configures CLI access in the web app after logging in.
-- Do not write raw SQL unless the user explicitly asks for database-level work.
-- Treat CLI JSON output as the source of truth for current TaskManager state.
-- On **exit code 6** (`code` often `server_unreachable`) or when stderr says the server is not reachable, run the exact `hirotm server start ...` command from the `hint` before retrying (append `--profile dev` when the hint targets port 3002 / dev).
+- Never access the HTTP API, SQLite DB, or run repo code directly for TaskManager data.
+- Never modify `data/taskmanager.db` directly.
+- Never change CLI access policy (the human configures it in the web app).
+- Treat CLI JSON output as the source of truth for current state.
+- Do not write raw SQL unless the user explicitly asks.
 
-## Exit codes and stderr JSON
+## Server recovery
 
-With **`--format ndjson`** (default), failures print **JSON on stderr** with at least `"error": "<message>"`. When present, use **`code`** (stable string) and **`retryable`** (boolean) together with **`$?`** for branching. In **`human`** format, stderr errors are plain text (same fields, not JSON). Maintainer-oriented contract: `docs/cli-error-handling.md`. Operator/agent-oriented catalog (exit codes, `code` values, examples): Hiro docs → Task Manager → [Errors & exit codes](/task-manager/cli/hirotm-error-codes).
+If a command fails with **exit 6** (server unreachable), run the exact `hirotm server start ...` command from the `hint` field in stderr JSON, then retry.
 
-| `$?` | Meaning (short) |
-|------|------------------|
-| **0** | Success |
-| **1** | Generic / internal / unmapped HTTP (often **5xx**); `code` may be `internal_error`, `http_error`, etc. |
-| **2** | Usage / invalid CLI arguments |
-| **3** | Resource not found (e.g. HTTP **404**, or missing local file / release in list) |
-| **4** | Forbidden / policy (**403**) |
-| **5** | Conflict (**409**) |
-| **6** | Server unreachable (connection failed; no HTTP response) |
-| **7** | Timeout (API request or background server start wait) |
-| **8** | Version mismatch (**426**, when used) |
-| **9** | Bad request / validation (**400**, **422**) |
-| **10** | Unauthenticated (**401**) |
+---
 
-## Common Commands
+## Command reference
 
-```bash
-hirotm server status
-hirotm boards list
-hirotm boards describe <id-or-slug>              # structure + policy, no tasks (optional --entities)
-hirotm statuses list
-hirotm query search "<query>"                         # all boards; NDJSON hits (default)
-hirotm query search "bug" --board <id-or-slug>       # one board
-hirotm query search "drag" --format human           # fixed-width table
-hirotm boards add "Sprint" [--emoji <text>] --client-name "Cursor Agent"
-hirotm lists list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
-hirotm lists add --board <id-or-slug> "Ready" [--emoji <text>] --client-name "Cursor Agent"
-hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--priority <id>] [--release <name>|none|--release-id <id>] [--title ...] [--body|--body-file|--body-stdin ...] --client-name "Cursor Agent"
-hirotm tasks update --board <id-or-slug> [field flags...] <task-id> [--client-name "Cursor Agent"]  # e.g. --release none, --release <name>, --release-id <id>
-hirotm tasks list --board <id-or-slug> [--release-id <id> ...] [--untagged]  # OR filter; repeat --release-id like --group
-hirotm releases list --board <id-or-slug>
-hirotm releases show --board <id-or-slug> <release-id>
-hirotm releases add --board <id-or-slug> --name <text> [--color|--release-date ...]
-hirotm releases update --board <id-or-slug> [--name ...] <release-id>
-hirotm releases delete --board <id-or-slug> [--move-tasks-to <id>] <release-id> --yes   # scripts / agents
-hirotm tasks move --board <id-or-slug> --to-list <id> [--to-status <id>] [--first|--last|--before-task <id>|--after-task <id>] <task-id> [--client-name "Cursor Agent"]
-hirotm trash list boards                              # JSON: trashed boards
-hirotm trash list lists | hirotm trash list tasks     # JSON: trashed lists/tasks
-hirotm boards delete <id-or-slug> --yes               # move to Trash (omit --yes on TTY for prompt)
-hirotm boards restore <id-or-slug> --yes
-hirotm boards purge <id-or-slug> --yes                 # permanent delete from Trash
-hirotm lists delete --board <id-or-slug> <list-id> --yes
-hirotm lists restore <list-id> --yes | hirotm lists purge <list-id> --yes
-hirotm tasks delete --board <id-or-slug> <task-id> --yes
-hirotm tasks restore <task-id> --yes | hirotm tasks purge <task-id> --yes
-hirotm server start --background
-hirotm server stop                                    # background servers started by hirotm (pid file)
-```
+Global options on every command: `--format ndjson|human` (default `ndjson`), `-q`/`--quiet`, `--profile <name>`, `--client-name <name>`.
 
-## Notes
+### server
 
-- Task **priority** is always a board `task_priority` row: builtin **`none`** (value `0`, white) is the default when `--priority` is omitted on `tasks add`. Use **`boards describe`** to read **`priorityId`** / **`value`** / **`label`**; pass **`--priority <id>`** with the row id to set another level or to switch back to `none` on `tasks update`. Requires **`readBoard`** CLI policy (same as other board reads).
-- **Releases:** omit both `--release` and `--release-id` on `tasks add` so the server can auto-assign when the board enables CLI auto-assign and a default release exists. Use `--release none` or `--release-id` with an explicit id to override. Release CRUD uses **`manageStructure`** (same as task groups), not a separate policy flag.
-- The CLI talks to the local HTTP API; it should not bypass the server and touch SQLite directly.
-- With default **`--format ndjson`**, errors are JSON on `stderr` with a non-zero exit code; prefer the `code` field when automating.
+| Command | Synopsis |
+|---------|----------|
+| `server start` | `hirotm server start [--background] [--port <port>] [--data-dir <path>]` |
+| `server status` | `hirotm server status` |
+| `server stop` | `hirotm server stop` |
+
+### boards
+
+| Command | Synopsis |
+|---------|----------|
+| `boards list` | `hirotm boards list [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `boards describe` | `hirotm boards describe <id-or-slug> [--entities list,group,priority,release,status,meta]` |
+| `boards add` | `hirotm boards add [name] [--emoji <text>] [--description <text>\|--description-file <path>\|--description-stdin]` |
+| `boards update` | `hirotm boards update <id-or-slug> [--name <text>] [--emoji <text>\|--clear-emoji] [--description <text>\|--description-file\|--description-stdin\|--clear-description] [--board-color <preset>\|--clear-board-color]` |
+| `boards delete` | `hirotm boards delete <id-or-slug> --yes` |
+| `boards restore` | `hirotm boards restore <id-or-slug> --yes` |
+| `boards purge` | `hirotm boards purge <id-or-slug> --yes` |
+| `boards configure groups` | `hirotm boards configure groups <id-or-slug> --json <text>\|--file <path>\|--stdin --yes` |
+| `boards configure priorities` | `hirotm boards configure priorities <id-or-slug> --json <text>\|--file <path>\|--stdin --yes` |
+
+### lists
+
+| Command | Synopsis |
+|---------|----------|
+| `lists list` | `hirotm lists list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `lists add` | `hirotm lists add --board <id-or-slug> [name] [--emoji <text>]` |
+| `lists update` | `hirotm lists update --board <id-or-slug> <list-id> [--name <text>] [--color <css>\|--clear-color] [--emoji <text>\|--clear-emoji]` |
+| `lists move` | `hirotm lists move --board <id-or-slug> <list-id> [--before <id>\|--after <id>\|--first\|--last]` |
+| `lists delete` | `hirotm lists delete --board <id-or-slug> <list-id> --yes` |
+| `lists restore` | `hirotm lists restore <list-id> --yes` |
+| `lists purge` | `hirotm lists purge <list-id> --yes` |
+
+### tasks
+
+| Command | Synopsis |
+|---------|----------|
+| `tasks list` | `hirotm tasks list --board <id-or-slug> [--list <id>] [--group <id>...] [--priority <id>...] [--status <id>...] [--release-id <id>...] [--untagged] [--date-mode opened\|closed\|any] [--from <yyyy-mm-dd>] [--to <yyyy-mm-dd>] [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `tasks add` | `hirotm tasks add --board <id-or-slug> --list <id> --group <id> [--title <text>] [--status <id>] [--priority <id>] [--release <name>\|none\|--release-id <id>] [--emoji <text>] [--body <text>\|--body-file <path>\|--body-stdin]` |
+| `tasks update` | `hirotm tasks update --board <id-or-slug> <task-id> [--title <text>] [--status <id>] [--list <id>] [--group <id>] [--priority <id>] [--release <name>\|none\|--release-id <id>] [--color <css>\|--clear-color] [--emoji <text>\|--clear-emoji] [--body <text>\|--body-file\|--body-stdin]` |
+| `tasks move` | `hirotm tasks move --board <id-or-slug> --to-list <id> <task-id> [--to-status <id>] [--before-task <id>\|--after-task <id>\|--first\|--last]` |
+| `tasks delete` | `hirotm tasks delete --board <id-or-slug> <task-id> --yes` |
+| `tasks restore` | `hirotm tasks restore <task-id> --yes` |
+| `tasks purge` | `hirotm tasks purge <task-id> --yes` |
+
+Filter notes for `tasks list`: `--group`, `--priority`, `--status`, and `--release-id` accept repeatable values or comma-separated ids. Combine `--release-id` with `--untagged` for OR filtering.
+
+### releases
+
+| Command | Synopsis |
+|---------|----------|
+| `releases list` | `hirotm releases list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `releases show` | `hirotm releases show --board <id-or-slug> <release-id> [--fields <keys>]` |
+| `releases add` | `hirotm releases add --board <id-or-slug> --name <text> [--color <css>] [--release-date <text>]` |
+| `releases update` | `hirotm releases update --board <id-or-slug> <release-id> [--name <text>] [--color <css>\|--clear-color] [--release-date <text>\|--clear-release-date]` |
+| `releases delete` | `hirotm releases delete --board <id-or-slug> <release-id> [--move-tasks-to <id>] --yes` |
+
+### statuses
+
+| Command | Synopsis |
+|---------|----------|
+| `statuses list` | `hirotm statuses list [--fields <keys>]` |
+
+### query
+
+| Command | Synopsis |
+|---------|----------|
+| `query search` | `hirotm query search "<query>" [--board <id-or-slug>] [--limit <n>] [--offset <n>] [--page-all] [--no-prefix] [--fields <keys>]` |
+
+Default search limit is 20. Prefix matching is on by default (`drag` matches `dragging`); use `--no-prefix` for exact tokens.
+
+### trash
+
+| Command | Synopsis |
+|---------|----------|
+| `trash list boards` | `hirotm trash list boards [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `trash list lists` | `hirotm trash list lists [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+| `trash list tasks` | `hirotm trash list tasks [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]` |
+
+Restore and purge commands live under their resource (`boards restore`, `lists restore`, `tasks restore`, etc.).
+
+---
+
+## Output & parsing
+
+**Default `--format ndjson`:** list/search reads emit one JSON object per line on stdout. Other successes emit one compact JSON line. Errors are JSON on stderr.
+
+**`--format human`:** list/search reads use fixed-width tables with a pagination footer. Other successes use labeled lines. Errors are plain text on stderr.
+
+**`--quiet` (`-q`):** on list-style reads, prints one identifier per line (plain text, not JSON). Requires `--format ndjson`. Default identifiers: boards → `slug` (fallback `boardId`), tasks/search → `taskId`, releases → `releaseId`, lists → `listId`, statuses → `statusId`. With `--fields`, only one key is allowed.
+
+**`--fields <keys>`:** comma-separated API JSON keys to project each row. Requires `--format ndjson`. Unknown keys exit 2. Not supported on `boards describe` (use `--entities` instead).
+
+**`boards describe` output:** ndjson emits multiple lines: `kind: "board"`, `kind: "policy"`, then entity rows (`list`, `group`, `priority`, `release`, `status`) and optional `kind: "meta"`. The `--entities` flag controls which sections appear and their order.
+
+---
+
+## Error handling
+
+Failures print JSON on stderr (with `--format ndjson`) containing `error`, `code`, and optionally `retryable` and `hint`.
+
+| Exit | Meaning | Agent action |
+|------|---------|--------------|
+| **0** | Success | Parse stdout; continue. |
+| **1** | Internal / DB / unmapped 5xx | If `retryable: true`, backoff and retry; else surface to user. |
+| **2** | Invalid CLI arguments | Fix flags; do not retry unchanged. |
+| **3** | Not found (404) | Refresh ids with `boards list` / `boards describe`; adjust target. |
+| **4** | Forbidden (403) / policy | Do not retry; user must change CLI access policy. |
+| **5** | Conflict (409) | Skip create or resolve duplicate. |
+| **6** | Server unreachable | Run `hirotm server start ...` from `hint`; retry. |
+| **7** | Timeout | Retry with delay. |
+| **8** | Version mismatch (426) | Upgrade CLI or app per message. |
+| **9** | Bad request (400/422) | Fix request params per `error`/`code`. |
+| **10** | Unauthenticated (401) | Configure credentials when auth is implemented. |
+
+Full error catalog: `docs/cli-error-handling.md`.
+
+---
+
+## Domain notes
+
+**Priority:** every board has `task_priority` rows (builtin `none` at value 0 is the default). Omit `--priority` on `tasks add` for the default. Use `boards describe` to read priority ids; pass `--priority <id>` to set or reset.
+
+**Releases:** omit `--release` and `--release-id` on `tasks add` to let the server auto-assign when the board has a default release and CLI auto-assign enabled. Use `--release none` to explicitly leave untagged. Release CRUD requires `manageStructure` policy.
+
+**Board colors:** preset values for `--board-color`: stone, cyan, azure, indigo, violet, rose, amber, emerald, coral, sage.

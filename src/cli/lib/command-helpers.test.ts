@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Command } from "commander";
 import {
   addPortOption,
@@ -8,7 +8,11 @@ import {
   collectMultiValue,
   parseLimitOption,
   parsePortOption,
+  requireNdjsonWhenQuiet,
+  requireNdjsonWhenUsingFields,
+  resolveQuietExplicitField,
 } from "./command-helpers";
+import { resetCliOutputFormat, syncCliOutputFormatFromGlobals } from "./cliFormat";
 import { CLI_ERR } from "../types/errors";
 import { CliError } from "./output";
 
@@ -83,5 +87,63 @@ describe("addPortOption / addProfileOption / addYesOption", () => {
     expect(defs).toContain("--yes");
     expect(defs).toContain("--client-name");
     expect(defs).toContain("--profile");
+  });
+});
+
+describe("global option guards (quiet / fields vs format)", () => {
+  beforeEach(() => {
+    resetCliOutputFormat();
+  });
+
+  afterEach(() => {
+    resetCliOutputFormat();
+  });
+
+  test("requireNdjsonWhenQuiet — quiet + human → exit 2", () => {
+    syncCliOutputFormatFromGlobals({ format: "human", quiet: true });
+    expect(() => requireNdjsonWhenQuiet()).toThrow(CliError);
+    try {
+      requireNdjsonWhenQuiet();
+    } catch (e) {
+      expect((e as CliError).exitCode).toBe(2);
+      expect((e as CliError).message).toContain("--quiet requires");
+      expect((e as CliError).details?.code).toBe(CLI_ERR.invalidValue);
+    }
+  });
+
+  test("requireNdjsonWhenQuiet — quiet + ndjson → ok", () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    expect(() => requireNdjsonWhenQuiet()).not.toThrow();
+  });
+
+  test("requireNdjsonWhenUsingFields — fields + human → exit 2", () => {
+    syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
+    expect(() => requireNdjsonWhenUsingFields(["boardId"])).toThrow(CliError);
+    try {
+      requireNdjsonWhenUsingFields(["boardId"]);
+    } catch (e) {
+      expect((e as CliError).message).toContain("--fields requires");
+      expect((e as CliError).details?.code).toBe(CLI_ERR.invalidValue);
+    }
+  });
+
+  test("requireNdjsonWhenUsingFields — fields + ndjson → ok", () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    expect(() => requireNdjsonWhenUsingFields(["boardId"])).not.toThrow();
+  });
+
+  test("resolveQuietExplicitField — one field ok", () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    expect(resolveQuietExplicitField(["slug"])).toBe("slug");
+  });
+
+  test("resolveQuietExplicitField — two fields + quiet → exit 2", () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    expect(() => resolveQuietExplicitField(["a", "b"])).toThrow(CliError);
+    try {
+      resolveQuietExplicitField(["a", "b"]);
+    } catch (e) {
+      expect((e as CliError).details?.code).toBe(CLI_ERR.invalidValue);
+    }
   });
 });

@@ -221,4 +221,154 @@ describe("handleSearch", () => {
 
     expect(fetchedPath).toContain("limit=20");
   });
+
+  test("--quiet — taskId per line", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    const hits: SearchHit[] = [
+      {
+        boardId: 1,
+        boardSlug: "b",
+        taskId: 77,
+        boardName: "B",
+        listId: 1,
+        listName: "L",
+        title: "T",
+        snippet: "s",
+        score: 0.1,
+      },
+    ];
+    const body: PaginatedListBody<SearchHit> = {
+      items: hits,
+      total: 1,
+      limit: 20,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async () => body) as CliContext["fetchApi"],
+    });
+
+    let out = "";
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      out +=
+        typeof chunk === "string"
+          ? chunk
+          : new TextDecoder().decode(chunk as Uint8Array);
+      void args;
+      return true;
+    };
+    try {
+      await handleSearch(ctx, ["q"], {});
+    } finally {
+      process.stdout.write = origWrite;
+    }
+
+    expect(out.trimEnd()).toBe("77");
+  });
+
+  test("--limit 50 — URL contains limit=50", async () => {
+    let fetchedPath = "";
+    const emptyBody: PaginatedListBody<SearchHit> = {
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async (path) => {
+        fetchedPath = path;
+        return emptyBody;
+      }) as CliContext["fetchApi"],
+      printJson: () => {},
+    });
+
+    await handleSearch(ctx, ["x"], { limit: "50" });
+
+    expect(fetchedPath).toContain("limit=50");
+  });
+
+  test("--limit 999 — capped to 500 in URL", async () => {
+    let fetchedPath = "";
+    const emptyBody: PaginatedListBody<SearchHit> = {
+      items: [],
+      total: 0,
+      limit: 500,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async (path) => {
+        fetchedPath = path;
+        return emptyBody;
+      }) as CliContext["fetchApi"],
+      printJson: () => {},
+    });
+
+    await handleSearch(ctx, ["x"], { limit: "999" });
+
+    expect(fetchedPath).toContain("limit=500");
+  });
+
+  test("no results — NDJSON empty; human No rows.", async () => {
+    const emptyBody: PaginatedListBody<SearchHit> = {
+      items: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+    };
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    const ctxNd = mockContext({
+      fetchApi: (async () => emptyBody) as CliContext["fetchApi"],
+    });
+    let outNd = "";
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (c: string | Uint8Array, ...a: unknown[]) => {
+      outNd += typeof c === "string" ? c : new TextDecoder().decode(c);
+      void a;
+      return true;
+    };
+    try {
+      await handleSearch(ctxNd, ["q"], {});
+    } finally {
+      process.stdout.write = orig;
+    }
+    expect(outNd.trim()).toBe("");
+
+    syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
+    const ctxHu = mockContext({
+      fetchApi: (async () => emptyBody) as CliContext["fetchApi"],
+    });
+    let outHu = "";
+    process.stdout.write = (c: string | Uint8Array, ...a: unknown[]) => {
+      outHu += typeof c === "string" ? c : new TextDecoder().decode(c);
+      void a;
+      return true;
+    };
+    try {
+      await handleSearch(ctxHu, ["q"], {});
+    } finally {
+      process.stdout.write = orig;
+    }
+    expect(outHu).toContain("No rows.");
+  });
+
+  test("--board appears in search URL", async () => {
+    let fetchedPath = "";
+    const emptyBody: PaginatedListBody<SearchHit> = {
+      items: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async (path) => {
+        fetchedPath = path;
+        return emptyBody;
+      }) as CliContext["fetchApi"],
+      printJson: () => {},
+    });
+
+    await handleSearch(ctx, ["term"], { board: "my-slug" });
+
+    expect(fetchedPath).toContain("board=my-slug");
+  });
 });

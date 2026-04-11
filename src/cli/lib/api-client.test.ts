@@ -146,19 +146,23 @@ describe("api-client (mock fetch)", () => {
     expect(out).toBeUndefined();
   });
 
-  test("fetchApiMutate error path maps status", async () => {
+  test("fetchApiMutate — 409 conflict (exit 5, conflict code + serverCode)", async () => {
     setMockFetch(async () =>
-      new Response(JSON.stringify({ error: "nope" }), {
+      new Response(JSON.stringify({ error: "dup", code: "slug_taken" }), {
         status: 409,
         headers: { "content-type": "application/json" },
       }),
     );
 
     await expect(
-      fetchApiMutate("/x", { method: "POST", body: {} }, { port: 19997 }),
+      fetchApiMutate("/boards", { method: "POST", body: {} }, { port: 19997 }),
     ).rejects.toMatchObject({
       exitCode: 5,
-      details: expect.objectContaining({ code: CLI_ERR.conflict }),
+      message: "dup",
+      details: expect.objectContaining({
+        code: CLI_ERR.conflict,
+        serverCode: "slug_taken",
+      }),
     });
   });
 
@@ -222,5 +226,73 @@ describe("api-client (mock fetch)", () => {
     });
 
     await expect(fetchHealth({ port: 20002 })).resolves.toBe(false);
+  });
+
+  test("fetchApi — non-JSON 200 body rejects (response.json fails)", async () => {
+    setMockFetch(async () =>
+      new Response("<html>not json</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    await expect(fetchApi("/boards", { port: 20003 })).rejects.toThrow();
+  });
+
+  test("fetchApi — 200 with empty body (not 204) rejects JSON parse", async () => {
+    setMockFetch(async () =>
+      new Response("", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(fetchApi("/boards", { port: 20004 })).rejects.toThrow();
+  });
+
+  test("fetchApiMutate — 422 maps to exit 9 bad_request", async () => {
+    setMockFetch(async () =>
+      new Response(
+        JSON.stringify({
+          error: "Validation failed",
+          code: "invalid_shape",
+        }),
+        {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      fetchApiMutate("/x", { method: "POST", body: {} }, { port: 20005 }),
+    ).rejects.toMatchObject({
+      exitCode: 9,
+      details: expect.objectContaining({
+        code: CLI_ERR.badRequest,
+        serverCode: "invalid_shape",
+      }),
+    });
+  });
+
+  test("fetchApiTrashMutate — 404 not_found", async () => {
+    setMockFetch(async () =>
+      new Response(JSON.stringify({ error: "gone", code: "not_found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(
+      fetchApiTrashMutate("/trash/boards/9/restore", { method: "POST" }, {
+        port: 20007,
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 3,
+      details: expect.objectContaining({
+        code: CLI_ERR.notFound,
+        serverCode: "not_found",
+      }),
+    });
   });
 });

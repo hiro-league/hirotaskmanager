@@ -2,10 +2,17 @@
  * Additional writeCommands coverage: lists, tasks, boards mutations, releases.
  * Complements `writeCommands.smoke.test.ts` (releases list/show, boards add).
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
+import { TASK_MANAGER_CLIENT_NAME_HEADER } from "../../shared/boardCliAccess";
 import type { Board } from "../../shared/models";
+import { setRuntimeCliClientName } from "./clientIdentity";
 import { createDefaultCliContext } from "../handlers/context";
+import { captureStdout } from "./testHelpers";
 import { CLI_ERR } from "../types/errors";
+import { resetCliOutputFormat, syncCliOutputFormatFromGlobals } from "./output";
 import {
   runBoardsDelete,
   runBoardsGroups,
@@ -26,27 +33,6 @@ import {
 } from "./writeCommands";
 
 const ctx = createDefaultCliContext();
-
-async function captureStdout(run: () => Promise<void>): Promise<string> {
-  let buf = "";
-  const orig = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (
-    chunk: string | Uint8Array,
-    ..._args: unknown[]
-  ): boolean => {
-    buf +=
-      typeof chunk === "string"
-        ? chunk
-        : new TextDecoder().decode(chunk);
-    return true;
-  };
-  try {
-    await run();
-  } finally {
-    process.stdout.write = orig;
-  }
-  return buf;
-}
 
 function reqUrl(input: RequestInfo | URL): string {
   return typeof input === "string" ? input : (input as Request).url;
@@ -155,6 +141,75 @@ describe("writeCommands breadth — validation", () => {
       details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
     });
   });
+
+  test("runTasksMove throws on multiple placement flags", async () => {
+    await expect(
+      runTasksMove(ctx, {
+        port: 1,
+        board: "b",
+        taskId: "1",
+        toList: "2",
+        first: true,
+        last: true,
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.mutuallyExclusiveOptions }),
+    });
+  });
+
+  test("runBoardsUpdate throws when --clear-description conflicts with description", async () => {
+    await expect(
+      runBoardsUpdate(ctx, {
+        port: 1,
+        board: "b",
+        clearDescription: true,
+        description: "x",
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.conflictingClearWithInput }),
+    });
+  });
+
+  test("runBoardsGroups throws on invalid task groups JSON", async () => {
+    await expect(
+      runBoardsGroups(ctx, { port: 1, board: "b", json: "{not-json" }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.invalidJson }),
+    });
+  });
+
+  test("runTasksAdd throws on conflicting body inputs", async () => {
+    await expect(
+      runTasksAdd(ctx, {
+        port: 1,
+        board: "b",
+        list: "1",
+        group: "1",
+        body: "a",
+        bodyFile: "/nope/does-not-matter",
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.conflictingInputSources }),
+    });
+  });
+
+  test("runReleasesDelete throws on invalid move-tasks-to id", async () => {
+    await expect(
+      runReleasesDelete(ctx, {
+        port: 1,
+        board: "b",
+        releaseId: "1",
+        moveTasksTo: "0",
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
+    });
+  });
 });
 
 describe("writeCommands breadth — mock fetch happy paths", () => {
@@ -171,6 +226,8 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
 
   afterEach(() => {
     globalThis.fetch = origFetch;
+    resetCliOutputFormat();
+    setRuntimeCliClientName("");
   });
 
   const jsonBoard = (
@@ -628,5 +685,611 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       boardUpdatedAt: "2026-01-04T00:00:00.000Z",
       entity: { type: "release", releaseId: 2, deleted: true },
     });
+  });
+
+  test("mutating fetch sends runtime client name header", async () => {
+    setRuntimeCliClientName("Cursor Agent");
+    setMockFetch(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get(TASK_MANAGER_CLIENT_NAME_HEADER)).toBe("Cursor Agent");
+      expect(init?.method).toBe("POST");
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "brd",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            taskId: 1,
+            listId: 1,
+            groupId: 1,
+            title: "T",
+            body: "",
+            priorityId: 1,
+            status: "open",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runTasksAdd(ctx, {
+        port: 22025,
+        board: "brd",
+        list: "1",
+        group: "1",
+        title: "T",
+      }),
+    );
+  });
+
+  test("runBoardsUpdate prints human-formatted success", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human" });
+    const board = jsonBoard({
+      boardId: 1,
+      slug: "hum",
+      name: "Human Board",
+    });
+    setMockFetch(async (input, init) => {
+      expect(reqUrl(input)).toContain("/api/boards/hum");
+      expect(init?.method).toBe("PATCH");
+      const body = JSON.parse(String(init?.body));
+      expect(body.emoji).toBeNull();
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const out = await captureStdout(() =>
+      runBoardsUpdate(ctx, {
+        port: 22026,
+        board: "hum",
+        clearEmoji: true,
+      }),
+    );
+    expect(out).toContain("ok:");
+    expect(out).toContain("true");
+  });
+
+  test("runBoardsDelete prints human trash envelope", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human" });
+    const board = jsonBoard({ boardId: 1, slug: "delh", name: "D" });
+    setMockFetch(async (input, init) => {
+      const url = reqUrl(input);
+      if (url.includes("/boards/delh") && init?.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+      if (url.includes("/boards/delh") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(board), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("nope", { status: 404 });
+    });
+    const out = await captureStdout(() =>
+      runBoardsDelete(ctx, { port: 22027, board: "delh" }),
+    );
+    expect(out).toContain("trashed");
+  });
+
+  test("runBoardsGroups loads JSON from --file", async () => {
+    const board = jsonBoard({ boardId: 1, slug: "gf", name: "G" });
+    const payload = JSON.stringify({
+      creates: [],
+      updates: [],
+      deletes: [],
+      defaultTaskGroupId: 1,
+      deletedGroupFallbackId: 1,
+    });
+    const dir = mkdtempSync(join(tmpdir(), "hirotm-groups-"));
+    const filePath = join(dir, "groups.json");
+    writeFileSync(filePath, payload, "utf8");
+    try {
+      setMockFetch(async (input, init) => {
+        expect(reqUrl(input)).toContain("/api/boards/gf/groups");
+        expect(init?.method).toBe("PATCH");
+        return new Response(JSON.stringify(board), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+      const out = await captureStdout(() =>
+        runBoardsGroups(ctx, { port: 22028, board: "gf", file: filePath }),
+      );
+      expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("runBoardsPriorities PATCH sends non-empty taskPriorities", async () => {
+    const board = jsonBoard({ boardId: 1, slug: "pr", name: "P" });
+    const prioritiesJson = JSON.stringify([
+      { priorityId: 1, value: 0, label: "none", color: "", isSystem: true },
+    ]);
+    setMockFetch(async (input, init) => {
+      expect(reqUrl(input)).toContain("/api/boards/pr/priorities");
+      const body = JSON.parse(String(init?.body));
+      expect(body.taskPriorities).toHaveLength(1);
+      expect(body.taskPriorities[0].label).toBe("none");
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const out = await captureStdout(() =>
+      runBoardsPriorities(ctx, { port: 22029, board: "pr", json: prioritiesJson }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
+  });
+
+  test("runListsAdd POST includes emoji in body", async () => {
+    setMockFetch(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        name: "Lane",
+        emoji: "✅",
+      });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "lb",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: { listId: 8, name: "Lane", order: 0, emoji: "✅" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const out = await captureStdout(() =>
+      runListsAdd(ctx, {
+        port: 22030,
+        board: "lb",
+        name: "Lane",
+        emoji: "✅",
+      }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
+  });
+
+  test("runListsMove PUT uses last placement", async () => {
+    const board = jsonBoard({
+      boardId: 1,
+      slug: "lm",
+      name: "B",
+      lists: [
+        { listId: 5, name: "L", order: 0, emoji: null },
+        { listId: 6, name: "L2", order: 1, emoji: null },
+      ],
+    });
+    setMockFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.listId).toBe(5);
+      expect(body.position).toBe("last");
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await captureStdout(() =>
+      runListsMove(ctx, {
+        port: 22031,
+        board: "lm",
+        listId: "5",
+        last: true,
+      }),
+    );
+  });
+
+  test("runListsMove PUT uses beforeListId / afterListId", async () => {
+    const board = jsonBoard({
+      boardId: 1,
+      slug: "lm2",
+      name: "B",
+      lists: [{ listId: 5, name: "L", order: 0, emoji: null }],
+    });
+    let calls = 0;
+    setMockFetch(async (_input, init) => {
+      calls += 1;
+      const body = JSON.parse(String(init?.body));
+      if (calls === 1) {
+        expect(body.beforeListId).toBe(9);
+        expect(body.afterListId).toBeUndefined();
+      } else {
+        expect(body.afterListId).toBe(8);
+        expect(body.beforeListId).toBeUndefined();
+      }
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await captureStdout(() =>
+      runListsMove(ctx, {
+        port: 22032,
+        board: "lm2",
+        listId: "5",
+        before: "9",
+      }),
+    );
+    await captureStdout(() =>
+      runListsMove(ctx, {
+        port: 22032,
+        board: "lm2",
+        listId: "5",
+        after: "8",
+      }),
+    );
+    expect(calls).toBe(2);
+  });
+
+  test("runTasksAdd POST includes priorityId and releaseId", async () => {
+    setMockFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.priorityId).toBe(3);
+      expect(body.releaseId).toBe(7);
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "brd",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            taskId: 1,
+            listId: 1,
+            groupId: 1,
+            title: "T",
+            body: "",
+            priorityId: 3,
+            status: "open",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runTasksAdd(ctx, {
+        port: 22033,
+        board: "brd",
+        list: "1",
+        group: "1",
+        title: "T",
+        priority: "3",
+        releaseId: "7",
+      }),
+    );
+  });
+
+  test("runTasksAdd resolves release name via GET board then POSTs task", async () => {
+    let getBoard = 0;
+    setMockFetch(async (input, init) => {
+      const url = reqUrl(input);
+      if (url.includes("/api/boards/brn") && !url.includes("/tasks")) {
+        getBoard += 1;
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify(
+            jsonBoard({
+              boardId: 1,
+              slug: "brn",
+              name: "B",
+              releases: [
+                {
+                  releaseId: 5,
+                  name: "v1",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                },
+              ],
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/tasks") && init?.method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.releaseId).toBe(5);
+        return new Response(
+          JSON.stringify({
+            boardId: 1,
+            boardSlug: "brn",
+            boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+            entity: {
+              taskId: 2,
+              listId: 1,
+              groupId: 1,
+              title: "T",
+              body: "",
+              priorityId: 1,
+              status: "open",
+              order: 0,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    await captureStdout(() =>
+      runTasksAdd(ctx, {
+        port: 22034,
+        board: "brn",
+        list: "1",
+        group: "1",
+        title: "T",
+        release: "v1",
+      }),
+    );
+    expect(getBoard).toBeGreaterThanOrEqual(1);
+  });
+
+  test("runTasksAdd reads body from --body-file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hirotm-task-body-"));
+    const filePath = join(dir, "body.md");
+    writeFileSync(filePath, "File body\n", "utf8");
+    try {
+      setMockFetch(async (_input, init) => {
+        expect(JSON.parse(String(init?.body)).body).toBe("File body\n");
+        return new Response(
+          JSON.stringify({
+            boardId: 1,
+            boardSlug: "brd",
+            boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+            entity: {
+              taskId: 3,
+              listId: 1,
+              groupId: 1,
+              title: "T",
+              body: "File body\n",
+              priorityId: 1,
+              status: "open",
+              order: 0,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      });
+      await captureStdout(() =>
+        runTasksAdd(ctx, {
+          port: 22035,
+          board: "brd",
+          list: "1",
+          group: "1",
+          title: "T",
+          bodyFile: filePath,
+        }),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("runTasksUpdate PATCHes status, priorityId, releaseId", async () => {
+    setMockFetch(async (input, init) => {
+      expect(reqUrl(input)).toContain("/api/boards/brd/tasks/9");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        status: "closed",
+        priorityId: 2,
+        releaseId: 4,
+      });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "brd",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            taskId: 9,
+            listId: 1,
+            groupId: 1,
+            title: "T",
+            body: "",
+            priorityId: 2,
+            status: "closed",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runTasksUpdate(ctx, {
+        port: 22036,
+        board: "brd",
+        taskId: "9",
+        status: "closed",
+        priority: "2",
+        releaseId: "4",
+      }),
+    );
+  });
+
+  test("runTasksMove PUT sends placement and toStatus", async () => {
+    const board = jsonBoard({
+      boardId: 1,
+      slug: "brd",
+      name: "B",
+      tasks: [
+        {
+          taskId: 7,
+          listId: 2,
+          groupId: 1,
+          title: "T",
+          body: "",
+          priorityId: 1,
+          status: "open",
+          order: 0,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    setMockFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.taskId).toBe(7);
+      expect(body.toListId).toBe(2);
+      expect(body.toStatus).toBe("in-progress");
+      expect(body.position).toBe("last");
+      expect(body.beforeTaskId).toBeUndefined();
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await captureStdout(() =>
+      runTasksMove(ctx, {
+        port: 22037,
+        board: "brd",
+        taskId: "7",
+        toList: "2",
+        toStatus: "in-progress",
+        last: true,
+      }),
+    );
+  });
+
+  test("runTasksMove PUT sends beforeTaskId and afterTaskId", async () => {
+    const board = jsonBoard({
+      boardId: 1,
+      slug: "brd",
+      name: "B",
+      tasks: [
+        {
+          taskId: 7,
+          listId: 2,
+          groupId: 1,
+          title: "T",
+          body: "",
+          priorityId: 1,
+          status: "open",
+          order: 0,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    let n = 0;
+    setMockFetch(async (_input, init) => {
+      n += 1;
+      const body = JSON.parse(String(init?.body));
+      if (n === 1) {
+        expect(body.beforeTaskId).toBe(10);
+      } else {
+        expect(body.afterTaskId).toBe(11);
+      }
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await captureStdout(() =>
+      runTasksMove(ctx, {
+        port: 22038,
+        board: "brd",
+        taskId: "7",
+        toList: "2",
+        beforeTask: "10",
+      }),
+    );
+    await captureStdout(() =>
+      runTasksMove(ctx, {
+        port: 22038,
+        board: "brd",
+        taskId: "7",
+        toList: "2",
+        afterTask: "11",
+      }),
+    );
+    expect(n).toBe(2);
+  });
+
+  test("runReleasesAdd POST includes color and releaseDate", async () => {
+    setMockFetch(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        name: "2.0",
+        color: "#abc",
+        releaseDate: "2026-06-01",
+      });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-02T00:00:00.000Z",
+          entity: {
+            releaseId: 9,
+            name: "2.0",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runReleasesAdd(ctx, {
+        port: 22039,
+        board: "b",
+        name: "2.0",
+        color: "#abc",
+        releaseDate: "2026-06-01",
+      }),
+    );
+  });
+
+  test("runReleasesUpdate PATCH clears color", async () => {
+    setMockFetch(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ color: null });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-03T00:00:00.000Z",
+          entity: {
+            releaseId: 3,
+            name: "1.1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runReleasesUpdate(ctx, {
+        port: 22040,
+        board: "b",
+        releaseId: "3",
+        clearColor: true,
+      }),
+    );
+  });
+
+  test("runReleasesDelete DELETE appends moveTasksTo query", async () => {
+    setMockFetch(async (input, init) => {
+      expect(reqUrl(input)).toContain("moveTasksTo=8");
+      expect(init?.method).toBe("DELETE");
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          boardSlug: "b",
+          boardUpdatedAt: "2026-01-04T00:00:00.000Z",
+          deletedReleaseId: 2,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      runReleasesDelete(ctx, {
+        port: 22041,
+        board: "b",
+        releaseId: "2",
+        moveTasksTo: "8",
+      }),
+    );
   });
 });

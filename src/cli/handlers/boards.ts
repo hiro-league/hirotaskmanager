@@ -3,6 +3,7 @@ import {
   type BoardDescribeResponse,
 } from "../../shared/boardDescribe";
 import { parsePortOption, requireNdjsonWhenQuiet } from "../lib/command-helpers";
+import { getCliQuiet } from "../lib/cliFormat";
 import { confirmMutableAction } from "../lib/mutableActionConfirm";
 import { runBoardsList } from "../lib/read/boards";
 import { runBoardsTasksList } from "../lib/read/tasks";
@@ -41,6 +42,12 @@ export async function handleBoardsDescribe(
   options: { port?: string; entities?: string },
 ): Promise<void> {
   const port = ctx.resolvePort({ port: parsePortOption(options.port) });
+  // Multi-line NDJSON / human tables cannot be collapsed to one identifier per line.
+  if (getCliQuiet()) {
+    throw new CliError("--quiet is not supported for boards describe", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
   const parsed = parseBoardDescribeEntities(
     options.entities === undefined
       ? undefined

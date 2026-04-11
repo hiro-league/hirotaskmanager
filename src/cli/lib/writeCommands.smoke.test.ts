@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Board } from "../../shared/models";
 import { createDefaultCliContext } from "../handlers/context";
 import { CLI_ERR } from "../types/errors";
 import { resetCliOutputFormat } from "./output";
+import { captureStdout } from "./testHelpers";
 import {
   runBoardsAdd,
   runListsList,
@@ -11,27 +15,6 @@ import {
 } from "./writeCommands";
 
 const ctx = createDefaultCliContext();
-
-async function captureStdout(run: () => Promise<void>): Promise<string> {
-  let buf = "";
-  const orig = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (
-    chunk: string | Uint8Array,
-    ..._args: unknown[]
-  ): boolean => {
-    buf +=
-      typeof chunk === "string"
-        ? chunk
-        : new TextDecoder().decode(chunk);
-    return true;
-  };
-  try {
-    await run();
-  } finally {
-    process.stdout.write = orig;
-  }
-  return buf;
-}
 
 describe("writeCommands smoke (mock fetch)", () => {
   const origFetch = globalThis.fetch;
@@ -199,5 +182,77 @@ describe("writeCommands smoke (mock fetch)", () => {
       slug: "new-board",
       name: "New Board",
     });
+  });
+
+  test("runBoardsAdd POSTs emoji and description in JSON body", async () => {
+    const board = {
+      boardId: 11,
+      slug: "emoji-board",
+      name: "Emoji Board",
+      emoji: "🚀",
+      description: "Hello desc",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    } as unknown as Board;
+
+    setMockFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      expect(body.name).toBe("Named");
+      expect(body.emoji).toBe("🚀");
+      expect(body.description).toBe("Line one");
+      return new Response(JSON.stringify(board), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    const out = await captureStdout(() =>
+      runBoardsAdd(ctx, {
+        port: 21005,
+        name: "Named",
+        emoji: "🚀",
+        description: "Line one",
+      }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({ ok: true, boardId: 11 });
+  });
+
+  test("runBoardsAdd reads description from --description-file", async () => {
+    const board = {
+      boardId: 12,
+      slug: "file-board",
+      name: "File Board",
+      emoji: null,
+      description: "from file",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    } as unknown as Board;
+
+    const dir = mkdtempSync(join(tmpdir(), "hirotm-boards-add-"));
+    const path = join(dir, "desc.txt");
+    writeFileSync(path, "  from file\n", "utf8");
+    try {
+      setMockFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.method).toBe("POST");
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        expect(body.description).toBe("from file");
+        return new Response(JSON.stringify(board), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+
+      const out = await captureStdout(() =>
+        runBoardsAdd(ctx, {
+          port: 21006,
+          name: "File Board",
+          descriptionFile: path,
+        }),
+      );
+      expect(JSON.parse(out.trim())).toMatchObject({ ok: true, boardId: 12 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

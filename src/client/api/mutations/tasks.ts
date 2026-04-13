@@ -37,7 +37,7 @@ export function useCreateTask() {
       groupId: number;
       /** Omitted → server uses builtin `none` for the board. */
       priorityId?: number;
-      /** Omitted → server applies board auto-assign rules; `null` → untagged. */
+      /** Omitted → server applies board auto-assign rules; `null` → unassigned (no release). */
       releaseId?: number | null;
       emoji?: string | null;
     }) => {

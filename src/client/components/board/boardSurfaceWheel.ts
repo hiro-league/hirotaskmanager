@@ -83,6 +83,22 @@ export function verticalScrollChainCanConsumeWheelWithin(
   return false;
 }
 
+/**
+ * Modals can be mounted inside the board’s horizontal scroller in the DOM (`position: fixed`
+ * does not reparent). Wheel events bubble to that scroller’s listener, which maps vertical
+ * wheel to horizontal pan — unless the gesture targets modal UI (e.g. task editor).
+ */
+export function wheelComposedPathIncludesModalSurface(e: WheelEvent): boolean {
+  for (const node of e.composedPath()) {
+    if (!(node instanceof Element)) continue;
+    const role = node.getAttribute("role");
+    if (role === "dialog" || role === "alertdialog") {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** True when `root` itself can scroll vertically in the direction of `deltaY`. */
 export function rootCanConsumeVerticalWheel(root: HTMLElement, deltaY: number): boolean {
   if (deltaY === 0) return false;

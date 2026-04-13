@@ -232,4 +232,18 @@
       background-position: 100% 100%, 0 100%, 0 0, 100% 0;
     }
   }
+
+  /*
+   * Task MD editor (@uiw/react-md-editor): Tailwind Preflight sets ul/ol { list-style: none },
+   * which removes bullets and numbers in the preview pane. Restore normal list styling here.
+   * Checkbox task lines use .contains-task-list li.task-list-item { list-style: none } from the library.
+   */
+  .task-md-editor .w-md-editor-preview ul {
+    list-style-type: disc;
+    padding-inline-start: 1.5rem;
+  }
+  .task-md-editor .w-md-editor-preview ol {
+    list-style-type: decimal;
+    padding-inline-start: 1.5rem;
+  }
 }

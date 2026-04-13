@@ -17,6 +17,7 @@ import {
 } from "@/api/mutations";
 import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
+import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
 import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { usePreferencesStore } from "@/store/preferences";
 import { NavLink, useMatch, useNavigate } from "react-router-dom";
@@ -101,15 +102,16 @@ function SidebarConfirmDialog({
     initialFocusRef: cancelButtonRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(onCancel, { disabled: busy });
+
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       role="presentation"
-      onClick={() => {
-        if (!busy) onCancel();
-      }}
+      onPointerDown={backdropDismiss.onPointerDown}
+      onClick={backdropDismiss.onClick}
     >
       <div
         role="alertdialog"

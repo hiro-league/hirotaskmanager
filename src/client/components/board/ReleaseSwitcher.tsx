@@ -20,7 +20,7 @@ export function ReleaseSwitcher({
   const setActive = usePreferencesStore((s) => s.setActiveReleaseIdsForBoard);
   const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
   const options = [
-    { id: RELEASE_FILTER_UNTAGGED, label: "Untagged" },
+    { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
     ...board.releases.map((r) => ({
       id: String(r.releaseId),
       label: r.name,

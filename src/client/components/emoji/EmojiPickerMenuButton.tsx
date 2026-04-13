@@ -47,6 +47,8 @@ export interface EmojiPickerMenuButtonProps {
   compact?: boolean;
   /** Extra classes for the trigger button. */
   triggerClassName?: string;
+  /** Explicit tab order for the trigger (e.g. task editor field sequence). */
+  triggerTabIndex?: number;
   /**
    * When true, Radix `Portal` + `Content` (Popper/Presence stack) mount only after the user
    * interacts with the trigger — cuts eager work on boards with many list headers (plan #6).
@@ -65,6 +67,7 @@ export function EmojiPickerMenuButton({
   placeholderIcon,
   compact = false,
   triggerClassName,
+  triggerTabIndex,
   lazyMountDropdown = false,
 }: EmojiPickerMenuButtonProps) {
   const dark = useDocumentDark();
@@ -100,6 +103,7 @@ export function EmojiPickerMenuButton({
         <button
           type="button"
           disabled={disabled}
+          tabIndex={triggerTabIndex}
           className={cn(
             "flex shrink-0 items-center justify-center rounded-md border border-input bg-background text-lg leading-none text-foreground hover:bg-muted disabled:opacity-50",
             compact

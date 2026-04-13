@@ -31,6 +31,7 @@ function ListColumnBody({
   taskPriorities,
   releases,
   defaultTaskGroupId,
+  defaultReleaseId,
   boardTasks,
   boardVisibleStatuses,
   list,
@@ -122,6 +123,7 @@ function ListColumnBody({
                 taskPriorities={taskPriorities}
                 releases={releases}
                 defaultTaskGroupId={defaultTaskGroupId}
+                defaultReleaseId={defaultReleaseId}
                 boardTasks={boardTasks}
                 list={list}
                 status={status}

@@ -10,7 +10,14 @@ import {
 import { cn } from "@/lib/utils";
 import { DiscardChangesDialog } from "./shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
+import { useBackdropDismissClick } from "./shortcuts/useBackdropDismissClick";
 import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
+import { useBodyScrollLock } from "./shortcuts/bodyScrollLock";
+import {
+  MODAL_BACKDROP_SURFACE_CLASS,
+  MODAL_DIALOG_OVERSCROLL_CLASS,
+  MODAL_TEXT_FIELD_CURSOR_CLASS,
+} from "./shortcuts/modalOverlayClasses";
 import { useModalFocusTrap } from "./shortcuts/useModalFocusTrap";
 
 interface ReleasesEditorDialogProps {
@@ -289,6 +296,16 @@ export function ReleasesEditorDialog({
     containerRef: dialogRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(requestClose, { disabled: busy });
+  const dismissDeleteConfirm = useCallback(() => {
+    setDeleteTargetId(null);
+  }, []);
+  const deleteConfirmBackdropDismiss = useBackdropDismissClick(dismissDeleteConfirm, {
+    disabled: busy,
+  });
+
+  useBodyScrollLock(open);
+
   const setStarDefault = (releaseId: number) => {
     if (board.defaultReleaseId === releaseId) return;
     patchBoard.mutate({
@@ -411,9 +428,14 @@ export function ReleasesEditorDialog({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        className={cn(
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+          MODAL_BACKDROP_SURFACE_CLASS,
+        )}
         role="presentation"
-        onClick={busy ? undefined : requestClose}
+        onPointerDown={backdropDismiss.onPointerDown}
+        onClick={backdropDismiss.onClick}
+        onWheel={(e) => e.stopPropagation()}
       >
         {/* w-fit: dialog width follows controls; max-w keeps it inside the viewport on narrow screens. */}
         <div
@@ -422,8 +444,13 @@ export function ReleasesEditorDialog({
           aria-labelledby={titleId}
           ref={dialogRef}
           tabIndex={-1}
-          className="max-h-[90vh] w-fit min-w-0 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
+          className={cn(
+            "max-h-[90vh] w-fit min-w-0 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text",
+            MODAL_DIALOG_OVERSCROLL_CLASS,
+            MODAL_TEXT_FIELD_CURSOR_CLASS,
+          )}
           onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
         >
           <h2 id={titleId} className="text-lg font-semibold text-foreground">
             Releases
@@ -746,15 +773,24 @@ export function ReleasesEditorDialog({
 
       {deleteTargetId != null && deletePending ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          className={cn(
+            "fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4",
+            MODAL_BACKDROP_SURFACE_CLASS,
+          )}
           role="presentation"
-          onClick={() => !busy && setDeleteTargetId(null)}
+          onPointerDown={deleteConfirmBackdropDismiss.onPointerDown}
+          onClick={deleteConfirmBackdropDismiss.onClick}
+          onWheel={(e) => e.stopPropagation()}
         >
           <div
             role="dialog"
             aria-modal="true"
-            className="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-lg"
+            className={cn(
+              "w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-lg",
+              MODAL_TEXT_FIELD_CURSOR_CLASS,
+            )}
             onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-foreground">Delete release?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -771,7 +807,7 @@ export function ReleasesEditorDialog({
                   disabled={busy}
                   onChange={(e) => setDeleteMoveToId(e.target.value)}
                 >
-                  <option value="">Clear release (untagged)</option>
+                  <option value="">Clear release (unassigned)</option>
                   {otherReleases.map((r) => (
                     <option key={r.releaseId} value={String(r.releaseId)}>
                       {r.name}

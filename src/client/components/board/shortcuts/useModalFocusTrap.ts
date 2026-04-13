@@ -26,6 +26,15 @@ function getTabbableElements(container: HTMLElement): HTMLElement[] {
   );
 }
 
+/** Tab order: explicit positive `tabIndex` first (ascending), then `tabIndex` 0 in tree order. */
+function sortTabbableElements(elements: HTMLElement[]): HTMLElement[] {
+  const positive = elements
+    .filter((e) => e.tabIndex > 0)
+    .sort((a, b) => a.tabIndex - b.tabIndex);
+  const zero = elements.filter((e) => e.tabIndex === 0);
+  return [...positive, ...zero];
+}
+
 function focusElement(element: HTMLElement | null | undefined): boolean {
   if (!element || !element.isConnected) return false;
   element.focus({ preventScroll: true });
@@ -41,6 +50,11 @@ interface UseModalFocusTrapOptions {
   containerRef: RefObject<HTMLElement | null>;
   /** Optional preferred target when the dialog first becomes active. */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * When this value changes while the dialog stays open, initial focus runs again (e.g. async
+   * editor mounts its textarea after the first frame).
+   */
+  initialFocusRetryKey?: string | number;
   /** Restore the opener when the dialog fully closes. */
   restoreFocus?: boolean;
 }
@@ -55,6 +69,7 @@ export function useModalFocusTrap({
   active = open,
   containerRef,
   initialFocusRef,
+  initialFocusRetryKey,
   restoreFocus = true,
 }: UseModalFocusTrapOptions): void {
   const openerRef = useRef<HTMLElement | null>(null);
@@ -80,9 +95,11 @@ export function useModalFocusTrap({
     if (!container || !open || !active) return;
 
     const focusInitial = () => {
-      if (container.contains(document.activeElement)) return;
+      // Prefer explicit initial focus first. A later pass (e.g. when `initialFocusRetryKey`
+      // changes) must still run if e.g. the emoji was focused before the textarea mounted.
       if (focusElement(initialFocusRef?.current)) return;
-      const tabbables = getTabbableElements(container);
+      if (container.contains(document.activeElement)) return;
+      const tabbables = sortTabbableElements(getTabbableElements(container));
       if (focusElement(tabbables[0])) return;
       if (!container.hasAttribute("tabindex")) container.tabIndex = -1;
       focusElement(container);
@@ -94,7 +111,7 @@ export function useModalFocusTrap({
       if (event.key !== "Tab") return;
       const liveContainer = containerRef.current;
       if (!liveContainer) return;
-      const tabbables = getTabbableElements(liveContainer);
+      const tabbables = sortTabbableElements(getTabbableElements(liveContainer));
       if (tabbables.length === 0) {
         event.preventDefault();
         if (!liveContainer.hasAttribute("tabindex")) liveContainer.tabIndex = -1;
@@ -126,7 +143,7 @@ export function useModalFocusTrap({
       window.cancelAnimationFrame(frameId);
       document.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [open, active, containerRef, initialFocusRef]);
+  }, [open, active, containerRef, initialFocusRef, initialFocusRetryKey]);
 
   useEffect(() => {
     if (open || !restoreFocus) return;

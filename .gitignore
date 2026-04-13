@@ -12,3 +12,5 @@ dist
 docs/chrome-profiling/*.json
 docs/profiling/*.json
 coverage/html
+
+opencode.json

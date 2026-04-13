@@ -84,6 +84,7 @@ import {
   verticalScrollChainContainsScrollable,
   verticalScrollChainCanConsumeWheel,
   verticalScrollChainCanConsumeWheelWithin,
+  wheelComposedPathIncludesModalSurface,
 } from "./boardSurfaceWheel";
 import { useBoardCanvasPanScroll } from "./useBoardCanvasPanScroll";
 import { BoardScrollRootContext } from "./useColumnInViewport";
@@ -621,6 +622,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     };
 
     const onWheelBoard = (e: WheelEvent) => {
+      if (wheelComposedPathIncludesModalSurface(e)) return;
       const t = e.target;
       if (!(t instanceof Element)) return;
       // Keep wheel gestures that start inside list/task scrollers local to that
@@ -632,6 +634,7 @@ export function BoardView({ boardId }: BoardViewProps) {
     };
 
     const onWheelHeader = (e: WheelEvent) => {
+      if (wheelComposedPathIncludesModalSurface(e)) return;
       const t = e.target;
       if (!(t instanceof Element) || !header) return;
       if (verticalScrollChainCanConsumeWheelWithin(t, e.deltaY, header)) return;
@@ -985,7 +988,7 @@ export function BoardView({ boardId }: BoardViewProps) {
       : undefined;
   const activeReleaseLabels =
     activeReleaseIds?.map((releaseId) => {
-      if (releaseId === RELEASE_FILTER_UNTAGGED) return "Untagged";
+      if (releaseId === RELEASE_FILTER_UNTAGGED) return "Unassigned";
       const r = data.releases.find((x) => String(x.releaseId) === releaseId);
       return r?.name ?? "";
     }).filter(Boolean) ?? null;

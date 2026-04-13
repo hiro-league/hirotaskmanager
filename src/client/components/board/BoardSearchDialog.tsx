@@ -3,8 +3,15 @@ import { Search } from "lucide-react";
 import type { Board, SearchHit } from "../../../shared/models";
 import { fetchBoardSearchHits } from "@/api/search";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
+import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
 import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
+import { useBodyScrollLock } from "@/components/board/shortcuts/bodyScrollLock";
+import {
+  MODAL_BACKDROP_SURFACE_CLASS,
+  MODAL_DIALOG_OVERSCROLL_CLASS,
+  MODAL_TEXT_FIELD_CURSOR_CLASS,
+} from "@/components/board/shortcuts/modalOverlayClasses";
 import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { cn } from "@/lib/utils";
 
@@ -112,6 +119,10 @@ export function BoardSearchDialog({
     initialFocusRef: inputRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(requestClose);
+
+  useBodyScrollLock(open);
+
   const pickHit = useCallback(
     (taskId: number) => {
       requestOpenTaskEditor(taskId);
@@ -124,9 +135,14 @@ export function BoardSearchDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[75] flex items-start justify-center bg-black/50 p-4 pt-[min(12vh,8rem)]"
+      className={cn(
+        "fixed inset-0 z-[75] flex items-start justify-center bg-black/50 p-4 pt-[min(12vh,8rem)]",
+        MODAL_BACKDROP_SURFACE_CLASS,
+      )}
       role="presentation"
-      onClick={requestClose}
+      onPointerDown={backdropDismiss.onPointerDown}
+      onClick={backdropDismiss.onClick}
+      onWheel={(e) => e.stopPropagation()}
     >
       <div
         role="dialog"
@@ -134,8 +150,12 @@ export function BoardSearchDialog({
         aria-labelledby={titleId}
         ref={dialogRef}
         tabIndex={-1}
-        className="flex max-h-[min(70vh,520px)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-card shadow-lg"
+        className={cn(
+          "flex max-h-[min(70vh,520px)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-card shadow-lg",
+          MODAL_TEXT_FIELD_CURSOR_CLASS,
+        )}
         onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <Search
@@ -160,7 +180,12 @@ export function BoardSearchDialog({
           />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto px-1 py-1",
+            MODAL_DIALOG_OVERSCROLL_CLASS,
+          )}
+        >
           {fetchError ? (
             <p className="px-3 py-4 text-sm text-destructive">{fetchError}</p>
           ) : loading && debouncedQuery.length > 0 ? (

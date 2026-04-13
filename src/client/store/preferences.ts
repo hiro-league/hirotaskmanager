@@ -97,7 +97,7 @@ const TASK_CARD_VIEW_SPECS: Record<TaskCardViewMode, TaskCardViewSpec> = {
     showGroupLabel: true,
     showDescriptionPreview: true,
     previewClassName: "line-clamp-2",
-    previewMaxLength: 140,
+    previewMaxLength: 90,
   },
 };
 

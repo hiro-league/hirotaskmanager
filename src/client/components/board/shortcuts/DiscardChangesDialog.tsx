@@ -1,7 +1,14 @@
 import { useCallback, useId, useRef } from "react";
+import { useBackdropDismissClick } from "./useBackdropDismissClick";
 import { useDialogCloseRequest } from "./useDialogCloseRequest";
 import { useShortcutOverlay } from "./ShortcutScopeContext";
+import { useBodyScrollLock } from "./bodyScrollLock";
+import {
+  MODAL_BACKDROP_SURFACE_CLASS,
+  MODAL_TEXT_FIELD_CURSOR_CLASS,
+} from "./modalOverlayClasses";
 import { useModalFocusTrap } from "./useModalFocusTrap";
+import { cn } from "@/lib/utils";
 
 interface DiscardChangesDialogProps {
   open: boolean;
@@ -49,13 +56,22 @@ export function DiscardChangesDialog({
     initialFocusRef: cancelButtonRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(requestCancel);
+
+  useBodyScrollLock(open);
+
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4"
+      className={cn(
+        "fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4",
+        MODAL_BACKDROP_SURFACE_CLASS,
+      )}
       role="presentation"
-      onClick={requestCancel}
+      onPointerDown={backdropDismiss.onPointerDown}
+      onClick={backdropDismiss.onClick}
+      onWheel={(e) => e.stopPropagation()}
     >
       <div
         role="alertdialog"
@@ -63,8 +79,12 @@ export function DiscardChangesDialog({
         aria-labelledby={titleId}
         ref={containerRef}
         tabIndex={-1}
-        className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg"
+        className={cn(
+          "w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg",
+          MODAL_TEXT_FIELD_CURSOR_CLASS,
+        )}
         onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <h2
           id={titleId}

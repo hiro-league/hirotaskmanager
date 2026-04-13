@@ -11,6 +11,7 @@ export type BoardBandSpreadProps = {
   taskPriorities: Board["taskPriorities"];
   releases: Board["releases"];
   defaultTaskGroupId: number;
+  defaultReleaseId: number | null;
   boardTasks: readonly Task[];
 };
 
@@ -29,6 +30,7 @@ export function boardColumnSpreadProps(board: Board): BoardColumnSpreadProps {
     taskPriorities: board.taskPriorities,
     releases: board.releases,
     defaultTaskGroupId: board.defaultTaskGroupId,
+    defaultReleaseId: board.defaultReleaseId,
     boardTasks: board.tasks,
     boardVisibleStatuses: board.visibleStatuses,
   };
@@ -42,6 +44,7 @@ export type TaskEditorBoardData = Pick<
   | "taskPriorities"
   | "releases"
   | "defaultTaskGroupId"
+  | "defaultReleaseId"
 >;
 
 export function taskEditorBoardData(board: Board): TaskEditorBoardData {
@@ -51,5 +54,6 @@ export function taskEditorBoardData(board: Board): TaskEditorBoardData {
     taskPriorities: board.taskPriorities,
     releases: board.releases,
     defaultTaskGroupId: board.defaultTaskGroupId,
+    defaultReleaseId: board.defaultReleaseId,
   };
 }

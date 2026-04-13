@@ -4,9 +4,17 @@ import {
   SHORTCUT_HELP_TABS,
   type ShortcutHelpTabId,
 } from "./boardShortcutTypes";
+import { useBackdropDismissClick } from "./useBackdropDismissClick";
 import { useDialogCloseRequest } from "./useDialogCloseRequest";
 import { useShortcutOverlay } from "./ShortcutScopeContext";
+import { useBodyScrollLock } from "./bodyScrollLock";
+import {
+  MODAL_BACKDROP_SURFACE_CLASS,
+  MODAL_DIALOG_OVERSCROLL_CLASS,
+  MODAL_TEXT_FIELD_CURSOR_CLASS,
+} from "./modalOverlayClasses";
 import { useModalFocusTrap } from "./useModalFocusTrap";
+import { cn } from "@/lib/utils";
 
 /** Fixed-height scroll region so the dialog does not jump when switching tabs. */
 const shortcutTableScrollClassName =
@@ -175,15 +183,24 @@ export function ShortcutHelpDialog({
     containerRef: dialogRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(requestClose);
+
+  useBodyScrollLock(open);
+
   if (!open) return null;
 
   const activeMeta = SHORTCUT_HELP_TABS.find((t) => t.id === activeTab);
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+      className={cn(
+        "fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4",
+        MODAL_BACKDROP_SURFACE_CLASS,
+      )}
       role="presentation"
-      onClick={requestClose}
+      onPointerDown={backdropDismiss.onPointerDown}
+      onClick={backdropDismiss.onClick}
+      onWheel={(e) => e.stopPropagation()}
     >
       <div
         role="dialog"
@@ -191,8 +208,13 @@ export function ShortcutHelpDialog({
         aria-labelledby={titleId}
         ref={dialogRef}
         tabIndex={-1}
-        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
+        className={cn(
+          "max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text",
+          MODAL_DIALOG_OVERSCROLL_CLASS,
+          MODAL_TEXT_FIELD_CURSOR_CLASS,
+        )}
         onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <h2
           id={titleId}

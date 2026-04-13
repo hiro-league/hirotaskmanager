@@ -18,9 +18,11 @@ import {
   type List,
   type Task,
 } from "../../../shared/models";
+import { clampTaskTitleInput, normalizeStoredTaskTitle } from "../../../shared/taskTitle";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
+import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
@@ -307,6 +309,7 @@ function ListStackedBody({
   taskPriorities,
   releases,
   defaultTaskGroupId,
+  defaultReleaseId,
   boardTasks,
   boardVisibleStatuses: _boardVisibleStatuses,
   list,
@@ -427,7 +430,9 @@ function ListStackedBody({
     );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
-    const nextTitle = editingTitleDraft.trim() || "Untitled";
+    const nextTitle = normalizeStoredTaskTitle(
+      editingTitleDraft.trim() || "Untitled",
+    );
     if (nextTitle === taskToEdit.title) return;
     await updateTask.mutateAsync({
       boardId: surfaceRef.current.boardId,
@@ -520,7 +525,7 @@ function ListStackedBody({
         boardId,
         listId: list.listId,
         status: quickAddStatus,
-        title: trimmed,
+        title: normalizeStoredTaskTitle(trimmed),
         body: "",
         groupId: defaultGroupId,
       },
@@ -630,23 +635,28 @@ function ListStackedBody({
         onClick={(e) => e.stopPropagation()}
       >
         {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
-        <textarea
-          ref={inputRef}
-          rows={3}
-          className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
-          placeholder="Enter a title or paste a link"
-          value={title}
-          disabled={createTask.isPending}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={handleTextareaBlur}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submitTask();
-            }
-            if (e.key === "Escape") cancelAdd();
-          }}
-        />
+        <div className="flex flex-col gap-1">
+          <textarea
+            ref={inputRef}
+            rows={3}
+            className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
+            placeholder="Enter a title or paste a link"
+            value={title}
+            disabled={createTask.isPending}
+            onChange={(e) => setTitle(clampTaskTitleInput(e.target.value))}
+            onBlur={handleTextareaBlur}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitTask();
+              }
+              if (e.key === "Escape") cancelAdd();
+            }}
+          />
+          <div className="flex justify-end">
+            <TaskTitleCharsLeft value={title} />
+          </div>
+        </div>
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
@@ -839,6 +849,7 @@ function ListStackedBody({
           taskPriorities,
           releases,
           defaultTaskGroupId,
+          defaultReleaseId,
         }}
         open={editingTask !== null || editingTaskId !== null}
         onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
@@ -903,6 +914,7 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   taskPriorities,
   releases,
   defaultTaskGroupId,
+  defaultReleaseId,
   boardTasks,
   boardVisibleStatuses,
 }: BoardListStackedColumnProps) {
@@ -984,6 +996,7 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
               taskPriorities={taskPriorities}
               releases={releases}
               defaultTaskGroupId={defaultTaskGroupId}
+              defaultReleaseId={defaultReleaseId}
               boardTasks={boardTasks}
               boardVisibleStatuses={boardVisibleStatuses}
               list={list}

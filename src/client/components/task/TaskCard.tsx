@@ -5,11 +5,12 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Bot, Check } from "lucide-react";
+import { Bot, Check, Clock } from "lucide-react";
 import {
   NONE_TASK_PRIORITY_VALUE,
   priorityDisplayLabel,
-  taskDisplayTitle,
+  formatTaskIdForDisplay,
+  taskDisplayTitleOnCard,
   type Board,
   type Task,
   type TaskPriorityDefinition,
@@ -21,6 +22,12 @@ import {
   type TaskCardViewMode,
 } from "@/store/preferences";
 import { cn } from "@/lib/utils";
+import {
+  formatTaskCardDateTooltip,
+  getTaskCardRelativeDateParts,
+  getTaskCardTimeline,
+} from "@/lib/taskCardDate";
+import { clampTaskTitleInput } from "../../../shared/taskTitle";
 
 function taskCardBodyPaddingClass(viewMode: TaskCardViewMode): string {
   return viewMode === "small" ? "px-2 py-2" : "px-2.5 py-2";
@@ -172,7 +179,7 @@ function isVeryLightPriorityBackground(color: string): boolean {
   return c === "#ffffff" || c === "#fff" || c === "white";
 }
 
-/** Resolved release label/color for a task, or null when untagged / unknown id. */
+/** Resolved release label/color for a task, or null when unassigned / unknown id. */
 export function taskReleasePill(
   board: Pick<Board, "releases">,
   task: Pick<Task, "releaseId">,
@@ -195,6 +202,44 @@ function ReleaseChipPrefix(): ReactNode {
 
 function releaseChipTitle(label: string): string {
   return `r ${label.trim()}`;
+}
+
+/**
+ * Open/created vs closed timestamp for large/larger task cards.
+ * Returns a bare `<span>` — the caller decides placement (metadata row, inline after preview, etc.).
+ */
+function TaskCardTimelineChip({
+  task,
+  className,
+}: {
+  task: Task;
+  className?: string;
+}) {
+  const timeline = getTaskCardTimeline(task);
+  if (!timeline) return null;
+  const { label: compact, showRecentDot } = getTaskCardRelativeDateParts(timeline.iso);
+  if (!compact) return null;
+  const tip = formatTaskCardDateTooltip(timeline.kind, timeline.iso);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/80",
+        className,
+      )}
+      title={tip}
+      aria-label={tip}
+    >
+      {showRecentDot ? (
+        <span
+          className="size-1.5 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
+          aria-hidden
+        />
+      ) : (
+        <Clock className="size-2.5 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+      )}
+      {compact}
+    </span>
+  );
 }
 
 function PriorityPill({
@@ -312,7 +357,7 @@ function TaskCardContent({
             onChange={(e) => {
               // Auto-grow up to three lines, then keep the native resize handle available.
               autoSizeInlineTitleTextarea(e.currentTarget);
-              onTitleDraftChange?.(e.target.value);
+              onTitleDraftChange?.(clampTaskTitleInput(e.target.value));
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -349,7 +394,7 @@ function TaskCardContent({
               viewSpec.titleClassName,
             )}
           >
-            {taskDisplayTitle(task)}
+            {taskDisplayTitleOnCard(task)}
           </div>
           {viewMode === "small" ? (
             <CliCreatedIndicator task={task} compact />
@@ -379,10 +424,47 @@ function TaskCardContent({
               {releasePill!.label}
             </span>
           ) : null}
+          {viewMode === "large" || viewMode === "larger" ? (
+            <span
+              className="text-muted-foreground/55"
+              title={`Task id ${formatTaskIdForDisplay(task.taskId)}`}
+            >
+              #{formatTaskIdForDisplay(task.taskId)}
+            </span>
+          ) : null}
           <CliCreatedIndicator task={task} />
+          {/* Date chip in metadata row when there is no preview body below (large mode). */}
+          {!preview && (viewMode === "large" || viewMode === "larger") ? (
+            <TaskCardTimelineChip task={task} className="ml-auto" />
+          ) : null}
         </div>
       ) : null}
-      {preview ? (
+      {/* Larger mode: preview body + date at bottom-right.
+          An invisible inline spacer reserves room on the last text line;
+          when text fills that line the spacer wraps, creating vertical space.
+          The date is absolutely positioned at bottom-right over the spacer.
+          No line-clamp here — JS truncation (previewBody) controls length,
+          avoiding the double-ellipsis caused by CSS clamp + JS "…". */}
+      {preview && (viewMode === "large" || viewMode === "larger") ? (
+        <p className="relative mt-1 text-xs text-muted-foreground">
+          {preview}
+          {getTaskCardTimeline(task) != null ? (
+            <>
+              {/* Reserve width for clock + longest relative labels (e.g. “3 days ago”). */}
+              <span
+                className="inline-block h-4 w-24 select-none align-bottom"
+                aria-hidden
+              >
+                {"\u00A0"}
+              </span>
+              <TaskCardTimelineChip
+                task={task}
+                className="absolute bottom-0 right-0"
+              />
+            </>
+          ) : null}
+        </p>
+      ) : preview ? (
         <div
           className={cn(
             "mt-1 text-xs text-muted-foreground",
@@ -398,7 +480,7 @@ function TaskCardContent({
 
 const TASK_CARD_INLINE_PADDING_REM = 0.625;
 const TASK_CARD_STATUS_SLOT_REM = 1.375;
-const TASK_CARD_RIGHT_SLOT_REM = 1.75;
+const TASK_CARD_RIGHT_SLOT_REM = 0.25;
 
 function openTaskContentRailStyle(viewMode: TaskCardViewMode): CSSProperties {
   const inlinePaddingRem = viewMode === "small" ? 0.5 : TASK_CARD_INLINE_PADDING_REM;

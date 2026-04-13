@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(hirotm boards:*)",
+      "Bash(hirotm lists:*)",
+      "Bash(hirotm tasks:*)"
+    ]
+  }
+}

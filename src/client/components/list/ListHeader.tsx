@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useState,
   useRef,
   type RefCallback,
@@ -75,6 +76,9 @@ export function ListHeader({
   const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  /** Measures the truncated list name span so we only show a native tooltip when text overflows. */
+  const listNameSpanRef = useRef<HTMLSpanElement | null>(null);
+  const [listNameTruncated, setListNameTruncated] = useState(false);
 
   const boardDrag = dragHandleRef != null;
   const busy = patchList.isPending;
@@ -157,6 +161,22 @@ export function ListHeader({
 
   const displayName = listDisplayName(list);
 
+  useLayoutEffect(() => {
+    if (editing) {
+      setListNameTruncated(false);
+      return;
+    }
+    const el = listNameSpanRef.current;
+    if (!el) return;
+    const check = () => {
+      setListNameTruncated(el.scrollWidth > el.clientWidth + 1);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editing, baseName, emojiChar, boardDrag]);
+
   const pickListEmoji = useCallback(
     (next: string | null) => {
       setEmojiFieldError(null);
@@ -176,7 +196,13 @@ export function ListHeader({
           {emojiChar}
         </span>
       ) : null}
-      <span className="min-w-0 truncate">{baseName}</span>
+      <span
+        ref={listNameSpanRef}
+        className="min-w-0 truncate"
+        title={listNameTruncated ? displayName : undefined}
+      >
+        {baseName}
+      </span>
     </>
   );
 

@@ -1,6 +1,7 @@
 import type { BoardColorPreset } from "./boardColor";
 import type { BoardCliPolicy } from "./cliPolicy";
 import type { CreatorPrincipalType } from "./provenance";
+import { truncateToMaxGraphemes, TASK_TITLE_MAX_GRAPHEMES } from "./taskTitle";
 
 /** Workflow status row from `GET /api/statuses` / `status` table. */
 export interface Status {
@@ -276,6 +277,22 @@ export function taskDisplayTitle(task: Task): string {
   const base = task.title.trim() || "Untitled";
   const e = task.emoji?.trim();
   return e ? `${e} ${base}` : base;
+}
+
+/**
+ * Task card row: same as {@link taskDisplayTitle} but caps the title text to
+ * {@link TASK_TITLE_MAX_GRAPHEMES} for legacy rows stored before server enforcement.
+ */
+export function taskDisplayTitleOnCard(task: Task): string {
+  const baseRaw = task.title.trim() || "Untitled";
+  const base = truncateToMaxGraphemes(baseRaw, TASK_TITLE_MAX_GRAPHEMES);
+  const e = task.emoji?.trim();
+  return e ? `${e} ${base}` : base;
+}
+
+/** Task id for UI labels (e.g. #1,234 with locale-appropriate grouping). */
+export function formatTaskIdForDisplay(taskId: number): string {
+  return taskId.toLocaleString();
 }
 
 /** Row in the board list API — lightweight sidebar entries. */

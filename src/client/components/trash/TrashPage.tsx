@@ -12,6 +12,7 @@ import {
   useTrashedLists,
   useTrashedTasks,
 } from "@/api/queries";
+import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
 import { cn } from "@/lib/utils";
 import { boardDisplayName, listDisplayName, taskDisplayTitle } from "../../../shared/models";
 import type {
@@ -74,6 +75,10 @@ function PurgeDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const backdropDismiss = useBackdropDismissClick(onCancel, {
+    disabled: busy || !target,
+  });
+
   if (!target) return null;
   const title = "Delete permanently?";
   const message =
@@ -87,9 +92,8 @@ function PurgeDialog({
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       role="presentation"
-      onClick={() => {
-        if (!busy) onCancel();
-      }}
+      onPointerDown={backdropDismiss.onPointerDown}
+      onClick={backdropDismiss.onClick}
     >
       <div
         role="alertdialog"

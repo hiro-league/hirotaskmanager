@@ -18,7 +18,14 @@ import { cn } from "@/lib/utils";
 import { getBoardThemePreviewBackground } from "./boardTheme";
 import { DiscardChangesDialog } from "./shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "./shortcuts/ShortcutScopeContext";
+import { useBackdropDismissClick } from "./shortcuts/useBackdropDismissClick";
 import { useDialogCloseRequest } from "./shortcuts/useDialogCloseRequest";
+import { useBodyScrollLock } from "./shortcuts/bodyScrollLock";
+import {
+  MODAL_BACKDROP_SURFACE_CLASS,
+  MODAL_DIALOG_OVERSCROLL_CLASS,
+  MODAL_TEXT_FIELD_CURSOR_CLASS,
+} from "./shortcuts/modalOverlayClasses";
 import { useModalFocusTrap } from "./shortcuts/useModalFocusTrap";
 
 type PolicyField = {
@@ -193,6 +200,10 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
     containerRef: dialogRef,
   });
 
+  const backdropDismiss = useBackdropDismissClick(requestClose, { disabled: busy });
+
+  useBodyScrollLock(open);
+
   if (!open) return null;
 
   const save = () => {
@@ -214,9 +225,14 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        className={cn(
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+          MODAL_BACKDROP_SURFACE_CLASS,
+        )}
         role="presentation"
-        onClick={busy ? undefined : requestClose}
+        onPointerDown={backdropDismiss.onPointerDown}
+        onClick={backdropDismiss.onClick}
+        onWheel={(e) => e.stopPropagation()}
       >
         <div
           role="dialog"
@@ -224,8 +240,13 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
           aria-labelledby={titleId}
           ref={dialogRef}
           tabIndex={-1}
-          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text"
+          className={cn(
+            "max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text",
+            MODAL_DIALOG_OVERSCROLL_CLASS,
+            MODAL_TEXT_FIELD_CURSOR_CLASS,
+          )}
           onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
         >
           <h2 id={titleId} className="text-lg font-semibold text-foreground">
             Edit board

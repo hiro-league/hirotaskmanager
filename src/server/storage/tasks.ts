@@ -5,6 +5,7 @@ import {
 } from "../../shared/models";
 import type { Board, Task } from "../../shared/models";
 import type { CreatorPrincipalType } from "../../shared/provenance";
+import { normalizeStoredTaskTitle } from "../../shared/taskTitle";
 import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
 import { boardExists, statusIsClosed } from "./helpers";
@@ -208,6 +209,8 @@ export function createTaskOnBoard(
   const now = new Date().toISOString();
   const closedAt = statusIsClosed(db, statusId) ? now : null;
   const emoji = input.emoji ?? null;
+  // Enforce max title length in grapheme clusters (shared with client; see `shared/taskTitle.ts`).
+  const titleStored = normalizeStoredTaskTitle(input.title);
   const principal = provenance?.principal ?? "web";
   const label = provenance?.label ?? null;
   const resolvedRelease = resolveReleaseIdOnTaskCreate(
@@ -230,7 +233,7 @@ export function createTaskOnBoard(
         priorityId,
         boardId,
         statusId,
-        input.title,
+        titleStored,
         input.body,
         maxOrder + 1,
         null,
@@ -335,7 +338,10 @@ export function patchTaskOnBoard(
     order = patch.order ?? trow.sort_order;
   }
 
-  const title = patch.title ?? trow.title;
+  const title =
+    patch.title !== undefined
+      ? normalizeStoredTaskTitle(patch.title)
+      : trow.title;
   const body = patch.body ?? trow.body;
   const color = patch.color !== undefined ? patch.color : trow.color;
   const emoji =

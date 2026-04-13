@@ -7,10 +7,12 @@ import {
   type List,
   type Task,
 } from "../../../shared/models";
+import { clampTaskTitleInput, normalizeStoredTaskTitle } from "../../../shared/taskTitle";
 import type { BoardBandSpreadProps } from "./boardColumnData";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses } from "@/api/queries";
 import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
+import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
@@ -53,6 +55,7 @@ export const ListStatusBand = memo(function ListStatusBand({
   taskPriorities,
   releases,
   defaultTaskGroupId,
+  defaultReleaseId,
   boardTasks,
   list,
   status,
@@ -189,7 +192,9 @@ export const ListStatusBand = memo(function ListStatusBand({
     );
     cancelInlineTitleEdit();
     if (!taskToEdit) return;
-    const nextTitle = editingTitleDraft.trim() || "Untitled";
+    const nextTitle = normalizeStoredTaskTitle(
+      editingTitleDraft.trim() || "Untitled",
+    );
     if (nextTitle === taskToEdit.title) return;
     await updateTask.mutateAsync({
       boardId: surfaceRef.current.boardId,
@@ -288,7 +293,7 @@ export const ListStatusBand = memo(function ListStatusBand({
         boardId,
         listId: list.listId,
         status,
-        title: trimmed,
+        title: normalizeStoredTaskTitle(trimmed),
         body: "",
         groupId: defaultGroupId,
       },
@@ -398,23 +403,28 @@ export const ListStatusBand = memo(function ListStatusBand({
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* This composer intentionally restores selection inside the board's non-selectable drag surface. */}
-                <textarea
-                  ref={inputRef}
-                  rows={3}
-                  className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
-                  placeholder="Enter a title or paste a link"
-                  value={title}
-                  disabled={createTask.isPending}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onBlur={handleTextareaBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submitCard();
-                    }
-                    if (e.key === "Escape") cancelAdd();
-                  }}
-                />
+                <div className="flex flex-col gap-1">
+                  <textarea
+                    ref={inputRef}
+                    rows={3}
+                    className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
+                    placeholder="Enter a title or paste a link"
+                    value={title}
+                    disabled={createTask.isPending}
+                    onChange={(e) => setTitle(clampTaskTitleInput(e.target.value))}
+                    onBlur={handleTextareaBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        submitCard();
+                      }
+                      if (e.key === "Escape") cancelAdd();
+                    }}
+                  />
+                  <div className="flex justify-end">
+                    <TaskTitleCharsLeft value={title} />
+                  </div>
+                </div>
                 <div className="mt-2 flex items-center gap-2">
                   <button
                     type="button"
@@ -470,6 +480,7 @@ export const ListStatusBand = memo(function ListStatusBand({
             taskPriorities,
             releases,
             defaultTaskGroupId,
+            defaultReleaseId,
           }}
           open={editingTask !== null || editingTaskId !== null}
           onClose={() => { setEditingTask(null); setEditingTaskId(null); }}
@@ -544,6 +555,7 @@ export const ListStatusBand = memo(function ListStatusBand({
           taskPriorities,
           releases,
           defaultTaskGroupId,
+          defaultReleaseId,
         }}
         open={editingTask !== null || editingTaskId !== null}
         onClose={() => { setEditingTask(null); setEditingTaskId(null); }}

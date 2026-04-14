@@ -97,7 +97,7 @@ function SetupForm({
             {
               onSuccess: () => {
                 onNoticeChange(
-                  "Recovery key printed to the server console. Save it now, then log in with your new passphrase.",
+                  "Recovery key shown in the terminal running TaskManager. Save it now, then log in with your new passphrase.",
                 );
               },
             },
@@ -132,8 +132,8 @@ function SetupForm({
           <p className="text-sm text-destructive">{setupAuth.error.message}</p>
         ) : null}
         <p className="text-sm text-muted-foreground">
-          The recovery key will be shown once in the server console. Save it outside
-          the app before continuing.
+          The recovery key will be shown once in the terminal running TaskManager.
+          Save it outside the app before continuing.
         </p>
         <button
           type="submit"

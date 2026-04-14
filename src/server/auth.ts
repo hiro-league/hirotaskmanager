@@ -239,23 +239,56 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
     activeSessionTokenHash: null,
   };
   await writeStoredAuthState(next);
+
+  // Write the one-time key to a sidecar file so the launcher process can read
+  // and display it even when the server runs as a detached child (avoids
+  // cross-process stdout races on Windows).
+  let wroteKeyFile = false;
+  try {
+    const keyFilePath = resolveRecoveryKeyFilePath();
+    await writeFile(keyFilePath, recoveryKey, "utf8");
+    await applyOwnerOnlyPermissions(keyFilePath);
+    wroteKeyFile = true;
+  } catch {
+    // Best-effort; fall through to console printing as a fallback.
+  }
+
+  // When the launcher owns terminal output it reads the sidecar file instead,
+  // so skip console printing to avoid duplicates.
+  if (!wroteKeyFile || process.env.TASKMANAGER_SILENT_STARTUP_LOG !== "1") {
+    printRecoveryKeyToConsole(recoveryKey);
+  }
+}
+
+/** Path to the one-time recovery key sidecar written during first setup. */
+export function resolveRecoveryKeyFilePath(): string {
+  return path.join(resolveAuthRootDir(), "recovery-key.tmp");
+}
+
+function printRecoveryKeyToConsole(recoveryKey: string): void {
   const o = process.stdout;
   if (colorEnabled(o)) {
-    console.log("");
-    console.log(paint(o, " Recovery key (shown once) — copy it now ", ansi.bold + ansi.yellow));
+    console.log(paint(o, "Recovery Key:", ansi.bold + ansi.yellow));
     console.log(paint(o, recoveryKey, ansi.cyan + ansi.bold));
     console.log(
       paint(
         o,
-        "Store this key outside the app. It cannot be shown again from the UI.",
+        "Store it on a separate device. It will never show again.",
         ansi.dim,
       ),
     );
-    console.log("");
+    console.log(
+      paint(
+        o,
+        "Use it to recover your passphrase and access your server/data.",
+        ansi.dim,
+      ),
+    );
   } else {
-    console.log("TaskManager recovery key (shown once):");
+    console.log("Recovery Key:");
     console.log(recoveryKey);
-    console.log("Save this recovery key somewhere safe outside the app.");
+    console.log("Store it on a separate device. It will never show again.");
+    console.log("Use it to recover your passphrase and access your server/data.");
   }
 }
 

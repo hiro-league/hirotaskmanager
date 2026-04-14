@@ -133,9 +133,12 @@ export async function startTaskManagerServer(options: {
     idleTimeout: 30,
   });
 
-  console.log(
-    `${options.kind === "installed" ? "TaskManager" : "TaskManager dev API"} server listening on http://localhost:${server.port}`,
-  );
+  // Let the installed launcher print its own startup status so first-run output stays compact.
+  if (process.env.TASKMANAGER_SILENT_STARTUP_LOG !== "1") {
+    console.log(
+      `${options.kind === "installed" ? "TaskManager" : "TaskManager dev API"} server listening on http://localhost:${server.port}`,
+    );
+  }
 
   return server;
 }

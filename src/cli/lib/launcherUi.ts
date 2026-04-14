@@ -1,196 +1,164 @@
 /**
- * hirotaskmanager interactive setup: banners, summaries, and first-run hints.
+ * hirotaskmanager interactive setup: compact prompts, inline spinners, and colored values.
  * Uses ANSI only when stdout is a TTY and NO_COLOR is unset.
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { ansi, colorEnabled, paint } from "../../shared/terminalColors";
+import { ansi, paint } from "../../shared/terminalColors";
 
 const out = process.stdout;
+const SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
+const SPINNER_INTERVAL_MS = 100;
+const DEFAULT_SPINNER_MS = 900;
 
 function line(text = ""): void {
   console.log(text);
 }
 
-function hr(): void {
-  line(colorEnabled(out) ? `${ansi.dim}────────────────────────────────────────────────────────────${ansi.reset}` : "────────────────────────────────────────────────────────────");
+function clearInline(): void {
+  if (typeof out.clearLine === "function" && typeof out.cursorTo === "function") {
+    out.clearLine(0);
+    out.cursorTo(0);
+  }
+}
+
+function writeInline(text: string): void {
+  clearInline();
+  out.write(text);
+}
+
+export function paintValue(value: string | number | boolean): string {
+  return paint(out, String(value), ansi.bold + ansi.cyan);
+}
+
+function paintSuccess(text: string): string {
+  return paint(out, text, ansi.bold + ansi.green);
+}
+
+function paintWarning(text: string): string {
+  return paint(out, text, ansi.bold + ansi.yellow);
+}
+
+export type SpinnerHandle = {
+  stop: (finalText?: string | null) => void;
+};
+
+export function startInlineSpinner(message: string): SpinnerHandle {
+  if (!out.isTTY) {
+    line(message);
+    return {
+      stop(finalText?: string | null): void {
+        if (finalText) line(finalText);
+      },
+    };
+  }
+
+  let frameIndex = 0;
+  let stopped = false;
+  writeInline(`${message} ${paint(out, SPINNER_FRAMES[frameIndex], ansi.dim)}`);
+  const timer = setInterval(() => {
+    frameIndex = (frameIndex + 1) % SPINNER_FRAMES.length;
+    writeInline(`${message} ${paint(out, SPINNER_FRAMES[frameIndex], ansi.dim)}`);
+  }, SPINNER_INTERVAL_MS);
+
+  return {
+    stop(finalText?: string | null): void {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+      clearInline();
+      if (finalText) out.write(`${finalText}\n`);
+    },
+  };
+}
+
+export async function spinForMoment(
+  message: string,
+  finalText = message,
+  durationMs = DEFAULT_SPINNER_MS,
+): Promise<void> {
+  const spinner = startInlineSpinner(message);
+  await Bun.sleep(durationMs);
+  spinner.stop(finalText);
+}
+
+export function formatTextPrompt(label: string, defaultValue: string): string {
+  return `${label}: ${paintValue(`[${defaultValue}]`)}`;
+}
+
+export function formatBooleanPrompt(
+  label: string,
+  defaultValue: boolean,
+): string {
+  return `${label} ${paintValue(`[${defaultValue ? "Y/n" : "y/N"}]`)}`;
 }
 
 export function printInteractiveSetupHeader(opts: {
   profileName: string;
   firstProfileOnMachine: boolean;
 }): void {
-  line();
-  hr();
-  if (opts.firstProfileOnMachine) {
-    line(
-      paint(out, "TaskManager — first-time setup", ansi.bold + ansi.cyan),
-    );
-    line(
-      paint(
-        out,
-        "No profiles were found yet. This wizard creates your default profile and saves it under your user folder.",
-        ansi.dim,
-      ),
-    );
-  } else {
-    line(paint(out, "TaskManager — profile setup", ansi.bold + ansi.cyan));
-    line(
-      paint(
-        out,
-        `Configure profile "${opts.profileName}" (launcher settings and paths).`,
-        ansi.dim,
-      ),
-    );
-  }
-  hr();
-  line();
-}
-
-export function printPortPromptExplainer(): void {
-  line(paint(out, "Local URL port", ansi.bold));
+  // Keep the setup header to one line so first run stays dense and scannable.
   line(
     paint(
       out,
-      "This port is where the web app and HTTP API listen on this machine only.",
-      ansi.dim,
-    ),
-  );
-  line(
-    paint(
-      out,
-      "You will open: http://127.0.0.1:<port>  (and hirotm uses the same port.)",
-      ansi.dim,
-    ),
-  );
-  line();
-}
-
-export function printDataDirExplainer(): void {
-  line(paint(out, "Data directory", ansi.bold));
-  line(
-    paint(
-      out,
-      "Your SQLite database (taskmanager.db) and on-disk app data are stored here.",
-      ansi.dim,
-    ),
-  );
-  line(
-    paint(
-      out,
-      "Pick a folder you can back up; avoid network drives if you care about reliability.",
-      ansi.dim,
-    ),
-  );
-  line();
-}
-
-export function printOpenBrowserExplainer(): void {
-  line(paint(out, "Open browser when the server starts", ansi.bold));
-  line(
-    paint(
-      out,
-      "If you choose yes, your default browser opens to the app URL right after the server is ready.",
-      ansi.dim,
-    ),
-  );
-  line();
-}
-
-export function printSavedProfileSummary(opts: {
-  profileName: string;
-  configPath: string;
-  profileRootDir: string;
-  dataDir: string;
-  authDir: string;
-}): void {
-  line();
-  hr();
-  line(paint(out, "Profile saved", ansi.bold + ansi.green));
-  line(`  ${paint(out, "Profile name", ansi.dim)}   ${opts.profileName}`);
-  line(`  ${paint(out, "Config file", ansi.dim)}    ${opts.configPath}`);
-  line(`  ${paint(out, "Profile folder", ansi.dim)} ${opts.profileRootDir}`);
-  line(`  ${paint(out, "Data (database)", ansi.dim)} ${opts.dataDir}`);
-  line(`  ${paint(out, "Auth storage", ansi.dim)}    ${opts.authDir}`);
-  hr();
-  line();
-}
-
-export function printStartingServer(port: number): void {
-  line(
-    paint(
-      out,
-      `Starting TaskManager server on port ${port} …`,
+      opts.firstProfileOnMachine
+        ? "Hiro Task Manager - First-time Setup..."
+        : `Hiro Task Manager - Profile Setup: ${opts.profileName}`,
       ansi.bold + ansi.cyan,
     ),
   );
 }
 
-export function printRunningAt(url: string): void {
-  line(paint(out, `Running at ${url}`, ansi.bold + ansi.green));
+export function printSavedProfileSummary(opts: {
+  created: boolean;
+  profileName: string;
+  appUrl: string;
+  dataDir: string;
+  openBrowser: boolean;
+}): void {
+  line(
+    `${opts.created ? paintSuccess("Profile Created:") : paintSuccess("Profile Saved:")} ${paintValue(opts.profileName)}`,
+  );
+  line(`  ${paintWarning("App URL:")}      ${paintValue(opts.appUrl)}`);
+  line(`  ${paintWarning("Data Path:")}    ${paintValue(opts.dataDir)}`);
+  line(
+    `  ${paintWarning("Open Browser:")} ${paintValue(opts.openBrowser ? "Yes" : "No")}`,
+  );
 }
 
-/**
- * After interactive setup, before browser opens: web passphrase + recovery key + skills.
- */
-export function printFirstWebAuthAndSkillsBox(opts: {
-  appUrl: string;
-}): void {
+export async function printPassphraseHint(): Promise<void> {
+  // Keep the browser handoff to one line because the recovery key prints later from the server.
+  const text =
+    "Create your passphrase in the browser. Your recovery key prints here once.";
+  await spinForMoment(text, text);
+}
+
+export function printRecoveryKey(recoveryKey: string): void {
   line();
-  hr();
-  line(
-    paint(out, "Next: unlock the web app", ansi.bold + ansi.yellow),
-  );
+  line(paintWarning("Recovery Key:"));
+  line(paintValue(recoveryKey));
   line(
     paint(
       out,
-      "1. In the browser, create your passphrase (this encrypts local access to Task Manager).",
-      ansi.reset,
-    ),
-  );
-  line(
-    paint(
-      out,
-      "2. After you submit it, come back to this terminal — your recovery key prints here once.",
-      ansi.reset,
-    ),
-  );
-  line(
-    paint(
-      out,
-      "   " + paint(out, "Copy that key and store it outside the app.", ansi.magenta),
-      ansi.reset,
-    ),
-  );
-  line();
-  line(
-    paint(out, `App URL: ${opts.appUrl}`, ansi.cyan),
-  );
-  line();
-  line(paint(out, "Agent skills (optional)", ansi.bold));
-  line(
-    paint(
-      out,
-      "From a clone of the hirotaskmanager repo, install the bundled skill for AI agents:",
+      "Store it on a separate device. It will never show again.",
       ansi.dim,
     ),
   );
   line(
     paint(
       out,
-      "  npx skills add ./skills/hiro-task-manager-cli",
-      ansi.cyan,
-    ),
-  );
-  line(
-    paint(
-      out,
-      "(Run from the repository root. Adjust the path if your clone lives elsewhere.)",
+      "Use it to recover your passphrase and access your server/data.",
       ansi.dim,
     ),
   );
-  hr();
   line();
+}
+
+export function printRecoveryKeyExitHint(appUrl: string): void {
+  // Explain why Enter returns to the shell without implying the server is stopping.
+  line(
+    `After you copy the recovery key, press Enter to close this launcher. TaskManager stays running at ${paintValue(appUrl)}.`,
+  );
 }
 
 export function isAuthInitialized(authDir: string): boolean {

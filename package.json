@@ -20,8 +20,12 @@
     "dist",
     "src",
     "README.md",
-    "scripts/postinstall-message.mjs"
+    "scripts/postinstall-message.mjs",
+    "scripts/stubs/node-domexception"
   ],
+  "overrides": {
+    "node-domexception": "file:./scripts/stubs/node-domexception"
+  },
   "bin": {
     "hirotaskmanager": "./src/cli/bin/hirotaskmanager.ts",
     "hirotm": "./src/cli/bin/hirotm.ts"

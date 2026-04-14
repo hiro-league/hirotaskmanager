@@ -3,8 +3,14 @@
  *
  * npm v7+ runs lifecycle scripts with stdio piped (foreground-scripts=false by
  * default), so console.log / console.error is silently swallowed. We bypass
- * this by writing directly to the terminal device (\\.\CON on Windows, /dev/tty on
- * Unix). Falls back to stderr when no terminal device is available (CI, piped).
+ * this by writing directly to the terminal device:
+ *   - Windows: \\.\CON  (UNC device path — avoids the ghost-file issue that
+ *     bare "CON" causes with git/Cursor on Windows)
+ *   - Unix:    /dev/tty
+ * Falls back to stderr when no terminal device is available (CI, piped).
+ *
+ * Border uses ASCII (+ - |) only: cmd.exe often uses a legacy code page, so
+ * UTF-8 box-drawing characters would render as mojibake (e.g. Γöî).
  */
 import { writeFileSync, openSync, closeSync } from 'node:fs';
 import { platform } from 'node:os';
@@ -14,9 +20,9 @@ if (process.env.CI === 'true' || process.env.SKIP_TASKMANAGER_POSTINSTALL === '1
 }
 
 const INNER = 60;
-const top    = `  ┌${'─'.repeat(INNER + 2)}┐`;
-const bottom = `  └${'─'.repeat(INNER + 2)}┘`;
-const row    = (t) => `  │  ${t.padEnd(INNER)}│`;
+const top = `  +${'-'.repeat(INNER + 2)}+`;
+const bottom = `  +${'-'.repeat(INNER + 2)}+`;
+const row = (t) => `  |  ${t.padEnd(INNER)}|`;
 
 const banner = [
   '',
@@ -35,12 +41,12 @@ const banner = [
 ].join('\n');
 
 /**
- * Try to write directly to the controlling terminal device, bypassing
- * npm's piped stdio so the message is visible even with foreground-scripts=false.
+ * Write directly to the controlling terminal device, bypassing npm's piped
+ * stdio so the message is visible even with foreground-scripts=false.
+ * Uses the UNC device path \\.\CON on Windows (not bare "CON") to avoid
+ * creating a ghost file entry that confuses git and Cursor.
  */
 function writeToTerminal(text) {
-  // Use \\.\CON on Windows: bare "CON" is a reserved name and Node can create a
-  // regular file named CON in cwd instead of opening the console device.
   const device = platform() === 'win32' ? '\\\\.\\CON' : '/dev/tty';
   try {
     const fd = openSync(device, 'w');
@@ -55,8 +61,6 @@ function writeToTerminal(text) {
   }
 }
 
-// Primary: write to the terminal device directly (survives npm stdio capture).
-// Fallback: stderr (works when foreground-scripts=true or run manually).
 if (!writeToTerminal(banner)) {
   console.error(banner);
 }

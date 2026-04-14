@@ -1,3 +1,4 @@
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
@@ -9,7 +10,6 @@ import {
 import {
   getDefaultInstalledAuthDir,
   getDefaultInstalledDataDir,
-  getCliHomeDir,
   hasCliConfigFile,
   readConfigFile,
   resolveProfileName,
@@ -23,15 +23,17 @@ import { CliError, exitWithError } from "../lib/output";
 import { startServer } from "../lib/process";
 import { canPromptInteractively } from "../lib/tty";
 import {
+  formatBooleanPrompt,
+  formatTextPrompt,
   isAuthInitialized,
-  printDataDirExplainer,
-  printFirstWebAuthAndSkillsBox,
+  paintValue,
+  printPassphraseHint,
+  printRecoveryKey,
+  printRecoveryKeyExitHint,
   printInteractiveSetupHeader,
-  printOpenBrowserExplainer,
-  printPortPromptExplainer,
-  printRunningAt,
   printSavedProfileSummary,
-  printStartingServer,
+  spinForMoment,
+  startInlineSpinner,
 } from "../lib/launcherUi";
 
 /** Phase 3: installed-app launcher logic (formerly all of app.ts). */
@@ -108,7 +110,7 @@ async function promptWithDefault(
     output: process.stdout,
   });
   try {
-    const answer = await rl.question(`${question} [${defaultValue}]: `);
+    const answer = await rl.question(`${question} `);
     return answer.trim() || defaultValue;
   } finally {
     rl.close();
@@ -119,14 +121,13 @@ async function promptBoolean(
   question: string,
   defaultValue: boolean,
 ): Promise<boolean> {
-  const label = defaultValue ? "Y/n" : "y/N";
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
   try {
     for (;;) {
-      const answer = (await rl.question(`${question} [${label}]: `))
+      const answer = (await rl.question(`${question}: `))
         .trim()
         .toLowerCase();
       if (!answer) return defaultValue;
@@ -174,21 +175,33 @@ async function runLauncherSetup(overrides: {
     firstProfileOnMachine: machineHadNoProfilesBefore,
   });
 
-  printPortPromptExplainer();
+  // Show the profile context line first so the user understands why the
+  // following prompts are being asked.
+  await spinForMoment(
+    "Looking for existing profiles...",
+    machineHadNoProfilesBefore
+      ? `Creating Profile: ${paintValue(resolveProfileName(configScope))}`
+      : `Using Profile: ${paintValue(resolveProfileName(configScope))}`,
+  );
+
   const portValue = await promptWithDefault(
-    "Port number for http://127.0.0.1 (web + API)",
+    formatTextPrompt("Pick a port for web/api", String(defaults.port)),
     String(defaults.port),
   );
 
-  printDataDirExplainer();
   const dataDirValue = await promptWithDefault(
-    "Folder for database and app data (taskmanager.db, etc.)",
+    formatTextPrompt(
+      "Pick a Data Directory to place the database",
+      defaults.data_dir,
+    ),
     defaults.data_dir,
   );
 
-  printOpenBrowserExplainer();
   const openBrowser = await promptBoolean(
-    "Open this URL in your browser when the server starts",
+    formatBooleanPrompt(
+      "Open default browser when starting the server with hirotaskmanager",
+      defaults.open_browser,
+    ),
     defaults.open_browser,
   );
 
@@ -199,20 +212,25 @@ async function runLauncherSetup(overrides: {
     auth_dir: defaults.auth_dir,
     open_browser: openBrowser,
   };
-  const savedPath = writeConfigFile(config, configScope);
-  const profileRoot = getCliHomeDir(configScope);
+  writeConfigFile(config, configScope);
   ensureRuntimeDirectories({
     ...configScope,
     dataDir: config.data_dir,
     authDir: config.auth_dir,
   });
 
+  await spinForMoment(
+    machineHadNoProfilesBefore
+      ? `Saving Profile: ${paintValue(resolveProfileName(configScope))}`
+      : `Saving Profile: ${paintValue(resolveProfileName(configScope))}`,
+  );
+
   printSavedProfileSummary({
+    created: machineHadNoProfilesBefore,
     profileName: resolveProfileName(configScope),
-    configPath: savedPath,
-    profileRootDir: profileRoot,
+    appUrl: `http://127.0.0.1:${config.port}`,
     dataDir: path.resolve(config.data_dir!),
-    authDir: path.resolve(config.auth_dir!),
+    openBrowser,
   });
 
   return {
@@ -243,6 +261,37 @@ async function openBrowser(url: string): Promise<void> {
     child.unref();
   } catch {
     console.warn(`Could not open a browser automatically. Visit ${url}`);
+  }
+}
+
+/**
+ * Poll for the recovery-key sidecar file written by the server during
+ * `setupPassphrase`. Returns the key string once available, then deletes the
+ * file so it is never left on disk.
+ */
+async function waitForRecoveryKeyFile(authDir: string): Promise<string> {
+  const keyPath = path.join(authDir, "recovery-key.tmp");
+  while (!existsSync(keyPath)) {
+    await Bun.sleep(250);
+  }
+  const key = readFileSync(keyPath, "utf8").trim();
+  try {
+    unlinkSync(keyPath);
+  } catch {
+    // Best-effort cleanup; the file has owner-only perms already.
+  }
+  return key;
+}
+
+async function waitForEnterToExitLauncher(): Promise<void> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    await rl.question("");
+  } finally {
+    rl.close();
   }
 }
 
@@ -313,36 +362,62 @@ export function createHirotaskmanagerProgram(): Command {
           overrideOpenBrowser ?? launcherConfig.open_browser ?? true;
 
         const url = `http://127.0.0.1:${port}`;
+        const needsRecoveryKeyExitFlow =
+          setupResult.setupMeta.justFinishedInteractiveSetup &&
+          !isAuthInitialized(authDir);
 
-        printStartingServer(port);
+        const startupSpinner = startInlineSpinner(
+          `Starting Server with profile ${paintValue(selectedProfile)}: ${paintValue(url)}`,
+        );
+        const previousSilentStartup = process.env.TASKMANAGER_SILENT_STARTUP_LOG;
+        // Let the launcher own startup copy so first-time setup stays compact.
+        process.env.TASKMANAGER_SILENT_STARTUP_LOG = "1";
 
         let browserHandled = false;
-        await startServer(
-          {
-            kind: "installed",
-            profile: selectedProfile,
-            port,
-            dataDir,
-          },
-          false,
-          async (status) => {
-            const finalUrl = status.url ?? url;
-            printRunningAt(finalUrl);
+        let runningUrl = url;
+        try {
+          await startServer(
+            {
+              kind: "installed",
+              profile: selectedProfile,
+              port,
+              dataDir,
+            },
+            needsRecoveryKeyExitFlow
+              ? "background-attached"
+              : "foreground",
+            async (status) => {
+              const finalUrl = status.url ?? url;
+              runningUrl = finalUrl;
+              startupSpinner.stop(
+                `Started, listening at ${paintValue(finalUrl)}`,
+              );
 
-            // After interactive setup, explain passphrase → recovery key → skills before opening the browser.
-            if (
-              setupResult.setupMeta.justFinishedInteractiveSetup &&
-              !isAuthInitialized(authDir)
-            ) {
-              printFirstWebAuthAndSkillsBox({ appUrl: finalUrl });
-            }
+              if (!browserHandled && shouldOpenBrowser) {
+                browserHandled = true;
+                await openBrowser(finalUrl);
+              }
 
-            if (!browserHandled && shouldOpenBrowser) {
-              browserHandled = true;
-              await openBrowser(finalUrl);
-            }
-          },
-        );
+              if (needsRecoveryKeyExitFlow) {
+                await printPassphraseHint();
+              }
+            },
+          );
+
+          if (needsRecoveryKeyExitFlow) {
+            const recoveryKey = await waitForRecoveryKeyFile(authDir);
+            printRecoveryKey(recoveryKey);
+            printRecoveryKeyExitHint(runningUrl);
+            await waitForEnterToExitLauncher();
+          }
+        } finally {
+          if (previousSilentStartup === undefined) {
+            delete process.env.TASKMANAGER_SILENT_STARTUP_LOG;
+          } else {
+            process.env.TASKMANAGER_SILENT_STARTUP_LOG = previousSilentStartup;
+          }
+          startupSpinner.stop(null);
+        }
       } catch (error) {
         exitWithError(error);
       }

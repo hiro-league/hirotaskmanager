@@ -1,0 +1,7 @@
+{
+  "name": "node-domexception",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "license": "MIT",
+  "description": "Vendored shim matching registry node-domexception@1.0.0 (not deprecated on npm)."
+}

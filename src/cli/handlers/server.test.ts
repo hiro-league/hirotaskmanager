@@ -4,6 +4,7 @@ import { createTestCliRuntime } from "../lib/runtime";
 import { createDefaultCliContext } from "./context";
 import { handleServerStart, handleServerStatus, handleServerStop } from "./server";
 import type { CliContext } from "./context";
+import type { ServerStartMode } from "../ports/process";
 
 function baseCtx(overrides: Partial<CliContext> = {}): CliContext {
   return {
@@ -37,15 +38,15 @@ describe("handleServerStatus", () => {
 describe("handleServerStart / handleServerStop", () => {
   test("background start passes dataDir + port and prints JSON status", async () => {
     let startArgs: ConfigOverrides | undefined;
-    let backgroundFlag: boolean | undefined;
+    let startMode: ServerStartMode | undefined;
     const status = { running: true, pid: 99, port: 3040 };
     let printed: unknown;
     const ctx = baseCtx({
       resolveDataDir: () => "/custom/data",
       resolvePort: () => 3040,
-      startServer: async (opts, bg) => {
+      startServer: async (opts, mode) => {
         startArgs = opts;
-        backgroundFlag = bg;
+        startMode = mode;
         return status;
       },
       printJson: (d) => {
@@ -59,22 +60,22 @@ describe("handleServerStart / handleServerStop", () => {
       dataDir: "/custom/data",
       port: 3040,
     } satisfies ConfigOverrides);
-    expect(backgroundFlag).toBe(true);
+    expect(startMode).toBe("background");
     expect(printed).toEqual(status);
   });
 
-  test("foreground start awaits startServer with background false", async () => {
-    let backgroundFlag: boolean | undefined;
+  test("foreground start awaits startServer with foreground mode", async () => {
+    let startMode: ServerStartMode | undefined;
     const ctx = baseCtx({
-      startServer: async (_opts, bg) => {
-        backgroundFlag = bg;
+      startServer: async (_opts, mode) => {
+        startMode = mode;
         return { running: false };
       },
     });
 
     await handleServerStart(ctx, {});
 
-    expect(backgroundFlag).toBe(false);
+    expect(startMode).toBe("foreground");
   });
 
   test("stop prints status from stopServer", async () => {

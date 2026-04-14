@@ -11,13 +11,13 @@ export async function handleServerStart(
   const dataDir = ctx.resolveDataDir({ dataDir: options.dataDir });
 
   if (options.background) {
-    const status = await ctx.startServer({ dataDir, port }, true);
+    const status = await ctx.startServer({ dataDir, port }, "background");
     ctx.printJson(status);
     return;
   }
 
   // Run in production mode so the installed CLI uses a stable home data directory by default.
-  await ctx.startServer({ dataDir, port }, false);
+  await ctx.startServer({ dataDir, port }, "foreground");
 }
 
 export async function handleServerStatus(ctx: CliContext): Promise<void> {

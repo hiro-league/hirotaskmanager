@@ -20,6 +20,7 @@ import { CLI_DEFAULTS, CLI_POLLING } from "./constants";
 import { CLI_ERR } from "../types/errors";
 import type { ServerStatus } from "../types/config";
 import { CliError } from "./output";
+import type { ServerStartMode } from "../ports/process";
 
 interface ManagedServerRecord {
   pid: number;
@@ -138,7 +139,7 @@ export async function readServerStatus(
 
 export async function startServer(
   overrides: ConfigOverrides = {},
-  background = false,
+  mode: ServerStartMode = "foreground",
   onReady?: ServerReadyCallback,
 ): Promise<ServerStatus> {
   const port = overrides.port;
@@ -153,6 +154,8 @@ export async function startServer(
   }
 
   const resolvedPort = resolvePort({ ...overrides, port: overrides.port });
+  const runDetached = mode !== "foreground";
+  const silenceConsole = mode === "background";
   const child = Bun.spawn({
     // Profile and port are passed on argv (bootstrap parsers); do not rely on TASKMANAGER_* env for these.
     cmd: [
@@ -164,14 +167,16 @@ export async function startServer(
       String(resolvedPort),
     ],
     cwd: process.cwd(),
-    detached: background,
+    detached: runDetached,
     env: buildServerEnv({ ...overrides, port }),
-    stderr: background ? "ignore" : "inherit",
-    stdin: background ? "ignore" : "inherit",
-    stdout: background ? "ignore" : "inherit",
+    // First-run launcher mode keeps the server alive after the launcher exits,
+    // but still lets the recovery key print in the same terminal.
+    stderr: silenceConsole ? "ignore" : "inherit",
+    stdin: runDetached ? "ignore" : "inherit",
+    stdout: silenceConsole ? "ignore" : "inherit",
   });
 
-  if (background) {
+  if (runDetached) {
     child.unref();
 
     const healthy = await waitForHealth(port, CLI_DEFAULTS.SERVER_START_WAIT_MS);

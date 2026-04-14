@@ -71,6 +71,18 @@ If you are not allowed to access an entity or perform an operation due to CLI Ac
 ## References
 
 - [Installation Guide](https://docs.hiroleague.com/task-manager/get-started/quick-start)
+- Server Commands - Start, stop, and check the server status.
+- [Boards Commands](reference/boards.md) - Create, update, delete, list, describe, and configure boards.
+- [Lists Commands](reference/lists.md) - List, add, update, move, delete, restore, and purge board lists.
+- [Tasks Commands](reference/tasks.md) - List, add, update, move, delete, restore, and purge tasks.
+- [Releases Commands](reference/releases.md) - List, show, add, update, and delete releases.
+- [Trash Commands](reference/trash.md) - Inspect trashed boards, lists, and tasks.
+- [Status Commands](reference/statuses.md) - List workflow statuses and their meanings.
+- [Search Commands](reference/search.md) - Full-text task search with `query search`.
+- [CLI Access Policy](reference/cli-access-policy.md) - Map commands to `cliPolicy` requirements and read/write permissions.
+- [Errors and Exit Codes](reference/errors.md) - Exit codes, stderr fields, and common machine-readable codes.
+
+
 
 **Safety notes**
 

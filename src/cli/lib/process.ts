@@ -94,9 +94,8 @@ function buildServerEnv(overrides: ConfigOverrides): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     TASKMANAGER_RUNTIME: resolveRuntimeKind(overrides),
-    TASKMANAGER_PROFILE: resolveProfileName(overrides),
-    TASKMANAGER_PORT: String(overrides.port),
   };
+  delete env.TASKMANAGER_PORT;
 
   // Pass the resolved data directory explicitly so the child process uses the
   // same profile-aware runtime config as the parent command.
@@ -153,8 +152,17 @@ export async function startServer(
     return currentStatus;
   }
 
+  const resolvedPort = resolvePort({ ...overrides, port: overrides.port });
   const child = Bun.spawn({
-    cmd: [process.execPath, getServerEntryPath(overrides)],
+    // Profile and port are passed on argv (bootstrap parsers); do not rely on TASKMANAGER_* env for these.
+    cmd: [
+      process.execPath,
+      getServerEntryPath(overrides),
+      "--profile",
+      resolveProfileName(overrides),
+      "--port",
+      String(resolvedPort),
+    ],
     cwd: process.cwd(),
     detached: background,
     env: buildServerEnv({ ...overrides, port }),

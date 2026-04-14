@@ -401,9 +401,7 @@ Usage:
 hirotm --profile remote boards list
 hirotm --profile remote tasks add --board sprint --list 3 --group 1 --title "New task" --client-name "Cursor Agent"
 
-# Or set once per shell:
-export TASKMANAGER_PROFILE=remote
-hirotm boards list
+# Or use a shell alias / wrapper that always adds `--profile remote`.
 ```
 
 ---
@@ -582,9 +580,7 @@ EOF
 hirotm --profile remote server status
 hirotm --profile remote boards list
 
-# For ongoing use, set the profile once:
-export TASKMANAGER_PROFILE=remote
-hirotm boards list
+# For ongoing use, pass `--profile remote` on each command (or use a shell alias).
 ```
 
 ---

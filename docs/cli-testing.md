@@ -112,7 +112,7 @@ CLI and server both resolve **profile** → config under `~/.taskmanager/profile
 
 - **Isolated automation** — Use a dedicated profile (e.g. `test` or `ci`) with **`data_dir`** pointing at a **temp directory** (unique per parallel worker if needed) and a **free port** so runs do not touch the developer’s default DB or port.
 - **`dev` profile caveat** — Default dev data dir is the **repo `data/`** tree; avoid that for hermetic CI unless you intentionally override `data_dir` in profile config or env.
-- **Subprocess + real HTTP** — Start the server with the same profile (or matching `TASKMANAGER_PROFILE` / port / data), then invoke `hirotm … --profile <name>` so base URL and DB stay aligned.
+- **Subprocess + real HTTP** — Start the server with the same profile, port, and data paths, then invoke `hirotm … --profile <name>` so base URL and DB stay aligned.
 
 ---
 
@@ -208,7 +208,7 @@ Goal: behavior agents rely on — **machine-readable success and failure**, **di
 - [x] **`--help`** — Exit **0**; usage text (Commander wiring) (`subprocess.smoke.test.ts`).
 - [x] **Subcommand `--help` spot-check** — `boards --help`, `query search --help` (`subprocess.smoke.test.ts`).
 - [x] **Handler validation subprocess** — Empty `query search` → exit **2** + JSON stderr; Commander missing arg (`boards describe`) → exit **1** + plain stderr (`subprocess.smoke.test.ts`).
-- [x] **Real stack (opt-in, `RUN_CLI_REAL_STACK=1`)** — Temp data/auth dirs, `integrationPrepareAuth.ts`, `bootstrapDev.ts` child, `hirotm boards list` → `[]`, `hirotm statuses list` → seeded rows (`subprocess.real-stack.test.ts`). No manual profile: isolation uses **`TASKMANAGER_DATA_DIR`**, **`TASKMANAGER_AUTH_DIR`**, **`HOME`**, ephemeral port.
+- [x] **Real stack (opt-in, `RUN_CLI_REAL_STACK=1`)** — Temp data/auth dirs, `integrationPrepareAuth.ts`, `bootstrapDev.ts` child, `hirotm boards list` → `[]`, `hirotm statuses list` → seeded rows (`subprocess.real-stack.test.ts`). Isolation uses **`TASKMANAGER_DATA_DIR`**, **`TASKMANAGER_AUTH_DIR`**, **`HOME`**, plus **`--profile`** / **`--port`** on spawned server and **`hirotm`** for an ephemeral port.
 
 ---
 

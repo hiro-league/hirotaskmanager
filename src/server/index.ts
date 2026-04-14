@@ -100,10 +100,12 @@ function assertInstalledDistReady(): void {
 export async function startTaskManagerServer(options: {
   kind: RuntimeKind;
   profile?: string;
+  port?: number;
 }): Promise<ReturnType<typeof Bun.serve>> {
   setRuntimeConfigSelection({
     kind: options.kind,
     profile: options.profile,
+    port: options.port,
   });
 
   await ensureDataDir();
@@ -123,6 +125,7 @@ export async function startTaskManagerServer(options: {
     port: resolvePort({
       kind: options.kind,
       profile: options.profile,
+      port: options.port,
     }),
     fetch: app.fetch,
     // SSE keeps requests open by design, so raise the idle timeout above the

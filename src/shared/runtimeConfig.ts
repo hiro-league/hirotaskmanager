@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 export type RuntimeKind = "installed" | "dev";
@@ -22,6 +28,8 @@ export interface RuntimeConfigOverrides {
 
 let selectedRuntimeKind: RuntimeKind | undefined;
 let selectedProfileName: string | undefined;
+/** Set from global `hirotm --port` (parsed before Commander); not read from any env var. */
+let selectedCliPort: number | undefined;
 
 function normalizeProfileName(profile: string | undefined): string | undefined {
   const trimmed = profile?.trim();
@@ -68,18 +76,22 @@ function normalizeBoolean(value: unknown): boolean | undefined {
 export function setRuntimeConfigSelection(selection: {
   kind?: RuntimeKind;
   profile?: string;
+  port?: number;
 }): void {
   if (selection.kind) selectedRuntimeKind = selection.kind;
   if (selection.profile !== undefined) {
     selectedProfileName = normalizeProfileName(selection.profile);
+  }
+  if (selection.port !== undefined) {
+    const p = normalizePort(selection.port);
+    selectedCliPort = p;
   }
 }
 
 export function resolveRuntimeKind(overrides: RuntimeConfigOverrides = {}): RuntimeKind {
   const inferredFromProfile =
     inferRuntimeKindFromProfile(normalizeProfileName(overrides.profile)) ??
-    inferRuntimeKindFromProfile(selectedProfileName) ??
-    inferRuntimeKindFromProfile(normalizeProfileName(process.env.TASKMANAGER_PROFILE));
+    inferRuntimeKindFromProfile(selectedProfileName);
 
   return (
     overrides.kind ??
@@ -94,13 +106,29 @@ export function resolveProfileName(overrides: RuntimeConfigOverrides = {}): stri
   return (
     normalizeProfileName(overrides.profile) ??
     selectedProfileName ??
-    normalizeProfileName(process.env.TASKMANAGER_PROFILE) ??
     (resolveRuntimeKind(overrides) === "dev" ? "dev" : "default")
   );
 }
 
 export function getTaskManagerHomeDir(): string {
   return path.join(resolveHomeDir(), ".taskmanager");
+}
+
+/** True if any `~/.taskmanager/profiles/<name>/config.json` exists (any named profile). */
+export function hasAnyProfileConfigOnDisk(): boolean {
+  const profilesRoot = path.join(getTaskManagerHomeDir(), "profiles");
+  if (!existsSync(profilesRoot)) return false;
+  try {
+    for (const ent of readdirSync(profilesRoot, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      if (existsSync(path.join(profilesRoot, ent.name, "config.json"))) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 export function getProfileRootDir(overrides: RuntimeConfigOverrides = {}): string {
@@ -191,7 +219,7 @@ export function resolvePort(overrides: RuntimeConfigOverrides = {}): number {
   const config = readProfileConfig(overrides);
   return (
     normalizePort(overrides.port) ??
-    normalizePort(process.env.TASKMANAGER_PORT) ??
+    normalizePort(selectedCliPort) ??
     normalizePort(config.port) ??
     getDefaultPort(overrides)
   );

@@ -62,8 +62,8 @@ function buildStartCommand(overrides: ConfigOverrides = {}): string {
     command.push("--profile", profile);
   }
 
-  // Port is not a CLI flag; it comes from profile config or TASKMANAGER_PORT. The shell
-  // inherits env when copy-pasting this command, so overrides still apply.
+  // Port is not a subcommand flag; use global `hirotm --port` or profile config.json.
+  // The shell inherits env when copy-pasting this command.
 
   return command.join(" ");
 }

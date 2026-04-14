@@ -28,6 +28,10 @@ export function setRuntimeProfile(profile: string | undefined): void {
   setRuntimeConfigSelection({ profile });
 }
 
+export function setRuntimeCliPort(port: number | undefined): void {
+  setRuntimeConfigSelection({ port });
+}
+
 export function setRuntimeKind(kind: RuntimeKind | undefined): void {
   setRuntimeConfigSelection({ kind });
 }

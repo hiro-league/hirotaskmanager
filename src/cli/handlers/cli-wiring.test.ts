@@ -17,7 +17,7 @@ function reqUrl(input: RequestInfo | URL): string {
   return typeof input === "string" ? input : (input as Request).url;
 }
 
-/** Deterministic port for fetch URL assertions (no CLI `--port`; profile/env/config only). */
+/** Deterministic port for fetch URL assertions (injected `resolvePort`; not parsing argv here). */
 function wiringContext(): CliContext {
   return {
     ...createDefaultCliContext(),

@@ -2,10 +2,14 @@ import path from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
-import { ensureRuntimeDirectories } from "../../shared/runtimeConfig";
+import {
+  ensureRuntimeDirectories,
+  hasAnyProfileConfigOnDisk,
+} from "../../shared/runtimeConfig";
 import {
   getDefaultInstalledAuthDir,
   getDefaultInstalledDataDir,
+  getCliHomeDir,
   hasCliConfigFile,
   readConfigFile,
   resolveProfileName,
@@ -18,6 +22,17 @@ import { CLI_DEFAULTS } from "../lib/constants";
 import { CliError, exitWithError } from "../lib/output";
 import { startServer } from "../lib/process";
 import { canPromptInteractively } from "../lib/tty";
+import {
+  isAuthInitialized,
+  printDataDirExplainer,
+  printFirstWebAuthAndSkillsBox,
+  printInteractiveSetupHeader,
+  printOpenBrowserExplainer,
+  printPortPromptExplainer,
+  printRunningAt,
+  printSavedProfileSummary,
+  printStartingServer,
+} from "../lib/launcherUi";
 
 /** Phase 3: installed-app launcher logic (formerly all of app.ts). */
 
@@ -26,6 +41,16 @@ interface LauncherOptions {
   dataDir?: string;
   browser?: string;
   profile?: string;
+}
+
+export interface LauncherSetupResult {
+  config: CliConfigFile;
+  setupMeta: {
+    /** User went through interactive prompts (not bunx / non-TTY defaults). */
+    justFinishedInteractiveSetup: boolean;
+    /** No profile had config.json on disk before this run’s save. */
+    firstProfileOnMachine: boolean;
+  };
 }
 
 function parseBrowserMode(browser: string | undefined): boolean | undefined {
@@ -119,10 +144,11 @@ async function runLauncherSetup(overrides: {
   port?: number;
   dataDir?: string;
   openBrowser?: boolean;
-}): Promise<CliConfigFile> {
+}): Promise<LauncherSetupResult> {
   const defaults = resolveLauncherDefaults(overrides);
   const configScope = { profile: overrides.profile, kind: "installed" as const };
   const existing = readConfigFile(configScope);
+  const machineHadNoProfilesBefore = !hasAnyProfileConfigOnDisk();
 
   // Keep the first-run path working for bunx and other non-interactive entry
   // points by saving sane defaults instead of failing on missing prompts.
@@ -134,18 +160,35 @@ async function runLauncherSetup(overrides: {
       dataDir: config.data_dir,
       authDir: config.auth_dir,
     });
-    return config;
+    return {
+      config,
+      setupMeta: {
+        justFinishedInteractiveSetup: false,
+        firstProfileOnMachine: machineHadNoProfilesBefore,
+      },
+    };
   }
 
-  console.log("TaskManager first-run setup");
+  printInteractiveSetupHeader({
+    profileName: resolveProfileName(configScope),
+    firstProfileOnMachine: machineHadNoProfilesBefore,
+  });
 
-  const portValue = await promptWithDefault("Port", String(defaults.port));
+  printPortPromptExplainer();
+  const portValue = await promptWithDefault(
+    "Port number for http://127.0.0.1 (web + API)",
+    String(defaults.port),
+  );
+
+  printDataDirExplainer();
   const dataDirValue = await promptWithDefault(
-    "Data directory",
+    "Folder for database and app data (taskmanager.db, etc.)",
     defaults.data_dir,
   );
+
+  printOpenBrowserExplainer();
   const openBrowser = await promptBoolean(
-    "Open browser automatically",
+    "Open this URL in your browser when the server starts",
     defaults.open_browser,
   );
 
@@ -157,13 +200,28 @@ async function runLauncherSetup(overrides: {
     open_browser: openBrowser,
   };
   const savedPath = writeConfigFile(config, configScope);
+  const profileRoot = getCliHomeDir(configScope);
   ensureRuntimeDirectories({
     ...configScope,
     dataDir: config.data_dir,
     authDir: config.auth_dir,
   });
-  console.log(`Saved launcher config to ${savedPath}`);
-  return config;
+
+  printSavedProfileSummary({
+    profileName: resolveProfileName(configScope),
+    configPath: savedPath,
+    profileRootDir: profileRoot,
+    dataDir: path.resolve(config.data_dir!),
+    authDir: path.resolve(config.auth_dir!),
+  });
+
+  return {
+    config,
+    setupMeta: {
+      justFinishedInteractiveSetup: true,
+      firstProfileOnMachine: machineHadNoProfilesBefore,
+    },
+  };
 }
 
 async function openBrowser(url: string): Promise<void> {
@@ -214,13 +272,25 @@ export function createHirotaskmanagerProgram(): Command {
         const shouldRunSetup =
           options.setup ||
           !hasCliConfigFile({ profile: selectedProfile, kind: "installed" });
-        const launcherConfig = shouldRunSetup
+
+        const setupResult: LauncherSetupResult = shouldRunSetup
           ? await runLauncherSetup({
               profile: selectedProfile,
               dataDir: overrideDataDir,
               openBrowser: overrideOpenBrowser,
             })
-          : readConfigFile({ profile: selectedProfile, kind: "installed" });
+          : {
+              config: readConfigFile({
+                profile: selectedProfile,
+                kind: "installed",
+              }),
+              setupMeta: {
+                justFinishedInteractiveSetup: false,
+                firstProfileOnMachine: false,
+              },
+            };
+
+        const launcherConfig = setupResult.config;
 
         const port =
           launcherConfig.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
@@ -232,8 +302,19 @@ export function createHirotaskmanagerProgram(): Command {
               kind: "installed",
             }),
         );
+        const authDir = path.resolve(
+          launcherConfig.auth_dir ??
+            getDefaultInstalledAuthDir({
+              profile: selectedProfile,
+              kind: "installed",
+            }),
+        );
         const shouldOpenBrowser =
           overrideOpenBrowser ?? launcherConfig.open_browser ?? true;
+
+        const url = `http://127.0.0.1:${port}`;
+
+        printStartingServer(port);
 
         let browserHandled = false;
         await startServer(
@@ -245,11 +326,20 @@ export function createHirotaskmanagerProgram(): Command {
           },
           false,
           async (status) => {
-            const url = status.url ?? `http://127.0.0.1:${port}`;
-            console.log(`TaskManager running at ${url}`);
+            const finalUrl = status.url ?? url;
+            printRunningAt(finalUrl);
+
+            // After interactive setup, explain passphrase → recovery key → skills before opening the browser.
+            if (
+              setupResult.setupMeta.justFinishedInteractiveSetup &&
+              !isAuthInitialized(authDir)
+            ) {
+              printFirstWebAuthAndSkillsBox({ appUrl: finalUrl });
+            }
+
             if (!browserHandled && shouldOpenBrowser) {
               browserHandled = true;
-              await openBrowser(url);
+              await openBrowser(finalUrl);
             }
           },
         );

@@ -47,6 +47,28 @@ npm install -g ./hiroleague-taskmanager-<version>.tgz
 
 Then `hirotm` is on PATH (if npm’s global bin is on PATH).
 
+## Global install with Bun
+
+```bash
+bun install -g ./hiroleague-taskmanager-<version>.tgz
+```
+
+(or `bun install -g @hiroleague/taskmanager` from the registry, if published.)
+
+**Uninstall** — use Bun, not npm; global installs are separate:
+
+```bash
+bun remove -g @hiroleague/taskmanager
+```
+
+List what Bun installed globally:
+
+```bash
+bun pm ls -g
+```
+
+If `where hirotm` (Windows) or `which -a hirotm` points at something like `~/.bun/bin/hirotm.exe`, removing it is `bun remove -g` with the package name from `bun pm ls -g`, not `npm uninstall -g`.
+
 ## Publish dry-run
 
 ```bash
@@ -79,16 +101,20 @@ npm publish --dry-run --access public
 
    There is no package named `hirotm`; uninstall the **package** that provides the bin.
 
-5. **Orphan shims** — after uninstall, `where hirotm` may still find `AppData\Roaming\npm\hirotm` / `hirotm.cmd`. If the package is gone but those files remain, delete `hirotm`, `hirotm.cmd`, and `hirotm.ps1` (if present) under that folder, then open a new terminal.
+5. **Installed with Bun instead of npm** — npm global uninstall does nothing for Bun’s copy. Check `bun pm ls -g`, then `bun remove -g @hiroleague/taskmanager` (or the name shown there). **npm and Bun maintain separate global package trees**; uninstall with the same tool you used to install.
 
-6. **Confirm what a project resolved:**
+6. **Orphan shims** — after uninstall, `where hirotm` may still find `AppData\Roaming\npm\hirotm` / `hirotm.cmd`. If the package is gone but those files remain, delete `hirotm`, `hirotm.cmd`, and `hirotm.ps1` (if present) under that folder, then open a new terminal.
+
+   If the path is `…\.bun\bin\hirotm.exe`, fix it with `bun remove -g …` (step 5), not by editing npm’s folder.
+
+7. **Confirm what a project resolved:**
 
    ```bash
    npm ls @hiroleague/taskmanager
    npm explain @hiroleague/taskmanager
    ```
 
-7. **Inspect tarball contents without writing a file:**
+8. **Inspect tarball contents without writing a file:**
 
    ```bash
    npm pack --dry-run

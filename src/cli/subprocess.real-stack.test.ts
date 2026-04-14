@@ -27,6 +27,9 @@ const prepareAuthScript = path.join(
 );
 const bootstrapDev = path.join(repoRoot, "src", "server", "bootstrapDev.ts");
 
+/** Real-stack tests use an isolated HOME; pin profile and port via argv on each hirotm/server spawn. */
+const PROFILE_ARGS = ["--profile", "default"] as const;
+
 const runRealStack =
   process.env.RUN_CLI_REAL_STACK === "1" ||
   process.env.RUN_CLI_REAL_STACK === "true";
@@ -113,8 +116,6 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       ...process.env,
       TASKMANAGER_DATA_DIR: dataDir,
       TASKMANAGER_AUTH_DIR: authDir,
-      TASKMANAGER_PORT: String(port),
-      TASKMANAGER_PROFILE: "default",
       HOME: rootDir,
     };
 
@@ -132,7 +133,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     }
 
     serverProc = Bun.spawn({
-      cmd: ["bun", "run", bootstrapDev],
+      cmd: ["bun", bootstrapDev, ...PROFILE_ARGS, "--port", String(port)],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -163,15 +164,21 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     args: string[],
   ): Promise<{ code: number; stdout: string; stderr: string }> {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, ...args],
+      cmd: [
+        "bun",
+        "run",
+        hirotmEntry,
+        ...PROFILE_ARGS,
+        "--port",
+        String(port),
+        ...args,
+      ],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
       env: {
         ...process.env,
         HOME: rootDir,
-        TASKMANAGER_PROFILE: "default",
-        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -183,15 +190,22 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
   test("boards list returns NDJSON (empty DB → no stdout lines) via real GET /api/boards", async () => {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, "boards", "list"],
+      cmd: [
+        "bun",
+        "run",
+        hirotmEntry,
+        ...PROFILE_ARGS,
+        "--port",
+        String(port),
+        "boards",
+        "list",
+      ],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
       env: {
         ...process.env,
         HOME: rootDir,
-        TASKMANAGER_PROFILE: "default",
-        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -207,15 +221,22 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
   test("statuses list returns seeded workflow rows", async () => {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", hirotmEntry, "statuses", "list"],
+      cmd: [
+        "bun",
+        "run",
+        hirotmEntry,
+        ...PROFILE_ARGS,
+        "--port",
+        String(port),
+        "statuses",
+        "list",
+      ],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
       env: {
         ...process.env,
         HOME: rootDir,
-        TASKMANAGER_PROFILE: "default",
-        TASKMANAGER_PORT: String(port),
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -569,15 +590,22 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
     process.env.HOME = rootDir;
     try {
       const proc = Bun.spawn({
-        cmd: ["bun", "run", hirotmEntry, "boards", "list"],
+        cmd: [
+          "bun",
+          "run",
+          hirotmEntry,
+          ...PROFILE_ARGS,
+          "--port",
+          String(deadPort),
+          "boards",
+          "list",
+        ],
         cwd: repoRoot,
         stdout: "pipe",
         stderr: "pipe",
         env: {
           ...process.env,
           HOME: rootDir,
-          TASKMANAGER_PROFILE: "default",
-          TASKMANAGER_PORT: String(deadPort),
         },
       });
       const stderr = await readSubprocessStream(proc.stderr);

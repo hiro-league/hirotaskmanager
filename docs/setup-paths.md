@@ -123,7 +123,7 @@ npm run dev
 - or use `**npx hirotm`** / `**npm run cli --**`. 
 - Re-run `**npm link**` only if the global command breaks (e.g. after `npm unlink` or changing clones).
 
-`**hirotm` and dev:** the dev API is on **3002**; the CLI defaults to **3001**. Use `**hirotm … --profile dev**` or `**TASKMANAGER_PROFILE=dev**`.
+`**hirotm` and dev:** the dev API is on **3002**; the CLI defaults to **3001**. Use `**hirotm … --profile dev**` for repo dev on port 3002.
 
 **SQLite data in the repo:** the dev runtime now defaults to `data/taskmanager.db` under the repository root, so the normal `npm run dev` flow uses the tracked SQLite file without needing env vars.
 

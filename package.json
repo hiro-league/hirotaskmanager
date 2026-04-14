@@ -1,6 +1,6 @@
 {
   "name": "@hiroleague/taskmanager",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Local-only task board app (Bun + Hono + React)",
   "license": "UNLICENSED",
@@ -19,13 +19,15 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "scripts/postinstall-message.mjs"
   ],
   "bin": {
     "hirotaskmanager": "./src/cli/bin/hirotaskmanager.ts",
     "hirotm": "./src/cli/bin/hirotm.ts"
   },
   "scripts": {
+    "postinstall": "node scripts/postinstall-message.mjs",
     "app": "bun run src/cli/bin/hirotaskmanager.ts",
     "cli": "bun run src/cli/bin/hirotm.ts",
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",

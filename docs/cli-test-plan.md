@@ -652,7 +652,7 @@ Each test in this file already uses:
 - `bootstrapDev.ts` as child server process
 - `waitForHealth(port, timeout)` before running CLI commands
 
-New tests should reuse this setup. For write tests, the subprocess `hirotm` command is called with `-p <port>` and appropriate env vars (`HOME`, `TASKMANAGER_PROFILE`).
+New tests should reuse this setup. For write tests, the subprocess `hirotm` command is called with `-p <port>`, `--profile <name>`, and appropriate env vars (e.g. `HOME`).
 
 Helper for running CLI and capturing output:
 
@@ -663,7 +663,7 @@ async function runHirotm(args: string[]): Promise<{ code: number; stdout: string
     cwd: repoRoot,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, HOME: rootDir, TASKMANAGER_PROFILE: "default" },
+    env: { ...process.env, HOME: rootDir },
   });
   const [stdout, stderr] = await Promise.all([
     readSubprocessStream(proc.stdout),

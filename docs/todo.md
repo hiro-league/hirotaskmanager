@@ -56,3 +56,5 @@ different error codes, but it goes back to prompt this time..
 
 
 7. now, all is installed, but no clear path to install agents.md to repo folder...
+
+8. what happens when existing profiles exist from previous installs? should uninstall remove profiles? option?

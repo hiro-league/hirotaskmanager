@@ -6,7 +6,7 @@ Use `hirotm` as the **only** channel to read or mutate TaskManager data.
 
 | Context | Flag | When |
 |---------|------|------|
-| Dev server (`npm run dev`, port 3002) | `--profile dev` | Every command (or `export TASKMANAGER_PROFILE=dev` once) |
+| Dev server (`npm run dev`, port 3002) | `--profile dev` | Every command |
 | Agent writes (add / update / move / delete) | `--client-name "Cursor Agent"` | Every mutating command |
 | Script / agent deletes & purges | `--yes` | Non-interactive confirmation |
 

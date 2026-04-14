@@ -1,6 +1,11 @@
 import { startTaskManagerServer } from "./index";
+import {
+  parseBootstrapPortFromArgv,
+  parseBootstrapProfileFromArgv,
+} from "./parseBootstrapProfile";
 
 await startTaskManagerServer({
   kind: "dev",
-  profile: process.env.TASKMANAGER_PROFILE?.trim() || "dev",
+  profile: parseBootstrapProfileFromArgv() ?? "dev",
+  port: parseBootstrapPortFromArgv(),
 });

@@ -8,6 +8,7 @@ import {
   type AuthPrincipalType,
   type AuthSessionResponse,
 } from "../shared/auth";
+import { ansi, colorEnabled, paint } from "../shared/terminalColors";
 import { resolveAuthDir } from "../shared/runtimeConfig";
 
 interface StoredAuthState {
@@ -238,9 +239,24 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
     activeSessionTokenHash: null,
   };
   await writeStoredAuthState(next);
-  console.log("TaskManager recovery key (shown once):");
-  console.log(recoveryKey);
-  console.log("Save this recovery key somewhere safe outside the app.");
+  const o = process.stdout;
+  if (colorEnabled(o)) {
+    console.log("");
+    console.log(paint(o, " Recovery key (shown once) — copy it now ", ansi.bold + ansi.yellow));
+    console.log(paint(o, recoveryKey, ansi.cyan + ansi.bold));
+    console.log(
+      paint(
+        o,
+        "Store this key outside the app. It cannot be shown again from the UI.",
+        ansi.dim,
+      ),
+    );
+    console.log("");
+  } else {
+    console.log("TaskManager recovery key (shown once):");
+    console.log(recoveryKey);
+    console.log("Save this recovery key somewhere safe outside the app.");
+  }
 }
 
 export async function loginWithPassphrase(passphrase: string): Promise<string | null> {

@@ -1,93 +1,85 @@
 ---
 name: hiro-task-manager-cli
-description: Use this skill when working with Hiro Task Manager through the hirotm CLI to inspect or manage local server state, boards, lists, tasks, search results, and trash safely.
+description: Use this skill when working with Hiro Task Manager through the `hirotm` CLI to manage tasks, task lists and task boards.
 ---
 
 # Hiro Task Manager CLI
 
-Use this skill when the user wants to work with Hiro Task Manager through the `hirotm` CLI.
+Use this skill when the user wants to work with Hiro Task Manager through the `hirotm` CLI to manage tasks, task lists and task boards.
 
 ## Use this skill for
-- starting, stopping, or checking the Hiro local server
-- listing boards, lists, tasks, and related Hiro entities
-- searching for tasks before creating or modifying work
-- creating, updating, moving, closing, deleting, restoring, or purging Hiro items
-- automating Hiro safely from an AI coding agent
+- Creating, updating and deleting tasks.
+- Creating, updating and deleting task lists.
+- Managing boards.
+- listing, searching and filtering tasks, lists and boards.
+- Managing Hiro Task Manager server, to be able to operate on tasks, lists and boards.
+- Delete, purge or restore tasks, lists and boards.
+
+## Default operating workflow
+1. Navigate to intended workspace root.
+2. Initially make sure Hiro Task Manager server is running.
+3. Discover the boards, lists or tasks you need to work with.
+4. Narrow down to the entity you need to work with, using search or list/filter.
+5. Use (Identification) to identify yourself in all commands.
+6. Perform the smallest safe mutation using all the available data, 
+7. Show the resulting state after the change.
 
 ## Core rules
-- Use `hirotm` for Hiro operations.
-- Do not edit Hiro storage files or databases directly.
+- Use `hirotm` cli command for all operations.
+- use `--help` to get help on any command or sub command `boards --help`, `boards describe --help`.
 - Run commands from the intended workspace root.
 - Inspect current state before making mutations.
-- Prefer machine-readable output for agent workflows.
 - Use `--client-name` on mutating commands so changes are attributable.
 - Treat delete, purge, and structural changes as sensitive.
 
-## Default operating workflow
-1. Verify the workspace is the intended one.
-2. Check whether the Hiro server is running.
-3. Inspect the relevant state before changing anything.
-4. Search before creating new work when duplicates are possible.
-5. Perform the smallest safe mutation.
-6. Show the resulting state after the change.
+# Identification
 
-## Output conventions
-Prefer machine-readable output when the result will be parsed or used by an agent.
+Identify yourself in all commands with `--client-name <your-name>`. Your name should reflect the Agent Name, ex: Cursor Agent, Github Copilot Agent, Claude Code Agent, Open Code Agent.
+If you are not sure, use a generic name "AI Agent"
 
-**Use:**
+## Installation
 
-```bash
---format ndjson
-```
+If command is not found, ask the user to [install](https://docs.hiroleague.com/task-manager/get-started/quick-start) it and configure it.
 
-**Use --client-name on mutating commands:**
+# Discovery
 
-```bash
---client-name "Cursor Agent"
-```
+- use `boards list` to list all boards.
+- use `boards describe <id-or-slug>` to describe all or some board details.
+- use `tasks list --board <board-id-or-slug>` to list and filter tasks in a board.
 
-**Common startup commands**
+# Finding/Adding/Updating Tasks
 
-```bash
-hirotm server status
-hirotm server start --background
-hirotm server stop
-```
+- When a user refers to an existing task, use `tasks list` with filers, or `search query` to find it.
+- If convenient, use limit, offset, fields, or quiet options to manage and the output shape.
+- When adding a task
+  - use any available information such as priority, task group, release, etc...
+  - Add proper title (80 characters max) and Emoji if relevant only.
+  - use Organized Markdown description if the task body is detailed.
+  - use mermaid diagrams if the task includes design diagrams or if the user requests it.
+  - If linking to a larger documents in the workspace, make sure to use a proper link from the workspace root.
 
-**Common inspection commands**
+# Access
 
-```bash
-hirotm boards list
-hirotm lists list --board sprint
-hirotm tasks list --board sprint
-hirotm query search "login bug" --board sprint --limit 15
-```
+If you are not allowed to access an entity or perform an operation due to CLI Access Control, explain the situation and suggest the user to give you the necessary permissions. Never attempt to bypass the CLI Access Control.
 
-**Common mutation commands**
+# Server Operations
 
-```bash
-hirotm tasks add --board sprint --list 3 --title "Fix login redirect" --client-name "Cursor Agent"
-hirotm tasks move --board sprint --to-list 4 101 --client-name "Cursor Agent"
-hirotm tasks close --board sprint 101 --client-name "Cursor Agent"
-hirotm tasks delete --board sprint 101 --yes --client-name "Cursor Agent"
-hirotm tasks restore 101 --yes --client-name "Cursor Agent"
-```
+- Check Server Status with `server status`
+- Start Server with `server start --background`
+- Stop Server with `server stop`
+
+## References
+
+- [Installation Guide](https://docs.hiroleague.com/task-manager/get-started/quick-start)
 
 **Safety notes**
 
-```bash
-Prefer inspect-first workflows.
-Search before create when overlap is likely.
-Do not purge unless intent is clearly explicit.
-Do not bypass the CLI by editing internal storage.
-Respect permission and policy failures instead of working around them unsafely.
-```
+- Prefer inspect-first workflows.
+- Search before create when overlap is likely.
+- Do not purge unless intent is clearly explicit.
+- Do not bypass the CLI by any other means than the `hirotm` CLI.
+- Respect permission and policy failures instead of working around them unsafely.
 
 **References**
 
-Use these files when you need more detail:
-
-- CLI overview
-- Command patterns
-- Safety rules
-- Examples
+- [Online Documentation](https://docs.hiroleague.com/task-manager/get-started/quick-start)

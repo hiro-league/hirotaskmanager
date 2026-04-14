@@ -22,6 +22,10 @@ export function createHirotmProgram(): Command {
     .description("TaskManager CLI for local app control and JSON queries")
     .option("--profile <name>", "Runtime profile name (default: default, dev)")
     .option(
+      "--port <port>",
+      "HTTP port for the local API (default: from profile config.json)",
+    )
+    .option(
       "--client-name <name>",
       "Human-friendly client label sent with API requests (for notifications)",
     )

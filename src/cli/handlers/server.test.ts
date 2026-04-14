@@ -28,7 +28,7 @@ describe("handleServerStatus", () => {
       readServerStatus: async () => status,
     });
 
-    await handleServerStatus(ctx, {});
+    await handleServerStatus(ctx);
 
     expect(printed).toEqual(status);
   });
@@ -87,7 +87,7 @@ describe("handleServerStart / handleServerStop", () => {
       },
     });
 
-    await handleServerStop(ctx, {});
+    await handleServerStop(ctx);
 
     expect(printed).toEqual(status);
   });

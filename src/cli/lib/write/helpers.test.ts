@@ -3,6 +3,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { Board } from "../../../shared/models";
+import type { ConfigOverrides } from "../../types/config";
+import type { CliContext } from "../../types/context";
 import { CLI_ERR } from "../../types/errors";
 import {
   parseCliReleaseFlags,
@@ -61,8 +63,10 @@ describe("resolveCliReleaseToApiValue", () => {
         { releaseId: 42, name: "v1", createdAt: "2026-01-01T00:00:00.000Z" },
       ],
     };
-    const ctx = {
-      fetchApi: async () => board as Board,
+    // Match ApiPort.fetchApi generic signature so Pick<CliContext, "fetchApi"> accepts the mock.
+    const ctx: Pick<CliContext, "fetchApi"> = {
+      fetchApi: async <T>(_endpoint: string, _overrides?: ConfigOverrides) =>
+        board as unknown as T,
     };
     const id = await resolveCliReleaseToApiValue(
       ctx,
@@ -77,8 +81,9 @@ describe("resolveCliReleaseToApiValue", () => {
     const board: Partial<Board> = {
       releases: [{ releaseId: 1, name: "other", createdAt: "2026-01-01T00:00:00.000Z" }],
     };
-    const ctx = {
-      fetchApi: async () => board as Board,
+    const ctx: Pick<CliContext, "fetchApi"> = {
+      fetchApi: async <T>(_endpoint: string, _overrides?: ConfigOverrides) =>
+        board as unknown as T,
     };
     await expect(
       resolveCliReleaseToApiValue(

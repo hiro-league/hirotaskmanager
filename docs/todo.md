@@ -1,11 +1,58 @@
-⚡And this is how my weekend project gave super powers to my development workflow.
+1. - after bun install, it should tell us what to do next.
 
-Managing tasks for solo builders is always a big challenge. Nowadays, with AI speed, it's even harder. You can build features in minutes, you think of a hundred more ideas. Suddenly, you have features, tasks, bugs, enhancements, processes, and documentation. The problem was no longer ideas. It was keeping hold of them without losing track and focus.
+PS C:\Users\GF> bun install -g @hiroleague/taskmanager
+bun add v1.3.11 (af24e281)
 
-A few weeks ago, one idea kept coming back to me. A task manager as simple as Trello, for me and for my AI Agent. 🤖 So, I started this weekend project, building a tool: a developer friendly task manager, with AI Agent controlled access.
+installed @hiroleague/taskmanager@0.0.1 with binaries:
+ - hirotaskmanager
+ - hirotm
 
-I code-named it Hiro Task Manager, a tool for solo builders who have endless ideas, and bad memory like myself. I am already enjoying it, with about 200 tasks, building the tool using the tool itself. My AI Agent is also helping me manage, document, review, and complete the tasks.
+736 packages installed [80.95s]
+PS C:\Users\GF>
 
- The project is open source, runs locally on any platform, works with any AI Agent. I’ll share the repo and docs when it feels solid enough. Let me know in the comments if you ever needed a tool like this.👀
 
-#OpenSource #TODO #AIAgents #DeveloperTools #BuildInPublic #TaskManagement #Productivity
+2. running hirotaskmanager, what about autostart? any other hints?:
+
+PS C:\Users\GF> hirotaskmanager
+TaskManager first-run setup
+Port [3001]:
+Data directory [C:\Users\GF\.taskmanager\profiles\default\data]:
+Open browser automatically [Y/n]:
+Saved launcher config to C:\Users\GF\.taskmanager\profiles\default\config.json
+TaskManager server listening on http://localhost:3001
+TaskManager running at http://127.0.0.1:3001
+TaskManager recovery key (shown once):
+589B-F6E4-71E4-A28F-B03E-1F13-80F2-BF99
+Save this recovery key somewhere safe outside the app.
+
+
+
+3. default groups, keep ? they have no emojis too.
+
+4. first release ever, need to add one in order to allow a default. auto save auto assign settings?
+
+
+5. when i do ctrl+c, i get this error
+
+TaskManager recovery key (shown once):
+589B-F6E4-71E4-A28F-B03E-1F13-80F2-BF99
+Save this recovery key somewhere safe outside the app.
+PS C:\Users\GF> {"error":"Server exited unexpectedly","code":"server_exited","childExitCode":58}
+
+and it doesnt go back to prompt...
+
+6- running again:
+
+TaskManager running at http://127.0.0.1:3001
+PS C:\Users\GF> {"error":"Server exited unexpectedly","code":"server_exited","childExitCode":130}
+PS C:\Users\GF> hirotaskmanager
+TaskManager server listening on http://localhost:3001
+TaskManager running at http://127.0.0.1:3001
+PS C:\Users\GF> {"error":"Server exited unexpectedly","code":"server_exited","childExitCode":58}
+PS C:\Users\GF>
+
+
+different error codes, but it goes back to prompt this time..
+
+
+7. now, all is installed, but no clear path to install agents.md to repo folder...

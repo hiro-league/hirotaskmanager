@@ -14,3 +14,5 @@ docs/profiling/*.json
 coverage/html
 
 opencode.json
+
+hiroleague-taskmanager-*.tgz

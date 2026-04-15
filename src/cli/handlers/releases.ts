@@ -3,6 +3,7 @@ import {
   runReleasesAdd,
   runReleasesDelete,
   runReleasesList,
+  runReleasesSetDefault,
   runReleasesShow,
   runReleasesUpdate,
 } from "../lib/writeCommands";
@@ -88,6 +89,20 @@ export async function handleReleasesUpdate(
     clearColor: options.clearColor,
     releaseDate: options.releaseDate,
     clearReleaseDate: options.clearReleaseDate,
+  });
+}
+
+export async function handleReleasesSetDefault(
+  ctx: CliContext,
+  releaseId: string | undefined,
+  options: { board: string; clear?: boolean },
+): Promise<void> {
+  const port = ctx.resolvePort();
+  await runReleasesSetDefault(ctx, {
+    port,
+    board: options.board,
+    releaseId,
+    clear: options.clear === true,
   });
 }
 

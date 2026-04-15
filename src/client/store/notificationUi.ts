@@ -6,6 +6,12 @@ export type NotificationToast = {
   notification: NotificationItem;
 };
 
+/** Ephemeral UI message (not a persisted notification row). */
+export type SystemToast = {
+  id: number;
+  message: string;
+};
+
 type NotificationUiState = {
   panelOpen: boolean;
   setPanelOpen: (value: boolean) => void;
@@ -13,6 +19,10 @@ type NotificationUiState = {
   pushToast: (notification: NotificationItem) => void;
   dismissToast: (id: number) => void;
   clearToasts: () => void;
+  /** One-shot banner (e.g. SSE connection pool exhaustion). */
+  systemToast: SystemToast | null;
+  pushSystemToast: (message: string) => void;
+  dismissSystemToast: () => void;
 };
 
 export const useNotificationUiStore = create<NotificationUiState>((set) => ({
@@ -29,4 +39,8 @@ export const useNotificationUiStore = create<NotificationUiState>((set) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
     })),
   clearToasts: () => set({ toasts: [] }),
+  systemToast: null,
+  pushSystemToast: (message) =>
+    set({ systemToast: { id: Date.now(), message } }),
+  dismissSystemToast: () => set({ systemToast: null }),
 }));

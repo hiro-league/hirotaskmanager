@@ -3,7 +3,7 @@ import type {
   ReleaseMutationResult,
 } from "../../../shared/mutationResults";
 import type { PaginatedListBody } from "../../../shared/pagination";
-import type { ReleaseDefinition } from "../../../shared/models";
+import type { Board, ReleaseDefinition } from "../../../shared/models";
 import type { CliContext } from "../../types/context";
 import { CLI_ERR } from "../../types/errors";
 import { CLI_DEFAULTS } from "../constants";
@@ -19,6 +19,7 @@ import { fetchAllPages } from "../paginatedFetch";
 import { CliError } from "../output";
 import { assertMutuallyExclusive } from "../validation";
 import {
+  compactBoardEntity,
   compactReleaseEntity,
   writeReleaseDelete,
   writeSuccess,
@@ -304,5 +305,67 @@ export async function runReleasesDelete(
     );
   } catch (e) {
     enrichNotFoundError(e, { board: boardId, releaseId: rid });
+  }
+}
+
+/**
+ * Set or clear the board default release (PATCH board `defaultReleaseId`).
+ * Validates the release exists on the board before PATCH so errors are clearer than a generic 404.
+ */
+export async function runReleasesSetDefault(
+  ctx: CliContext,
+  opts: {
+    port?: number;
+    board: string | undefined;
+    releaseId: string | undefined;
+    clear: boolean;
+  },
+): Promise<void> {
+  const boardId = opts.board?.trim();
+  if (!boardId) {
+    throw new CliError("Missing required option: --board", 2, {
+      code: CLI_ERR.missingRequired,
+    });
+  }
+  assertMutuallyExclusive([
+    ["<release-id>", opts.releaseId, "--clear", opts.clear],
+  ]);
+  const ridRaw = opts.releaseId?.trim();
+  if (!opts.clear && (ridRaw === undefined || ridRaw === "")) {
+    throw new CliError("Provide <release-id> or use --clear", 2, {
+      code: CLI_ERR.missingRequired,
+    });
+  }
+  if (!opts.clear) {
+    const rid = parsePositiveInt("releaseId", ridRaw);
+    if (rid === undefined) {
+      throw new CliError("Invalid release id", 2, {
+        code: CLI_ERR.invalidValue,
+        releaseId: ridRaw,
+      });
+    }
+    const rows = await fetchAllBoardReleases(ctx, opts.port, boardId);
+    if (!rows.some((r) => r.releaseId === rid)) {
+      throw new CliError("Release not found", 3, {
+        code: CLI_ERR.notFound,
+        board: boardId,
+        releaseId: rid,
+      });
+    }
+  }
+
+  const patch: Record<string, unknown> = {
+    defaultReleaseId: opts.clear ? null : Number(ridRaw),
+  };
+
+  try {
+    const board = await ctx.fetchApiMutate<Board>(
+      `/boards/${encodeURIComponent(boardId)}`,
+      { method: "PATCH", body: patch },
+      { port: opts.port },
+    );
+    ctx.printJson(writeSuccess(board, compactBoardEntity(board)));
+  } catch (e) {
+    enrichNotFoundError(e, { board: boardId });
   }
 }

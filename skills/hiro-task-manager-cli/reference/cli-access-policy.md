@@ -54,6 +54,7 @@ Use this page to map `hirotm` commands to the board CLI policy checks enforced b
 - `releases add`: `readBoard` + `manageStructure`
 - `releases update`: `readBoard` + `manageStructure`
 - `releases delete`: `readBoard` + `manageStructure`
+- `releases set-default`: `readBoard` + `manageStructure`
 
 ### Search and trash
 

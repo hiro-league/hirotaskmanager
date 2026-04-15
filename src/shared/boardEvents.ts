@@ -79,7 +79,13 @@ export type ListPurgedEvent = BoardEventBase & {
   listId: number;
 };
 
+/** Board list (`GET /api/boards`) changed — create, trash, restore, or index metadata patch. */
+export type BoardIndexChangedEvent = {
+  kind: "board-index-changed";
+};
+
 export type BoardEvent =
+  | BoardIndexChangedEvent
   | BoardChangedEvent
   | ReleaseUpsertedEvent
   | TaskCreatedEvent

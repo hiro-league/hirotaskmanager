@@ -9,7 +9,11 @@ import {
   cliManageListError,
   cliManageTaskError,
 } from "../cliPolicyGuard";
-import { publishBoardChanged, publishBoardEvent } from "../events";
+import {
+  publishBoardChanged,
+  publishBoardEvent,
+  publishBoardIndexChanged,
+} from "../events";
 import {
   recordBoardPurged,
   recordBoardRestored,
@@ -110,6 +114,7 @@ trashRoute.post("/boards/:id/restore", async (c) => {
   if (!outcome.ok) return c.json({ error: "Board not in Trash" }, 404);
   const { boardUpdatedAt } = outcome.value;
   publishBoardChanged(boardId, boardUpdatedAt);
+  publishBoardIndexChanged();
   const board = loadBoard(boardId);
   if (board) recordBoardRestored(c, entry, board);
   return c.json({ boardId, boardUpdatedAt });

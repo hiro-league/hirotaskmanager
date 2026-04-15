@@ -9,7 +9,7 @@ import { createDefaultCliContext } from "./context";
 import { handleBoardsUpdate } from "./boards";
 import type { CliContext } from "./context";
 import { handleListsAdd, handleListsList } from "./lists";
-import { handleReleasesAdd } from "./releases";
+import { handleReleasesAdd, handleReleasesSetDefault } from "./releases";
 import { handleTasksAdd } from "./tasks";
 import { handleTrashLists } from "./trash";
 
@@ -120,6 +120,43 @@ describe("CLI handler → writeCommands wiring", () => {
       }),
     );
     expect(sawPort).toBe("31999");
+  });
+
+  test("handleReleasesSetDefault uses resolved port from context", async () => {
+    let sawPort = "";
+    let n = 0;
+    setMockFetch(async (input) => {
+      sawPort = new URL(reqUrl(input)).port;
+      n += 1;
+      if (n === 1) {
+        return new Response(
+          JSON.stringify({
+            items: [{ releaseId: 1, name: "v", createdAt: "2026-01-01T00:00:00.000Z" }],
+            total: 1,
+            limit: 500,
+            offset: 0,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          slug: "rb",
+          name: "B",
+          defaultReleaseId: 1,
+          updatedAt: "2026-01-02T00:00:00.000Z",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    await captureStdout(() =>
+      handleReleasesSetDefault(wiringContext(), "1", {
+        board: "rb",
+      }),
+    );
+    expect(sawPort).toBe("31999");
+    expect(n).toBe(2);
   });
 
   test("handleReleasesAdd uses resolved port from context", async () => {

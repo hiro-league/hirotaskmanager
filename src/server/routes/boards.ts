@@ -82,7 +82,11 @@ import {
   cliManageTaskError,
 } from "../cliPolicyGuard";
 import { provenanceForWrite } from "../provenance";
-import { publishBoardChanged, publishBoardEvent } from "../events";
+import {
+  publishBoardChanged,
+  publishBoardEvent,
+  publishBoardIndexChanged,
+} from "../events";
 import {
   recordBoardCreated,
   recordBoardTrashed,
@@ -264,6 +268,7 @@ boardsRoute.post("/", async (c) => {
     cliBootstrap: auth.principal === "web" ? "web_default" : "cli_full",
   });
   publishBoardChanged(board.boardId, board.updatedAt);
+  publishBoardIndexChanged();
   recordBoardCreated(c, board);
   return c.json(board, 201);
 });
@@ -1483,6 +1488,14 @@ boardsRoute.patch("/:id", async (c) => {
   const saved = await patchBoard(entry.boardId, patch);
   if (!saved) return c.json({ error: "Board not found" }, 404);
   publishBoardChanged(entry.boardId, saved.updatedAt);
+  if (
+    "name" in body ||
+    "emoji" in body ||
+    "description" in body ||
+    "cliPolicy" in body
+  ) {
+    publishBoardIndexChanged();
+  }
   recordBoardPatched(c, entry, saved);
   return c.json(saved);
 });
@@ -1567,6 +1580,7 @@ boardsRoute.delete("/:id", async (c) => {
   const trashed = trashBoardById(entry.boardId);
   if (!trashed) return c.json({ error: "Board not found" }, 404);
   publishBoardChanged(entry.boardId, trashed.boardUpdatedAt);
+  publishBoardIndexChanged();
   recordBoardTrashed(c, entry, snapshot);
   return c.body(null, 204);
 });

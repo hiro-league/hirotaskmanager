@@ -1,4 +1,5 @@
 import type { BoardEvent } from "../shared/boardEvents";
+import type { NotificationCreatedEvent } from "../shared/notifications";
 
 const encoder = new TextEncoder();
 const KEEPALIVE_CHUNK = encoder.encode(": keepalive\n\n");
@@ -12,17 +13,38 @@ type BoardEventSubscriber = {
 
 const boardEventSubscribers = new Set<BoardEventSubscriber>();
 
-function encodeBoardEvent(event: BoardEvent): Uint8Array {
+function encodeSseEvent(kind: string, data: unknown): Uint8Array {
   return encoder.encode(
-    `event: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`,
+    `event: ${kind}\ndata: ${JSON.stringify(data)}\n\n`,
   );
 }
 
 /** Broadcast board writes so open browser tabs can refetch without polling. */
 export function publishBoardEvent(event: BoardEvent): void {
-  const chunk = encodeBoardEvent(event);
+  const chunk = encodeSseEvent(event.kind, event);
   for (const subscriber of [...boardEventSubscribers]) {
-    if (subscriber.boardId !== null && subscriber.boardId !== event.boardId) continue;
+    // Index-level changes must reach every tab (sidebar board list), including
+    // board-scoped SSE connections that filter by active board id.
+    const isIndex = event.kind === "board-index-changed";
+    if (
+      !isIndex &&
+      subscriber.boardId !== null &&
+      subscriber.boardId !== event.boardId
+    ) {
+      continue;
+    }
+    try {
+      subscriber.send(chunk);
+    } catch {
+      subscriber.close();
+    }
+  }
+}
+
+/** Broadcast notification-created to ALL SSE subscribers (every tab needs it). */
+export function publishNotificationToAllSubscribers(event: NotificationCreatedEvent): void {
+  const chunk = encodeSseEvent(event.kind, event);
+  for (const subscriber of [...boardEventSubscribers]) {
     try {
       subscriber.send(chunk);
     } catch {
@@ -37,6 +59,11 @@ export function publishBoardChanged(
   boardUpdatedAt: string,
 ): void {
   publishBoardEvent({ kind: "board-changed", boardId, boardUpdatedAt });
+}
+
+/** Sidebar / `GET /api/boards` index changed (not every `board-changed` — tasks bump that too). */
+export function publishBoardIndexChanged(): void {
+  publishBoardEvent({ kind: "board-index-changed" });
 }
 
 /** Keep one SSE stream per tab so browser clients can hear about external writes. */

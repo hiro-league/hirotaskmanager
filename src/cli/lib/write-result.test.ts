@@ -29,6 +29,7 @@ describe("compact*Entity", () => {
       emoji: null,
       createdAt: "c",
       updatedAt: "u",
+      defaultReleaseId: null,
     });
   });
 
@@ -103,6 +104,7 @@ describe("writeSuccess / trashedEntity / writeTrashMove", () => {
         emoji: null,
         createdAt: "c",
         updatedAt: "u",
+        defaultReleaseId: null,
       },
     );
     expect(envelope).toEqual({
@@ -118,6 +120,7 @@ describe("writeSuccess / trashedEntity / writeTrashMove", () => {
         emoji: null,
         createdAt: "c",
         updatedAt: "u",
+        defaultReleaseId: null,
       },
     });
   });

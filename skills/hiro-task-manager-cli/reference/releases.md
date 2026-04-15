@@ -85,3 +85,17 @@ Delete a release from a board.
 
 - `--move-tasks-to <id>`: move tagged tasks to another release before deletion.
 - If omitted, tasks on that release become untagged.
+
+### `releases set-default`
+
+Format:
+
+```bash
+hirotm releases set-default --board <id-or-slug> <release-id>
+hirotm releases set-default --board <id-or-slug> --clear
+```
+
+Set or clear the board’s default release (the release used for new tasks when the board’s auto-assign rules apply). This PATCHes the board (`defaultReleaseId`); requires `manageStructure` on the board for CLI clients.
+
+- Provide `<release-id>` to set the default, or `--clear` to remove it.
+- Do not pass `<release-id>` together with `--clear`.

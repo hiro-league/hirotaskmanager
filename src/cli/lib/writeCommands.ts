@@ -27,6 +27,7 @@ export {
   runReleasesAdd,
   runReleasesDelete,
   runReleasesList,
+  runReleasesSetDefault,
   runReleasesShow,
   runReleasesUpdate,
 } from "./write/releases";

@@ -1,4 +1,5 @@
 import type { NotificationCreatedEvent } from "../shared/notifications";
+import { publishNotificationToAllSubscribers } from "./events";
 
 const encoder = new TextEncoder();
 const KEEPALIVE_CHUNK = encoder.encode(": keepalive\n\n");
@@ -15,7 +16,10 @@ function encodeNotificationEvent(event: NotificationCreatedEvent): Uint8Array {
   return encoder.encode(`event: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`);
 }
 
-/** Broadcast newly created notification rows to global app-shell subscribers. */
+/** Broadcast newly created notification rows to all SSE subscribers.
+ *  Sends to both the legacy `/api/notifications/events` subscribers AND the
+ *  unified `/api/events` board-events stream so a single connection per tab
+ *  can receive notifications without a separate EventSource. */
 export function publishNotificationCreated(event: NotificationCreatedEvent): void {
   const chunk = encodeNotificationEvent(event);
   for (const subscriber of [...notificationSubscribers]) {
@@ -25,6 +29,9 @@ export function publishNotificationCreated(event: NotificationCreatedEvent): voi
       subscriber.close();
     }
   }
+  // Pipe to the unified board-events stream — clients that use only
+  // `/api/events` (single-connection mode) receive notifications here.
+  publishNotificationToAllSubscribers(event);
 }
 
 /** Keep one notification SSE stream per open app shell so live feed/toasts need no polling. */

@@ -9,6 +9,8 @@ export type WriteBoardEntity = {
   emoji: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Board default release for new tasks (when set). */
+  defaultReleaseId?: number | null;
 };
 
 export type WriteListEntity = {
@@ -91,6 +93,7 @@ export function compactBoardEntity(board: Board): WriteBoardEntity {
     emoji: board.emoji ?? null,
     createdAt: board.createdAt,
     updatedAt: board.updatedAt,
+    defaultReleaseId: board.defaultReleaseId ?? null,
   };
 }
 

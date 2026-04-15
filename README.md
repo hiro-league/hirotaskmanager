@@ -74,7 +74,7 @@ Hiro Task Manager exposes `hirotm` cli for command line and ai agent friendly co
 | **`boards`** | List boards, inspect structure, manage board settings, and handle board trash operations. |
 | **`lists`** | List, create, update, move, delete, restore, and purge lists on a board. |
 | **`tasks`** | List, create, update, move, delete, restore, and purge tasks. |
-| **`releases`** | List, show, create, update, and delete releases on a board. |
+| **`releases`** | List, show, create, update, delete, and set-default releases on a board. |
 | **`statuses`** | List global workflow statuses. |
 | **`query`** | Run full-text task search with `query search`. |
 | **`trash`** | Read items currently in Trash. Restore and purge stay under their resource commands. |

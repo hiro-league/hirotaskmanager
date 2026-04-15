@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useNotificationStream } from "@/api/useNotificationStream";
+import { useBoardChangeStream } from "@/api/useBoardChangeStream";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/store/preferences";
 import { AppHeader } from "./AppHeader";
@@ -12,7 +12,10 @@ interface AppShellProps {
 
 export function AppShell({ sidebar, children }: AppShellProps) {
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
-  useNotificationStream();
+  // Single SSE connection for non-board pages (board-index + notifications).
+  // On board pages, BoardView opens its own board-scoped connection that
+  // supersedes this one — the effect re-runs with a boardId when navigating.
+  useBoardChangeStream(null, null);
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-background">

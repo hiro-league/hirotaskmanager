@@ -444,6 +444,20 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
 
     r = await runHirotm([
       "releases",
+      "set-default",
+      "--board",
+      slug,
+      releaseId,
+      ...CLIENT_NAME,
+    ]);
+    expect(r.code).toBe(0);
+    const setDef = JSON.parse(r.stdout.trim()) as {
+      entity?: { defaultReleaseId?: number | null };
+    };
+    expect(setDef.entity?.defaultReleaseId).toBe(Number(releaseId));
+
+    r = await runHirotm([
+      "releases",
       "update",
       "--board",
       slug,

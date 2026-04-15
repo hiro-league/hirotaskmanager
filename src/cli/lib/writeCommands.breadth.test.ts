@@ -25,6 +25,7 @@ import {
   runListsUpdate,
   runReleasesAdd,
   runReleasesDelete,
+  runReleasesSetDefault,
   runReleasesUpdate,
   runTasksAdd,
   runTasksDelete,
@@ -115,6 +116,48 @@ describe("writeCommands breadth — validation", () => {
     ).rejects.toMatchObject({
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.noUpdateFields }),
+    });
+  });
+
+  test("runReleasesSetDefault throws without board", async () => {
+    await expect(
+      runReleasesSetDefault(ctx, {
+        port: 1,
+        board: undefined,
+        releaseId: "1",
+        clear: false,
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
+    });
+  });
+
+  test("runReleasesSetDefault throws without release id and without --clear", async () => {
+    await expect(
+      runReleasesSetDefault(ctx, {
+        port: 1,
+        board: "b",
+        releaseId: undefined,
+        clear: false,
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
+    });
+  });
+
+  test("runReleasesSetDefault throws when release id and --clear together", async () => {
+    await expect(
+      runReleasesSetDefault(ctx, {
+        port: 1,
+        board: "b",
+        releaseId: "2",
+        clear: true,
+      }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.mutuallyExclusiveOptions }),
     });
   });
 
@@ -684,6 +727,106 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       boardSlug: "b",
       boardUpdatedAt: "2026-01-04T00:00:00.000Z",
       entity: { type: "release", releaseId: 2, deleted: true },
+    });
+  });
+
+  test("runReleasesSetDefault GETs releases then PATCHes board defaultReleaseId", async () => {
+    setMockFetch(async (input, init) => {
+      const u = reqUrl(input);
+      if (
+        u.includes("/boards/b/releases") &&
+        (init?.method === "GET" || init?.method === undefined)
+      ) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                releaseId: 2,
+                name: "v1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+            total: 1,
+            limit: 500,
+            offset: 0,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (u.includes("/api/boards/b") && !u.includes("/releases") && init?.method === "PATCH") {
+        expect(JSON.parse(String(init?.body))).toEqual({ defaultReleaseId: 2 });
+        return new Response(
+          JSON.stringify({
+            boardId: 1,
+            slug: "b",
+            name: "B",
+            emoji: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+            defaultReleaseId: 2,
+            releases: [],
+            lists: [],
+            taskGroups: [],
+            taskPriorities: [],
+            defaultTaskGroupId: 1,
+            autoAssignReleaseOnCreateUi: false,
+            autoAssignReleaseOnCreateCli: false,
+          } as unknown as Board),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected fetch: ${u} ${init?.method}`);
+    });
+    const out = await captureStdout(() =>
+      runReleasesSetDefault(ctx, {
+        port: 22025,
+        board: "b",
+        releaseId: "2",
+        clear: false,
+      }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({
+      ok: true,
+      entity: { type: "board", defaultReleaseId: 2 },
+    });
+  });
+
+  test("runReleasesSetDefault --clear PATCHes defaultReleaseId null", async () => {
+    setMockFetch(async (input, init) => {
+      expect(reqUrl(input)).toContain("/api/boards/b");
+      expect(init?.method).toBe("PATCH");
+      expect(JSON.parse(String(init?.body))).toEqual({ defaultReleaseId: null });
+      return new Response(
+        JSON.stringify({
+          boardId: 1,
+          slug: "b",
+          name: "B",
+          emoji: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          defaultReleaseId: null,
+          releases: [],
+          lists: [],
+          taskGroups: [],
+          taskPriorities: [],
+          defaultTaskGroupId: 1,
+          autoAssignReleaseOnCreateUi: false,
+          autoAssignReleaseOnCreateCli: false,
+        } as unknown as Board),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const out = await captureStdout(() =>
+      runReleasesSetDefault(ctx, {
+        port: 22026,
+        board: "b",
+        releaseId: undefined,
+        clear: true,
+      }),
+    );
+    expect(JSON.parse(out.trim())).toMatchObject({
+      ok: true,
+      entity: { type: "board", defaultReleaseId: null },
     });
   });
 

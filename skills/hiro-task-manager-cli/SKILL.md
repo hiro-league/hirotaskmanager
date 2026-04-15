@@ -39,7 +39,9 @@ If you are not sure, use a generic name "AI Agent"
 
 ## Installation
 
-If command is not found, ask the user to [install](https://docs.hiroleague.com/task-manager/get-started/quick-start) it and configure it.
+The `hirotm` binary ships with the **`@hiroleague/taskmanager`** npm package ([npm](https://www.npmjs.com/package/@hiroleague/taskmanager), [source](https://github.com/hiro-league/hirotaskmanager)).
+
+If the command is not found, ask the user to [install](https://docs.hiroleague.com/task-manager/get-started/quickstart) it and configure it.
 
 # Discovery
 
@@ -70,12 +72,12 @@ If you are not allowed to access an entity or perform an operation due to CLI Ac
 
 ## References
 
-- [Installation Guide](https://docs.hiroleague.com/task-manager/get-started/quick-start)
+- [Installation Guide](https://docs.hiroleague.com/task-manager/get-started/quickstart)
 - Server Commands - Start, stop, and check the server status.
 - [Boards Commands](reference/boards.md) - Create, update, delete, list, describe, and configure boards.
 - [Lists Commands](reference/lists.md) - List, add, update, move, delete, restore, and purge board lists.
 - [Tasks Commands](reference/tasks.md) - List, add, update, move, delete, restore, and purge tasks.
-- [Releases Commands](reference/releases.md) - List, show, add, update, and delete releases.
+- [Releases Commands](reference/releases.md) - List, show, add, update, delete, and set-default releases.
 - [Trash Commands](reference/trash.md) - Inspect trashed boards, lists, and tasks.
 - [Status Commands](reference/statuses.md) - List workflow statuses and their meanings.
 - [Search Commands](reference/search.md) - Full-text task search with `query search`.
@@ -94,4 +96,4 @@ If you are not allowed to access an entity or perform an operation due to CLI Ac
 
 **References**
 
-- [Online Documentation](https://docs.hiroleague.com/task-manager/get-started/quick-start)
+- [Online Documentation](https://docs.hiroleague.com/task-manager/get-started/quickstart)

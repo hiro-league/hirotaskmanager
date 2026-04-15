@@ -4,6 +4,7 @@ import {
   handleReleasesAdd,
   handleReleasesDelete,
   handleReleasesList,
+  handleReleasesSetDefault,
   handleReleasesShow,
   handleReleasesUpdate,
 } from "../handlers/releases";
@@ -82,6 +83,27 @@ export function registerReleaseCommands(
       releaseDate?: string;
       clearReleaseDate?: boolean;
     }) => handleReleasesAdd(ctx, options)),
+  );
+
+  addClientNameOption(
+    releasesCommand
+      .command("set-default")
+      .description(
+        "Set or clear the board default release (PATCH board; requires manageStructure)",
+      )
+      .requiredOption("--board <id-or-slug>", "Board id or slug")
+      .option("--clear", "Clear the board default release")
+      .argument(
+        "[release-id]",
+        "Numeric release id to use as default (omit when using --clear)",
+      ),
+  ).action(
+    cliAction(
+      (
+        releaseId: string | undefined,
+        options: { board: string; clear?: boolean },
+      ) => handleReleasesSetDefault(ctx, releaseId, options),
+    ),
   );
 
   addClientNameOption(

@@ -39,6 +39,18 @@ function paintWarning(text: string): string {
   return paint(out, text, ansi.bold + ansi.yellow);
 }
 
+function printAsciiTable(lines: readonly string[]): void {
+  const innerWidth = Math.max(76, ...lines.map((line) => line.length));
+  const border = `  +-${"-".repeat(innerWidth)}-+`;
+  line();
+  line(border);
+  for (const entry of lines) {
+    line(`  | ${entry.padEnd(innerWidth)} |`);
+  }
+  line(border);
+  line();
+}
+
 export type SpinnerHandle = {
   stop: (finalText?: string | null) => void;
 };
@@ -124,6 +136,41 @@ export function printSavedProfileSummary(opts: {
   line(
     `  ${paintWarning("Open Browser:")} ${paintValue(opts.openBrowser ? "Yes" : "No")}`,
   );
+}
+
+export function printSetupNextSteps(opts: {
+  profileName: string;
+  skillsInstalled: boolean;
+}): void {
+  const cliHelpCommand =
+    opts.profileName === "default"
+      ? "hirotm --help"
+      : `hirotm --profile ${opts.profileName} --help`;
+  const skillLines = [
+    "1. Repo skills  : npx skills add hiro-league/hirotaskmanager",
+  ];
+  if (opts.skillsInstalled) {
+    skillLines.push("2. Local skills : npx skills add \"$HOME/.taskmanager/skills\"");
+    skillLines.push("3. Update later : npx skills update");
+  } else {
+    skillLines.push("2. Update later : npx skills update");
+  }
+  const lines = [
+    "REQUIRED BEFORE USING hirotm",
+    "Install AI agent skills now. The hirotm CLI depends on these skills.",
+    "",
+    ...skillLines,
+    "",
+    `After skills install: ${cliHelpCommand}`,
+  ];
+
+  // Package managers may block postinstall hooks, so setup must surface the
+  // exact skills commands in a standalone table before startup continues.
+  printAsciiTable(lines);
+}
+
+export function printSetupContinuePrompt(): void {
+  line("Press Enter to continue and start TaskManager...");
 }
 
 export async function printPassphraseHint(): Promise<void> {

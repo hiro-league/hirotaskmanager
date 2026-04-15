@@ -1,8 +1,7 @@
 /**
  * Copies bundled skills/ from the installed package into ~/.taskmanager/skills/.
- * Used as a safety net in the launcher when postinstall didn't run (e.g.
- * --ignore-scripts, CI).  The postinstall-message.mjs script has equivalent
- * plain-Node logic that runs at npm/bun install time.
+ * Used by the launcher because package-manager lifecycle scripts may be blocked
+ * or skipped entirely (trusted-package checks, --ignore-scripts, CI).
  */
 import {
   cpSync,

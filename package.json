@@ -1,8 +1,8 @@
 {
   "name": "@hiroleague/taskmanager",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
-  "description": "Local-only task board app (Bun + Hono + React)",
+  "description": "Task Manager for Solo Builders and AI Agents, working as a team",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,7 +22,6 @@
     "skills",
     "LICENSE",
     "README.md",
-    "scripts/postinstall-message.mjs",
     "scripts/stubs/node-domexception"
   ],
   "overrides": {
@@ -33,7 +32,6 @@
     "hirotm": "./src/cli/bin/hirotm.ts"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall-message.mjs",
     "app": "bun run src/cli/bin/hirotaskmanager.ts",
     "cli": "bun run src/cli/bin/hirotm.ts",
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",

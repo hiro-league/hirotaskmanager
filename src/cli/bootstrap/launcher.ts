@@ -29,6 +29,8 @@ import {
   formatTextPrompt,
   isAuthInitialized,
   paintValue,
+  printSetupContinuePrompt,
+  printSetupNextSteps,
   printPassphraseHint,
   printRecoveryKey,
   printRecoveryKeyExitHint,
@@ -319,7 +321,7 @@ async function waitForRecoveryKeyFile(authDir: string): Promise<string> {
   return key;
 }
 
-async function waitForEnterToExitLauncher(): Promise<void> {
+async function waitForEnterKey(): Promise<void> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -383,9 +385,21 @@ export function createHirotaskmanagerProgram(): Command {
               },
             };
 
-        // Safety net: copy bundled skills to ~/.taskmanager/skills/ if
-        // postinstall was skipped (--ignore-scripts, CI, bunx) or stale.
-        ensureBundledSkills();
+        // Registry installs can skip lifecycle hooks, so setup itself must
+        // print the exact `npx skills` commands users should run next.
+        const skillsInstalled = ensureBundledSkills();
+        if (shouldRunSetup) {
+          printSetupNextSteps({
+            profileName: selectedProfile,
+            skillsInstalled,
+          });
+          if (setupResult.setupMeta.justFinishedInteractiveSetup) {
+            // Keep setup blocked here so users see the required skills step
+            // before the server starts and the browser steals focus.
+            printSetupContinuePrompt();
+            await waitForEnterKey();
+          }
+        }
 
         const launcherConfig = setupResult.config;
 
@@ -471,7 +485,7 @@ export function createHirotaskmanagerProgram(): Command {
             const recoveryKey = await waitForRecoveryKeyFile(authDir);
             printRecoveryKey(recoveryKey);
             printRecoveryKeyExitHint(runningUrl);
-            await waitForEnterToExitLauncher();
+            await waitForEnterKey();
           }
         } finally {
           if (previousSilentStartup === undefined) {

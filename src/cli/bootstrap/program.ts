@@ -8,8 +8,56 @@ import { registerStatusCommands } from "../commands/statuses";
 import { registerTaskCommands } from "../commands/tasks";
 import { registerTrashCommands } from "../commands/trash";
 import { createDefaultCliContext } from "../handlers/context";
+import { hasCliConfigFile, resolveProfileName, resolveRuntimeKind } from "../lib/config";
 import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
-import { exitWithError, resetCliOutputFormat } from "../lib/output";
+import { CliError, exitWithError, resetCliOutputFormat } from "../lib/output";
+import { CLI_ERR } from "../types/errors";
+
+export function shouldRequireLauncherSetupForHirotm(options: {
+  runtimeKind: "installed" | "dev";
+  hasInstalledProfileConfig: boolean;
+}): boolean {
+  return (
+    options.runtimeKind === "installed" &&
+    options.hasInstalledProfileConfig === false
+  );
+}
+
+export function getHirotmLauncherSetupCommand(profileName: string): string {
+  return profileName === "default"
+    ? "hirotaskmanager"
+    : `hirotaskmanager --profile ${profileName}`;
+}
+
+function ensureInstalledProfileIsReadyForHirotm(): void {
+  const runtimeKind = resolveRuntimeKind();
+  const profileName = resolveProfileName({ kind: "installed" });
+  const hasInstalledProfileConfig = hasCliConfigFile({
+    profile: profileName,
+    kind: "installed",
+  });
+  if (
+    !shouldRequireLauncherSetupForHirotm({
+      runtimeKind,
+      hasInstalledProfileConfig,
+    })
+  ) {
+    return;
+  }
+
+  const setupCommand = getHirotmLauncherSetupCommand(profileName);
+  // Package managers can skip lifecycle scripts, so actionable `hirotm`
+  // commands must direct users back to the launcher for first-run setup.
+  throw new CliError(
+    `No installed TaskManager profile found for "${profileName}". Run \`${setupCommand}\` first to create and configure this profile.`,
+    2,
+    {
+      code: CLI_ERR.missingRequired,
+      profile: profileName,
+      hint: `Run \`${setupCommand}\` first.`,
+    },
+  );
+}
 
 /**
  * Build the hirotm Commander program.
@@ -45,6 +93,7 @@ export function createHirotmProgram(): Command {
       quiet?: boolean;
     };
     syncCliOutputFormatFromGlobals(opts);
+    ensureInstalledProfileIsReadyForHirotm();
   });
 
   const ctx = createDefaultCliContext();

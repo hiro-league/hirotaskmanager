@@ -1,6 +1,6 @@
 ## What is Hiro Task Manager?
 
-Task management for solo builders with endless ideas and bad memory like myself. Hiro Task Manager adds superpowers to your task lists with AI agents controlled access.
+Task management for solo builders with endless ideas and a talent for forgetting. Hiro Task Manager adds superpowers to your task lists with AI-agent access control.
 
 ## Current Status
 

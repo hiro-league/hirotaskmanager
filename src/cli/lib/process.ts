@@ -235,7 +235,12 @@ export async function startServer(
     });
   }
 
+  // Track whether the CLI forwarded a termination signal so we can treat
+  // the resulting non-zero exit code as a normal user-initiated shutdown
+  // rather than an unexpected crash.
+  let signalForwarded = false;
   const forwardSignal = (signal: NodeJS.Signals) => {
+    signalForwarded = true;
     child.kill(signal);
   };
 
@@ -246,7 +251,7 @@ export async function startServer(
   process.off("SIGINT", forwardSignal);
   process.off("SIGTERM", forwardSignal);
 
-  if (exitCode !== 0) {
+  if (exitCode !== 0 && !signalForwarded) {
     throw new CliError("Server exited unexpectedly", 1, {
       code: CLI_ERR.serverExited,
       childExitCode: exitCode,

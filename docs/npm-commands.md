@@ -4,11 +4,14 @@ Repo root: `@hiroleague/taskmanager`. CLI bin: `hirotm`.
 
 ## Pack
 
+From the repo root, ensure a `packages` directory exists, then pack into it (avoids leaving the tarball in the project root):
+
 ```bash
-npm pack
+mkdir -p packages
+npm pack --pack-destination packages
 ```
 
-Writes `hiroleague-taskmanager-<version>.tgz` in the current directory. `prepack` runs `npm run build` first.
+Writes `packages/hiroleague-taskmanager-<version>.tgz`. `prepack` runs `npm run build` first.
 
 Optional gate before packing:
 
@@ -20,8 +23,10 @@ npm run release:check
 
 ```bash
 cd /path/to/empty-or-test-project
-npm install /absolute/path/to/hiroleague-taskmanager-<version>.tgz
+npm install /absolute/path/to/hirotaskmanager/packages/hiroleague-taskmanager-<version>.tgz
 ```
+
+If the test project sits next to the clone, a relative path works—for example: `npm install ../hirotaskmanager/packages/hiroleague-taskmanager-<version>.tgz`.
 
 ## Test (local dependency)
 
@@ -39,10 +44,10 @@ Or:
 
 ## Global install (no registry upload)
 
-From the directory that contains the `.tgz`:
+From the repo root (where `packages/` contains the tarball):
 
 ```bash
-npm install -g ./hiroleague-taskmanager-<version>.tgz
+npm install -g ./packages/hiroleague-taskmanager-<version>.tgz
 ```
 
 Then `hirotm` is on PATH (if npm’s global bin is on PATH).
@@ -50,7 +55,7 @@ Then `hirotm` is on PATH (if npm’s global bin is on PATH).
 ## Global install with Bun
 
 ```bash
-bun install -g ./hiroleague-taskmanager-<version>.tgz
+bun install -g ./packages/hiroleague-taskmanager-<version>.tgz
 ```
 
 (or `bun install -g @hiroleague/taskmanager` from the registry, if published.)
@@ -117,5 +122,5 @@ npm publish --dry-run --access public
 8. **Inspect tarball contents without writing a file:**
 
    ```bash
-   npm pack --dry-run
+   npm pack --dry-run --pack-destination packages
    ```

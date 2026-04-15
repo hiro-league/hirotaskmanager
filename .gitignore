@@ -15,5 +15,5 @@ coverage/html
 
 opencode.json
 
-# remove everything that starts with hiroleague-taskmanager-
-hiroleague*.tgz
+# Packages
+# packages/

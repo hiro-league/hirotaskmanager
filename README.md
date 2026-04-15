@@ -40,7 +40,15 @@ Follow [QuickStart](https://docs.hiroleague.com/task-manager/get-started/quickst
 
 run `hirotaskmanager` to start the app. First run will guide you to create a default profile and set a passphrase.
 
-use `npx skills hiroleague/taskmanager` to add it as a skill to your AI Agents.
+AI agent skills are bundled and copied to `~/.taskmanager/skills/` automatically on install and upgrade.
+
+```bash
+# First time — add skills to your AI agents
+npx skills add ~/.taskmanager/skills
+
+# After a package upgrade — refresh agent copies
+npx skills update
+```
 
 ## CLI
 

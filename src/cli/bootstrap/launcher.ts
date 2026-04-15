@@ -7,6 +7,7 @@ import {
   ensureRuntimeDirectories,
   hasAnyProfileConfigOnDisk,
 } from "../../shared/runtimeConfig";
+import { ensureBundledSkills } from "../../shared/skillsInstall";
 import {
   getDefaultInstalledAuthDir,
   getDefaultInstalledDataDir,
@@ -338,6 +339,10 @@ export function createHirotaskmanagerProgram(): Command {
                 firstProfileOnMachine: false,
               },
             };
+
+        // Safety net: copy bundled skills to ~/.taskmanager/skills/ if
+        // postinstall was skipped (--ignore-scripts, CI, bunx) or stale.
+        ensureBundledSkills();
 
         const launcherConfig = setupResult.config;
 

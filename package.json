@@ -19,6 +19,7 @@
   "files": [
     "dist",
     "src",
+    "skills",
     "README.md",
     "scripts/postinstall-message.mjs",
     "scripts/stubs/node-domexception"

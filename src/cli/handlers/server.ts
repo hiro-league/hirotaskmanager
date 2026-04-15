@@ -1,23 +1,36 @@
+import { CLI_ERR } from "../types/errors";
+import { CliError } from "../lib/output";
 import type { CliContext } from "./context";
 
 export async function handleServerStart(
   ctx: CliContext,
   options: {
     background?: boolean;
+    foreground?: boolean;
     dataDir?: string;
   },
 ): Promise<void> {
   const port = ctx.resolvePort();
   const dataDir = ctx.resolveDataDir({ dataDir: options.dataDir });
 
-  if (options.background) {
-    const status = await ctx.startServer({ dataDir, port }, "background");
+  if (options.background && options.foreground) {
+    throw new CliError("Choose either --background or --foreground", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+
+  // Default to background so `hirotm server start` stays script/agent-friendly
+  // unless the caller explicitly asks to keep logs attached.
+  const startMode = options.foreground ? "foreground" : "background";
+
+  if (startMode === "background") {
+    const status = await ctx.startServer({ dataDir, port }, startMode);
     ctx.printJson(status);
     return;
   }
 
   // Run in production mode so the installed CLI uses a stable home data directory by default.
-  await ctx.startServer({ dataDir, port }, "foreground");
+  await ctx.startServer({ dataDir, port }, startMode);
 }
 
 export async function handleServerStatus(ctx: CliContext): Promise<void> {

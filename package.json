@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "type": "module",
   "description": "Local-only task board app (Bun + Hono + React)",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hiro-league/hirotaskmanager.git"
@@ -20,6 +20,7 @@
     "dist",
     "src",
     "skills",
+    "LICENSE",
     "README.md",
     "scripts/postinstall-message.mjs",
     "scripts/stubs/node-domexception"
@@ -36,9 +37,10 @@
     "app": "bun run src/cli/bin/hirotaskmanager.ts",
     "cli": "bun run src/cli/bin/hirotm.ts",
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "npx --yes bun --watch src/server/bootstrapDev.ts",
+    "dev:server": "npx --yes bun --watch src/server/bootstrapDev.ts --dev --profile dev",
     "dev:client": "npx --yes wait-on tcp:127.0.0.1:3002 && vite",
     "build": "vite build",
+    "pack:install": "node ./pack-and-install.mjs",
     "prepack": "npm run build",
     "release:check": "npm run typecheck && bun test && npm run build && npm pack --dry-run",
     "release:publish": "npm publish --access public",

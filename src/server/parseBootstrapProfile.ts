@@ -35,3 +35,8 @@ export function parseBootstrapPortFromArgv(): number | undefined {
   }
   return undefined;
 }
+
+/** Reads `--dev` flag from argv for server bootstrap entrypoints. */
+export function parseBootstrapDevFlagFromArgv(): boolean {
+  return process.argv.slice(2).includes("--dev");
+}

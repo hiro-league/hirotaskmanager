@@ -21,8 +21,9 @@ import { parsePortOption } from "../lib/command-helpers";
 import { CLI_ERR } from "../types/errors";
 import { CLI_DEFAULTS } from "../lib/constants";
 import { CliError, exitWithError } from "../lib/output";
-import { startServer } from "../lib/process";
+import { readServerStatus, startServer, stopServer } from "../lib/process";
 import { canPromptInteractively } from "../lib/tty";
+import type { ServerStartMode } from "../ports/process";
 import {
   formatBooleanPrompt,
   formatTextPrompt,
@@ -46,6 +47,15 @@ interface LauncherOptions {
   profile?: string;
 }
 
+interface LauncherServerOptions {
+  profile?: string;
+}
+
+interface LauncherServerStartOptions extends LauncherServerOptions {
+  dataDir?: string;
+  foreground?: boolean;
+}
+
 export interface LauncherSetupResult {
   config: CliConfigFile;
   setupMeta: {
@@ -53,6 +63,31 @@ export interface LauncherSetupResult {
     justFinishedInteractiveSetup: boolean;
     /** No profile had config.json on disk before this run’s save. */
     firstProfileOnMachine: boolean;
+  };
+}
+
+export function resolveLauncherStartPlan(options: {
+  shouldRunSetup: boolean;
+  needsRecoveryKeyExitFlow: boolean;
+  alreadyRunning: boolean;
+  shouldOpenBrowser: boolean;
+  preferForegroundWhenNotSetup?: boolean;
+}): {
+  startMode: ServerStartMode;
+  readyLabel: "Started" | "Already started";
+  shouldOpenBrowserOnReady: boolean;
+} {
+  return {
+    startMode: options.shouldRunSetup
+      ? options.needsRecoveryKeyExitFlow
+        ? "background-attached"
+        : "foreground"
+      : options.preferForegroundWhenNotSetup
+        ? "foreground"
+        : "background",
+    readyLabel: options.alreadyRunning ? "Already started" : "Started",
+    shouldOpenBrowserOnReady:
+      options.shouldOpenBrowser && !options.alreadyRunning,
   };
 }
 
@@ -296,6 +331,17 @@ async function waitForEnterToExitLauncher(): Promise<void> {
   }
 }
 
+function resolveInstalledLauncherProfile(profile: string | undefined): string {
+  return resolveProfileName({
+    profile,
+    kind: "installed",
+  });
+}
+
+function printLauncherJson(data: unknown): void {
+  process.stdout.write(`${JSON.stringify(data)}\n`);
+}
+
 export function createHirotaskmanagerProgram(): Command {
   const program = new Command();
   program
@@ -314,10 +360,7 @@ export function createHirotaskmanagerProgram(): Command {
           ? path.resolve(options.dataDir.trim())
           : undefined;
         const overrideOpenBrowser = parseBrowserMode(options.browser);
-        const selectedProfile = resolveProfileName({
-          profile: options.profile,
-          kind: "installed",
-        });
+        const selectedProfile = resolveInstalledLauncherProfile(options.profile);
 
         const shouldRunSetup =
           options.setup ||
@@ -370,9 +413,26 @@ export function createHirotaskmanagerProgram(): Command {
         const needsRecoveryKeyExitFlow =
           setupResult.setupMeta.justFinishedInteractiveSetup &&
           !isAuthInitialized(authDir);
+        // Keep normal launcher runs non-blocking, and avoid reopening the browser
+        // when the launcher is only attaching to an already running profile.
+        const alreadyRunning = shouldRunSetup
+          ? false
+          : (
+              await readServerStatus({
+                kind: "installed",
+                profile: selectedProfile,
+                port,
+              })
+            ).running;
+        const startPlan = resolveLauncherStartPlan({
+          shouldRunSetup,
+          needsRecoveryKeyExitFlow,
+          alreadyRunning,
+          shouldOpenBrowser,
+        });
 
         const startupSpinner = startInlineSpinner(
-          `Starting Server with profile ${paintValue(selectedProfile)}: ${paintValue(url)}`,
+          `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(selectedProfile)}: ${paintValue(url)}`,
         );
         const previousSilentStartup = process.env.TASKMANAGER_SILENT_STARTUP_LOG;
         // Let the launcher own startup copy so first-time setup stays compact.
@@ -388,17 +448,15 @@ export function createHirotaskmanagerProgram(): Command {
               port,
               dataDir,
             },
-            needsRecoveryKeyExitFlow
-              ? "background-attached"
-              : "foreground",
+            startPlan.startMode,
             async (status) => {
-              const finalUrl = status.url ?? url;
+              const finalUrl = status.url;
               runningUrl = finalUrl;
               startupSpinner.stop(
-                `Started, listening at ${paintValue(finalUrl)}`,
+                `${startPlan.readyLabel}, listening at ${paintValue(finalUrl)}`,
               );
 
-              if (!browserHandled && shouldOpenBrowser) {
+              if (!browserHandled && startPlan.shouldOpenBrowserOnReady) {
                 browserHandled = true;
                 await openBrowser(finalUrl);
               }
@@ -422,6 +480,118 @@ export function createHirotaskmanagerProgram(): Command {
             process.env.TASKMANAGER_SILENT_STARTUP_LOG = previousSilentStartup;
           }
           startupSpinner.stop(null);
+        }
+      } catch (error) {
+        exitWithError(error);
+      }
+    });
+
+  const server = program
+    .command("server")
+    .description("Start, stop, or inspect the installed TaskManager server");
+
+  server
+    .command("start")
+    .description("Start the installed TaskManager server")
+    .option("--profile <name>", "Launcher profile name for this command")
+    .option("--data-dir <path>", "Override the task data directory")
+    .option("--foreground", "Run the server in the foreground")
+    .action(async (options: LauncherServerStartOptions, command: Command) => {
+      try {
+        const profile = resolveInstalledLauncherProfile(
+          (command.optsWithGlobals() as LauncherServerStartOptions).profile ?? options.profile,
+        );
+        const overrideDataDir = options.dataDir?.trim()
+          ? path.resolve(options.dataDir.trim())
+          : undefined;
+        const config = readConfigFile({ profile, kind: "installed" });
+        const port = config.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
+        const dataDir = path.resolve(
+          overrideDataDir ??
+            config.data_dir ??
+            getDefaultInstalledDataDir({ profile, kind: "installed" }),
+        );
+        const status = await readServerStatus({
+          kind: "installed",
+          profile,
+          port,
+        });
+        const startPlan = resolveLauncherStartPlan({
+          shouldRunSetup: false,
+          needsRecoveryKeyExitFlow: false,
+          alreadyRunning: status.running,
+          shouldOpenBrowser: false,
+          preferForegroundWhenNotSetup: options.foreground === true,
+        });
+        const startupSpinner = startInlineSpinner(
+          `${status.running ? "Checking Server" : "Starting Server"} with profile ${paintValue(profile)}: ${paintValue(status.running ? status.url : `http://127.0.0.1:${port}`)}`,
+        );
+
+        try {
+          // Launcher `server start` is human-facing, so prefer concise text
+          // instead of JSON while still sharing the same server lifecycle path.
+          await startServer(
+            {
+              kind: "installed",
+              profile,
+              port,
+              dataDir,
+            },
+            startPlan.startMode,
+            async (started) => {
+              startupSpinner.stop(
+                `${startPlan.readyLabel}, listening at ${paintValue(started.url)}`,
+              );
+            },
+          );
+        } finally {
+          startupSpinner.stop(null);
+        }
+      } catch (error) {
+        exitWithError(error);
+      }
+    });
+
+  server
+    .command("status")
+    .description("Show whether the installed TaskManager server is running")
+    .option("--profile <name>", "Launcher profile name for this command")
+    .action(async (options: LauncherServerOptions, command: Command) => {
+      try {
+        const profile = resolveInstalledLauncherProfile(
+          (command.optsWithGlobals() as LauncherServerOptions).profile ?? options.profile,
+        );
+        printLauncherJson(
+          await readServerStatus({
+            kind: "installed",
+            profile,
+          }),
+        );
+      } catch (error) {
+        exitWithError(error);
+      }
+    });
+
+  server
+    .command("stop")
+    .description("Stop a background installed server started for this profile")
+    .option("--profile <name>", "Launcher profile name for this command")
+    .action(async (options: LauncherServerOptions, command: Command) => {
+      try {
+        const profile = resolveInstalledLauncherProfile(
+          (command.optsWithGlobals() as LauncherServerOptions).profile ?? options.profile,
+        );
+        const stopSpinner = startInlineSpinner(
+          `Stopping Server with profile ${paintValue(profile)}`,
+        );
+        try {
+          await stopServer({
+            kind: "installed",
+            profile,
+          });
+          stopSpinner.stop("Server stopped");
+        } finally {
+          stopSpinner.stop(null);
         }
       } catch (error) {
         exitWithError(error);

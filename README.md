@@ -1,6 +1,10 @@
-# What is Hiro Task Manager?
+## What is Hiro Task Manager?
 
 Task management for solo builders with endless ideas and bad memory like myself. Hiro Task Manager adds superpowers to your task lists with AI agents controlled access.
+
+## Current Status
+
+Hiro Task Manager is in active development and is not yet ready for production use. However it is stable enough to try out and get started with.
 
 ## Features
 
@@ -30,49 +34,56 @@ Task management for solo builders with endless ideas and bad memory like myself.
 
 ## Install
 
-Quickly bootstrap with bun or npm
+1. Bootstrap with bun or npm
 
 ```bash
 bun install -g @hiroleague/taskmanager
 ```
 
-Follow [QuickStart](https://docs.hiroleague.com/task-manager/get-started/quickstart) Guide for more details.
-
-run `hirotaskmanager` to start the app. First run will guide you to create a default profile and set a passphrase.
-
-AI agent skills are bundled and copied to `~/.taskmanager/skills/` automatically on install and upgrade.
+2. Create default Profile and Start App
 
 ```bash
-# First time — add skills to your AI agents
-npx skills add ~/.taskmanager/skills
+hirotaskmanager     # Follow on Screen Instructions
+```
 
-# After a package upgrade — refresh agent copies
+3. Add AI Agent Skills to your AI Agents
+
+```bash
+npx skills add hiro-league/hirotaskmanager # add skills from our repo
+npx skills add "$HOME/.taskmanager/skills" # Or Alternatively add skills from local install
+```
+
+Follow npx skills instructions on screen to pick your AI Agents and whether to install the skills globally or in specific folders.
+
+## Update New Verions
+
+```bash
+bun update -g @hiroleague/taskmanager
 npx skills update
 ```
+
+Follow [QuickStart](https://docs.hiroleague.com/task-manager/get-started/quickstart) Guide for more details.
 
 ## CLI
 
 Hiro Task Manager exposes `hirotm` cli for command line and ai agent friendly control. You can use cli to manage your boards, lists, and tasks. AI Agents can create, update and delete all entities. Defensive and granular access control is built in.
 
-Try hirotm help for a list of commands.
-
-```bash
-hirotm server status
-hirotm boards
-hirotm tasks
-hirotm lists
-hirotm query search
-```
-
-## Development
-
-Repository development uses a separate dev profile and port:
-
-```bash
-npm install
-npm run dev
-```
+| Command | Summary |
+|---------|---------|
+| **`server`** | Start, stop, and check the server status. |
+| **`boards`** | List boards, inspect structure, manage board settings, and handle board trash operations. |
+| **`lists`** | List, create, update, move, delete, restore, and purge lists on a board. |
+| **`tasks`** | List, create, update, move, delete, restore, and purge tasks. |
+| **`releases`** | List, show, create, update, and delete releases on a board. |
+| **`statuses`** | List global workflow statuses. |
+| **`query`** | Run full-text task search with `query search`. |
+| **`trash`** | Read items currently in Trash. Restore and purge stay under their resource commands. |
 
 ## Contributing
 
 Issues and pull requests are welcome.
+
+## References
+
+- [Hiro Task Manager Documentation](https://docs.hiroleague.com/task-manager)
+- [Website](https://hiroleague.com/hiro-task-manager)

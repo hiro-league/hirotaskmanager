@@ -8,6 +8,11 @@ import {
   setRuntimeConfigSelection,
   type RuntimeKind,
 } from "../shared/runtimeConfig";
+import { resolveRuntimeSource } from "../shared/runtimeIdentity";
+import {
+  buildLocalServerUrl,
+  type RunningServerStatus,
+} from "../shared/serverStatus";
 import { authMiddleware, requireWebSession, type AppBindings } from "./auth";
 import { cliBoardReadError } from "./cliPolicyGuard";
 import { getDb, runMigrations } from "./db";
@@ -23,6 +28,20 @@ import { ensureDataDir, entryByIdOrSlug } from "./storage";
 
 export function createTaskManagerApp(kind: RuntimeKind): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
+  const source = resolveRuntimeSource(import.meta.url);
+  // Keep `/api/health` and CLI `server status` on the exact same payload so
+  // users can compare them directly without translating field names.
+  const healthStatus = (): RunningServerStatus => {
+    const port = resolvePort({ kind });
+    return {
+      pid: process.pid,
+      port,
+      running: true,
+      runtime: kind,
+      source,
+      url: buildLocalServerUrl(port),
+    };
+  };
 
   // Keep dev auth close to production, but allow the Vite origin to talk to the
   // API directly for EventSource and fetch during local development.
@@ -37,7 +56,7 @@ export function createTaskManagerApp(kind: RuntimeKind): Hono<AppBindings> {
   }
 
   app.use("/api/*", authMiddleware);
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  app.get("/api/health", (c) => c.json(healthStatus()));
   app.get("/api/events", async (c) => {
     const rawBoardId = c.req.query("boardId");
     if (rawBoardId != null && !/^\d+$/.test(rawBoardId)) {
@@ -65,9 +84,10 @@ export function createTaskManagerApp(kind: RuntimeKind): Hono<AppBindings> {
   app.route("/api/notifications", notificationsRoute);
   app.route("/api/search", searchRoute);
 
-  if (kind === "installed") {
-    const distDir = resolveInstalledDistDir();
-
+  // Installed mode requires a built frontend; dev mode serves it as an
+  // optional fallback so the server URL is not a dead 404 if dist/ exists.
+  const distDir = resolveInstalledDistDir();
+  if (kind === "installed" || existsSync(path.join(distDir, "index.html"))) {
     app.use("/*", serveStatic({ root: distDir }));
 
     app.get("*", async () => {

@@ -7,6 +7,12 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveRuntimeSource } from "../../shared/runtimeIdentity";
+import {
+  buildLocalServerUrl,
+  type RunningServerStatus,
+  type ServerStatus,
+} from "../../shared/serverStatus";
 import {
   getServerPidFilePath,
   resolveDataDir,
@@ -15,10 +21,9 @@ import {
   resolveRuntimeKind,
   type ConfigOverrides,
 } from "./config";
-import { fetchHealth } from "./api-client";
+import { fetchHealth, fetchHealthStatus } from "./api-client";
 import { CLI_DEFAULTS, CLI_POLLING } from "./constants";
 import { CLI_ERR } from "../types/errors";
-import type { ServerStatus } from "../types/config";
 import { CliError } from "./output";
 import type { ServerStartMode } from "../ports/process";
 
@@ -30,7 +35,11 @@ interface ManagedServerRecord {
 
 export type { ServerStatus };
 
-type ServerReadyCallback = (status: ServerStatus) => void | Promise<void>;
+type ServerReadyCallback = (status: RunningServerStatus) => void | Promise<void>;
+
+function buildStoppedStatus(): ServerStatus {
+  return { running: false };
+}
 
 function getPidFilePath(overrides: ConfigOverrides = {}): string {
   return getServerPidFilePath(overrides);
@@ -108,26 +117,15 @@ function buildServerEnv(overrides: ConfigOverrides): NodeJS.ProcessEnv {
 export async function readServerStatus(
   overrides: ConfigOverrides = {},
 ): Promise<ServerStatus> {
-  const port = resolvePort(overrides);
-  const healthy = await fetchHealth(overrides);
+  const health = await fetchHealthStatus(overrides);
+  const healthy = health?.running === true;
   const managedRecord = readManagedServerRecord(overrides);
 
   if (healthy) {
     if (managedRecord && !isProcessAlive(managedRecord.pid)) {
       removeManagedServerRecord(overrides);
-      return {
-        port,
-        running: true,
-        url: `http://127.0.0.1:${port}`,
-      };
     }
-
-    return {
-      pid: managedRecord?.pid,
-      port,
-      running: true,
-      url: `http://127.0.0.1:${port}`,
-    };
+    return health;
   }
 
   if (managedRecord && !isProcessAlive(managedRecord.pid)) {
@@ -156,16 +154,22 @@ export async function startServer(
   const resolvedPort = resolvePort({ ...overrides, port: overrides.port });
   const runDetached = mode !== "foreground";
   const silenceConsole = mode === "background";
+  const runtime = resolveRuntimeKind(overrides);
+  const source = resolveRuntimeSource(import.meta.url);
+  const spawnCmd = [
+    process.execPath,
+    getServerEntryPath(overrides),
+    "--profile",
+    resolveProfileName(overrides),
+    "--port",
+    String(resolvedPort),
+  ];
+  // Pass --dev explicitly so the child bootstrap sets dev runtime.
+  if (runtime === "dev") {
+    spawnCmd.push("--dev");
+  }
   const child = Bun.spawn({
-    // Profile and port are passed on argv (bootstrap parsers); do not rely on TASKMANAGER_* env for these.
-    cmd: [
-      process.execPath,
-      getServerEntryPath(overrides),
-      "--profile",
-      resolveProfileName(overrides),
-      "--port",
-      String(resolvedPort),
-    ],
+    cmd: spawnCmd,
     cwd: process.cwd(),
     detached: runDetached,
     env: buildServerEnv({ ...overrides, port }),
@@ -184,18 +188,24 @@ export async function startServer(
       throw new CliError("Server failed to start", 7, {
         code: CLI_ERR.serverStartTimeout,
         retryable: true,
-        hint: "Try running `hirotm server start` without --background to inspect logs.",
+        hint: "Try running `hirotm server start --foreground` to inspect logs.",
         url: `http://127.0.0.1:${port}`,
       });
     }
 
+    const health = await fetchHealthStatus({ ...overrides, port });
+
     if (onReady) {
-      await onReady({
-        pid: child.pid,
-        port,
-        running: true,
-        url: `http://127.0.0.1:${port}`,
-      });
+      await onReady(
+        health ?? {
+          pid: child.pid,
+          port,
+          running: true,
+          runtime,
+          source,
+          url: buildLocalServerUrl(port),
+        },
+      );
     }
 
     // Persist the pid so later status calls can report a CLI-managed background server.
@@ -205,12 +215,16 @@ export async function startServer(
       startedAt: new Date().toISOString(),
     }, overrides);
 
-    return {
-      pid: child.pid,
-      port,
-      running: true,
-      url: `http://127.0.0.1:${port}`,
-    };
+    return (
+      health ?? {
+        pid: child.pid,
+        port,
+        running: true,
+        runtime,
+        source,
+        url: buildLocalServerUrl(port),
+      }
+    );
   }
 
   // Wait for health before handing control back to the launcher so first-run
@@ -226,13 +240,19 @@ export async function startServer(
     });
   }
 
+  const health = await fetchHealthStatus({ ...overrides, port });
+
   if (onReady) {
-    await onReady({
-      pid: child.pid,
-      port,
-      running: true,
-      url: `http://127.0.0.1:${port}`,
-    });
+    await onReady(
+      health ?? {
+        pid: child.pid,
+        port,
+        running: true,
+        runtime,
+        source,
+        url: buildLocalServerUrl(port),
+      },
+    );
   }
 
   // Track whether the CLI forwarded a termination signal so we can treat
@@ -258,10 +278,7 @@ export async function startServer(
     });
   }
 
-  return {
-    port,
-    running: false,
-  };
+  return buildStoppedStatus();
 }
 
 /**
@@ -330,9 +347,5 @@ export async function stopServer(
 
   removeManagedServerRecord(overrides);
 
-  return {
-    pid: record.pid,
-    port: waitPort,
-    running: false,
-  };
+  return buildStoppedStatus();
 }

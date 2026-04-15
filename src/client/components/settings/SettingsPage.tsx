@@ -34,7 +34,7 @@ export function SettingsPage() {
             <input
               type="checkbox"
               className="mt-0.5 size-4 shrink-0 rounded border-input"
-              checked={globalPolicy?.createBoard ?? false}
+              checked={globalPolicy?.createBoard ?? true}
               disabled={patchGlobal.isPending}
               onChange={(e) =>
                 patchGlobal.mutate({ createBoard: e.target.checked })

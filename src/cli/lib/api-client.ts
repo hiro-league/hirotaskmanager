@@ -23,6 +23,7 @@ import { CLI_DEFAULTS } from "./constants";
 import { CLI_ERR } from "../types/errors";
 import { mapHttpStatusToCliFailure } from "./cli-http-errors";
 import { CliError } from "./output";
+import type { RunningServerStatus } from "../../shared/serverStatus";
 
 /** Uses `CLI_DEFAULTS.API_FETCH_TIMEOUT_MS`; health polling uses short waits in `process.ts`. */
 // Aligns with docs/cli-error-handling.md: timeouts surface as exit 7 + code request_timeout.
@@ -54,16 +55,16 @@ function buildBaseUrl(overrides: ConfigOverrides = {}): string {
 }
 
 function buildStartCommand(overrides: ConfigOverrides = {}): string {
-  const command = ["hirotm", "server", "start", "--background"];
+  const command = ["hirotm", "server", "start"];
   const profile = resolveProfileName(overrides);
   const runtime = resolveRuntimeKind(overrides);
 
-  if (runtime === "dev" || profile !== "default") {
+  if (profile !== "default") {
     command.push("--profile", profile);
   }
-
-  // Port is not a subcommand flag; use global `hirotm --port` or profile config.json.
-  // The shell inherits env when copy-pasting this command.
+  if (runtime === "dev") {
+    command.push("--dev");
+  }
 
   return command.join(" ");
 }
@@ -177,6 +178,8 @@ async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
+export type HealthStatus = RunningServerStatus;
+
 export async function fetchApi<T>(
   endpoint: string,
   overrides: ConfigOverrides = {},
@@ -211,17 +214,47 @@ export async function fetchApiTrashMutate<T>(
   });
 }
 
-export async function fetchHealth(overrides: ConfigOverrides = {}): Promise<boolean> {
+export async function fetchHealthStatus(
+  overrides: ConfigOverrides = {},
+): Promise<HealthStatus | null> {
   const baseUrl = buildBaseUrl(overrides);
 
   try {
     const response = await fetch(`${baseUrl}/api/health`, {
       headers: taskManagerClientHeaders(),
     });
-    if (!response.ok) return false;
-    const body = (await response.json()) as { ok?: unknown };
-    return body.ok === true;
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      pid?: unknown;
+      port?: unknown;
+      running?: unknown;
+      runtime?: unknown;
+      source?: unknown;
+      url?: unknown;
+    };
+    if (
+      typeof body.pid !== "number" ||
+      typeof body.port !== "number" ||
+      body.running !== true ||
+      (body.runtime !== "dev" && body.runtime !== "installed") ||
+      (body.source !== "repo" && body.source !== "installed") ||
+      typeof body.url !== "string"
+    ) {
+      return null;
+    }
+    return {
+      pid: body.pid,
+      port: body.port,
+      running: true,
+      runtime: body.runtime,
+      source: body.source,
+      url: body.url,
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function fetchHealth(overrides: ConfigOverrides = {}): Promise<boolean> {
+  return (await fetchHealthStatus(overrides))?.running === true;
 }

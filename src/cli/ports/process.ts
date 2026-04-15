@@ -1,7 +1,8 @@
+import type { RunningServerStatus } from "../../shared/serverStatus";
 import type { ConfigOverrides, ServerStatus } from "../types/config";
 
 export type ServerReadyCallback = (
-  status: ServerStatus,
+  status: RunningServerStatus,
 ) => void | Promise<void>;
 
 export type ServerStartMode =

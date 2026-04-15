@@ -36,10 +36,6 @@ function normalizeProfileName(profile: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function inferRuntimeKindFromProfile(profile: string | undefined): RuntimeKind | undefined {
-  return profile === "dev" ? "dev" : undefined;
-}
-
 function readRuntimeKindFromEnv(): RuntimeKind | undefined {
   const value = process.env.TASKMANAGER_RUNTIME?.trim().toLowerCase();
   if (value === "installed" || value === "dev") return value;
@@ -88,16 +84,13 @@ export function setRuntimeConfigSelection(selection: {
   }
 }
 
+// Runtime kind is set explicitly via --dev flag, setRuntimeConfigSelection, or
+// TASKMANAGER_RUNTIME env. Profile name no longer implies runtime kind.
 export function resolveRuntimeKind(overrides: RuntimeConfigOverrides = {}): RuntimeKind {
-  const inferredFromProfile =
-    inferRuntimeKindFromProfile(normalizeProfileName(overrides.profile)) ??
-    inferRuntimeKindFromProfile(selectedProfileName);
-
   return (
     overrides.kind ??
     selectedRuntimeKind ??
     readRuntimeKindFromEnv() ??
-    inferredFromProfile ??
     "installed"
   );
 }
@@ -106,7 +99,7 @@ export function resolveProfileName(overrides: RuntimeConfigOverrides = {}): stri
   return (
     normalizeProfileName(overrides.profile) ??
     selectedProfileName ??
-    (resolveRuntimeKind(overrides) === "dev" ? "dev" : "default")
+    "default"
   );
 }
 
@@ -198,12 +191,10 @@ export function getDefaultPort(overrides: RuntimeConfigOverrides = {}): number {
   return resolveRuntimeKind(overrides) === "dev" ? 3002 : 3001;
 }
 
+// All profiles (including dev) use the profile-based data dir under
+// ~/.taskmanager/profiles/<name>/data. Use --data-dir or config.json
+// data_dir to override.
 export function getDefaultDataDir(overrides: RuntimeConfigOverrides = {}): string {
-  if (resolveRuntimeKind(overrides) === "dev") {
-    // Keep repository development pointed at the tracked local SQLite file
-    // without relying on env vars in the normal dev workflow.
-    return path.resolve(import.meta.dir, "../..", "data");
-  }
   return path.join(getProfileRootDir(overrides), "data");
 }
 

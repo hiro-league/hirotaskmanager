@@ -61,7 +61,8 @@ export function readCliGlobalPolicy(): CliGlobalPolicy {
   const row = db
     .query("SELECT create_board FROM cli_global_policy WHERE id = 1")
     .get() as { create_board: number } | null;
-  return { createBoard: row ? row.create_board !== 0 : false };
+  // Missing row should not happen after migrations; default matches seeded `create_board` (on).
+  return { createBoard: row ? row.create_board !== 0 : true };
 }
 
 export function setCliGlobalCreateBoard(enabled: boolean): void {

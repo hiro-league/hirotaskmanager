@@ -22,6 +22,13 @@
       "internalConsoleOptions": "neverOpen"
     },
     {
+      "name": "Pack + Install Tarball Globally",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run pack:install",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Start (production)",
       "type": "node",
       "request": "launch",
@@ -36,8 +43,8 @@
       "type": "bun",
       "request": "launch",
       "program": "${workspaceFolder}/src/server/bootstrapDev.ts",
+      "args": ["--dev", "--profile", "dev"],
       "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
       "stopOnEntry": false,
       "watchMode": true
     }

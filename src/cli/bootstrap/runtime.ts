@@ -1,5 +1,5 @@
 import { setRuntimeCliClientName } from "../lib/clientIdentity";
-import { setRuntimeCliPort, setRuntimeProfile } from "../lib/config";
+import { setRuntimeCliPort, setRuntimeKind, setRuntimeProfile } from "../lib/config";
 
 /**
  * Parse argv before Commander runs so profile and client name match this invocation
@@ -51,8 +51,15 @@ export function readPortArg(argv: string[]): number | undefined {
   return undefined;
 }
 
+export function readDevFlag(argv: string[]): boolean {
+  return argv.includes("--dev");
+}
+
 export function applyCliRuntimeFromArgv(argv: string[]): void {
   setRuntimeCliClientName(readClientNameArg(argv));
   setRuntimeProfile(readProfileArg(argv));
   setRuntimeCliPort(readPortArg(argv));
+  if (readDevFlag(argv)) {
+    setRuntimeKind("dev");
+  }
 }

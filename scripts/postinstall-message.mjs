@@ -1,6 +1,6 @@
 /**
- * Prints a "next step" banner after install and copies bundled skills to
- * ~/.taskmanager/skills/ so users can run `npx skills add` from a local path.
+ * Prints a "next step" banner after install and copies bundled skills to the
+ * user's Task Manager home so users can install skills from the repo or locally.
  *
  * npm v7+ runs lifecycle scripts with stdio piped (foreground-scripts=false by
  * default), so console.log / console.error is silently swallowed. We bypass
@@ -32,7 +32,7 @@ if (process.env.CI === 'true' || process.env.SKIP_TASKMANAGER_POSTINSTALL === '1
 }
 
 // ---------------------------------------------------------------------------
-// Skills copy: bundle → ~/.taskmanager/skills/
+// Skills copy: bundle → user Task Manager home
 // ---------------------------------------------------------------------------
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -54,7 +54,8 @@ function getPackageVersion() {
 }
 
 /**
- * Copy bundled skills to ~/.taskmanager/skills/, replacing stale copies when
+ * Copy bundled skills to the user's Task Manager home, replacing stale copies
+ * when
  * the package version changes.
  */
 function installSkills() {
@@ -92,7 +93,34 @@ const skillsInstalled = installSkills();
 // Banner
 // ---------------------------------------------------------------------------
 
-const INNER = 60;
+// Use $HOME so the same local install command works in PowerShell and Unix shells.
+const localSkillsSource = '"$HOME/.taskmanager/skills"';
+
+const contentLines = [
+  '@hiroleague/taskmanager installed',
+  '',
+  'To finish setup and start the server, run:',
+  '',
+  '  hirotaskmanager',
+  '',
+  'CLI shorthand (boards, tasks, search):',
+  '',
+  '  hirotm --help',
+];
+
+if (skillsInstalled) {
+  // Show both sources so users can choose repo-tracked or local bundled skills.
+  contentLines.push(
+    '',
+    'AI agent skills:',
+    '',
+    '  Repo install:  npx skills add hiro-league/hirotaskmanager',
+    `  Local install: npx skills add ${localSkillsSource}`,
+    '  Update:        npx skills update',
+  );
+}
+
+const INNER = Math.max(60, ...contentLines.map((line) => line.length));
 const top = `  +${'-'.repeat(INNER + 2)}+`;
 const bottom = `  +${'-'.repeat(INNER + 2)}+`;
 const row = (t) => `  |  ${t.padEnd(INNER)}|`;
@@ -100,26 +128,8 @@ const row = (t) => `  |  ${t.padEnd(INNER)}|`;
 const bannerLines = [
   '',
   top,
-  row('@hiroleague/taskmanager installed'),
-  row(''),
-  row('To finish setup and start the server, run:'),
-  row(''),
-  row('  hirotaskmanager'),
-  row(''),
-  row('CLI shorthand (boards, tasks, search):'),
-  row(''),
-  row('  hirotm --help'),
+  ...contentLines.map(row),
 ];
-
-if (skillsInstalled) {
-  bannerLines.push(
-    row(''),
-    row('AI agent skills:'),
-    row(''),
-    row('  First time:    npx skills add ~/.taskmanager/skills'),
-    row('  After update:  npx skills update'),
-  );
-}
 
 bannerLines.push(bottom, '');
 const banner = bannerLines.join('\n');

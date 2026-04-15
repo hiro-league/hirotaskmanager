@@ -5,6 +5,7 @@ import {
   fetchApiMutate,
   fetchApiTrashMutate,
   fetchHealth,
+  fetchHealthStatus,
 } from "./api-client";
 import { CliError } from "./output";
 
@@ -200,7 +201,14 @@ describe("api-client (mock fetch)", () => {
 
   test("fetchHealth true when ok JSON", async () => {
     setMockFetch(async () =>
-      new Response(JSON.stringify({ ok: true }), {
+      new Response(JSON.stringify({
+        pid: 4321,
+        port: 20000,
+        running: true,
+        runtime: "installed",
+        source: "installed",
+        url: "http://127.0.0.1:20000",
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -209,9 +217,34 @@ describe("api-client (mock fetch)", () => {
     await expect(fetchHealth({ port: 20000 })).resolves.toBe(true);
   });
 
+  test("fetchHealthStatus returns runtime/source metadata when provided", async () => {
+    setMockFetch(async () =>
+      new Response(JSON.stringify({
+        pid: 12345,
+        port: 20000,
+        running: true,
+        runtime: "installed",
+        source: "repo",
+        url: "http://127.0.0.1:20000",
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(fetchHealthStatus({ port: 20000 })).resolves.toEqual({
+      pid: 12345,
+      port: 20000,
+      running: true,
+      runtime: "installed",
+      source: "repo",
+      url: "http://127.0.0.1:20000",
+    });
+  });
+
   test("fetchHealth false when not ok", async () => {
     setMockFetch(async () =>
-      new Response(JSON.stringify({ ok: false }), {
+      new Response(JSON.stringify({ running: false }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),

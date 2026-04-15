@@ -79,6 +79,13 @@ export function addProfileOption(command: Command): Command {
   );
 }
 
+export function addDevOption(command: Command): Command {
+  return command.option(
+    "--dev",
+    "Run in dev mode (API-only with dev CORS, port 3002 default)",
+  );
+}
+
 export function parsePortOption(port: string | undefined): number | undefined {
   if (!port?.trim()) return undefined;
 

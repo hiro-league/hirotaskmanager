@@ -6,7 +6,6 @@
  * Or: npm run test:cli:real-stack
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
 import { createServer } from "node:net";
 import {
   mkdirSync,
@@ -28,7 +27,7 @@ const prepareAuthScript = path.join(
 const bootstrapDev = path.join(repoRoot, "src", "server", "bootstrapDev.ts");
 
 /** Real-stack tests use an isolated HOME; pin profile and port via argv on each hirotm/server spawn. */
-const PROFILE_ARGS = ["--profile", "default"] as const;
+const PROFILE_ARGS = ["--profile", "default", "--dev"] as const;
 
 const runRealStack =
   process.env.RUN_CLI_REAL_STACK === "1" ||
@@ -63,8 +62,8 @@ async function waitForHealth(port: number, timeoutMs: number): Promise<void> {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/api/health`);
       if (r.ok) {
-        const j = (await r.json()) as { ok?: unknown };
-        if (j.ok === true) return;
+        const j = (await r.json()) as { running?: unknown; port?: unknown };
+        if (j.running === true && j.port === port) return;
       }
     } catch {
       /* connection refused until server is up */
@@ -83,19 +82,6 @@ function parseNdjsonLines(stdout: string): Record<string, unknown>[] {
 }
 
 const CLIENT_NAME = ["--client-name", "Cursor Agent"];
-
-/** Real-stack DB seeds `cli_global_policy.create_board = 0`; CLI board creation requires 1 (see `cliCreateBoardDeniedError`). */
-function enableCliGlobalCreateBoard(dataDir: string): void {
-  const dbPath = path.join(dataDir, "taskmanager.db");
-  const db = new Database(dbPath);
-  try {
-    db.run(
-      "INSERT OR REPLACE INTO cli_global_policy (id, create_board) VALUES (1, 1)",
-    );
-  } finally {
-    db.close();
-  }
-}
 
 describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", () => {
   let rootDir: string;
@@ -141,7 +127,6 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     });
 
     await waitForHealth(port, 30_000);
-    enableCliGlobalCreateBoard(dataDir);
   });
 
   afterEach(() => {

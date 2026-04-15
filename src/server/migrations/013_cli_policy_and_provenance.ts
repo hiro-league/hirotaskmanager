@@ -18,10 +18,10 @@ ALTER TABLE task ADD COLUMN created_by_label TEXT;
 
 CREATE TABLE cli_global_policy (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  create_board INTEGER NOT NULL DEFAULT 0
+  create_board INTEGER NOT NULL DEFAULT 1
 );
 
-INSERT INTO cli_global_policy (id, create_board) VALUES (1, 0);
+INSERT INTO cli_global_policy (id, create_board) VALUES (1, 1);
 
 CREATE TABLE board_cli_policy (
   board_id INTEGER PRIMARY KEY REFERENCES board(id) ON DELETE CASCADE,

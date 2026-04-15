@@ -52,7 +52,14 @@ describe("process.ts server lifecycle (mock fetch)", () => {
     setMockFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : (input as Request).url;
       expect(url).toContain("/api/health");
-      return new Response(JSON.stringify({ ok: true }), {
+      return new Response(JSON.stringify({
+        pid: 1001,
+        port: 17_001,
+        running: true,
+        runtime: "installed",
+        source: "installed",
+        url: "http://127.0.0.1:17001",
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -60,15 +67,18 @@ describe("process.ts server lifecycle (mock fetch)", () => {
 
     const status = await readServerStatus({ port: 17_001 });
     expect(status).toEqual({
+      pid: 1001,
       running: true,
       port: 17_001,
+      runtime: "installed",
+      source: "installed",
       url: "http://127.0.0.1:17001",
     });
   });
 
   test("readServerStatus — no health, no pid file", async () => {
     setMockFetch(async () =>
-      new Response(JSON.stringify({ ok: false }), {
+      new Response(JSON.stringify({ running: false }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -93,7 +103,7 @@ describe("process.ts server lifecycle (mock fetch)", () => {
     expect(existsSync(pidPath)).toBe(true);
 
     setMockFetch(async () =>
-      new Response(JSON.stringify({ ok: false }), {
+      new Response(JSON.stringify({ running: false }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -120,16 +130,25 @@ describe("process.ts server lifecycle (mock fetch)", () => {
     setMockFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : (input as Request).url;
       expect(url).toContain("/api/health");
-      return new Response(JSON.stringify({ ok: true }), {
+      return new Response(JSON.stringify({
+        pid: process.pid,
+        port,
+        running: true,
+        runtime: "dev",
+        source: "repo",
+        url: `http://127.0.0.1:${port}`,
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     });
 
     const status = await readServerStatus({ port });
-    expect(status.running).toBe(true);
+    if (!status.running) expect.unreachable();
     expect(status.port).toBe(port);
     expect(status.pid).toBe(process.pid);
+    expect(status.runtime).toBe("dev");
+    expect(status.source).toBe("repo");
     expect(status.url).toBe(`http://127.0.0.1:${port}`);
   });
 

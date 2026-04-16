@@ -2,6 +2,8 @@
 
 Task management for solo builders with endless ideas and a talent for forgetting. Hiro Task Manager adds superpowers to your task lists with AI-agent access control.
 
+[![Hiro Task Manager — watch on YouTube](assets/baymax_video_cover.jpg)](https://youtu.be/NUSbLk1sZQU)
+
 ## Current Status
 
 Hiro Task Manager is in active development and is not yet ready for production use. However it is stable enough to try out and get started with.

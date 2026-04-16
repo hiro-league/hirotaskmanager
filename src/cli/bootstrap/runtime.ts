@@ -1,5 +1,5 @@
-import { setRuntimeCliClientName } from "../lib/clientIdentity";
-import { setRuntimeCliPort, setRuntimeKind, setRuntimeProfile } from "../lib/config";
+import { setRuntimeCliClientName } from "../lib/client/clientIdentity";
+import { setRuntimeCliPort, setRuntimeKind, setRuntimeProfile } from "../lib/core/config";
 
 /**
  * Parse argv before Commander runs so profile and client name match this invocation

@@ -2,7 +2,7 @@ import {
   runTrashBoards,
   runTrashLists,
   runTrashTasks,
-} from "../lib/trashCommands";
+} from "../lib/trash/trashCommands";
 import type { CliContext } from "./context";
 
 export async function handleTrashBoards(

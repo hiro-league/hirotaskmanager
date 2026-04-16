@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { requireWebSession, type AppBindings } from "../auth";
-import { readCliGlobalPolicy, setCliGlobalCreateBoard } from "../storage/cliPolicy";
+import { readCliGlobalPolicy, setCliGlobalCreateBoard } from "../storage/system/cliPolicy";
 
 /** Web-only singleton: whether the CLI may create new boards (`cli_global_policy.create_board`). */
 export const cliGlobalPolicyRoute = new Hono<AppBindings>();

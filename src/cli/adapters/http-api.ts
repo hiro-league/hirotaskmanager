@@ -3,7 +3,7 @@ import {
   fetchApiMutate,
   fetchApiTrashMutate,
   fetchHealth,
-} from "../lib/api-client";
+} from "../lib/client/api-client";
 import type { ApiPort } from "../ports/api";
 
 /** Default TaskManager HTTP API adapter (local fetch + shared config). */

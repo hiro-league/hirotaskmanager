@@ -1,4 +1,5 @@
 import { useDeleteList } from "@/api/mutations";
+import { reportMutationError } from "@/lib/mutationErrorUi";
 import { listDisplayName, type Board } from "../../../../shared/models";
 import { useBoardKeyboardNav } from "./BoardKeyboardNavContext";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -47,6 +48,7 @@ export function BoardListDeleteConfirm({
               nav.setHighlightedListId(null);
               onClose();
             },
+            onError: (err) => reportMutationError("delete list", err),
           },
         );
       }}

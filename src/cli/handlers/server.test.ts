@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ConfigOverrides } from "../lib/config";
-import { createTestCliRuntime } from "../lib/runtime";
+import type { ConfigOverrides } from "../lib/core/config";
+import { createTestCliRuntime } from "../lib/core/runtime";
 import { createDefaultCliContext } from "./context";
 import { handleServerStart, handleServerStatus, handleServerStop } from "./server";
 import type { CliContext } from "./context";

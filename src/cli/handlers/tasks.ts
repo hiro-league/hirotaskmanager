@@ -1,11 +1,11 @@
-import { confirmMutableAction } from "../lib/mutableActionConfirm";
-import { runTasksPurge, runTasksRestore } from "../lib/trashCommands";
+import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import { runTasksPurge, runTasksRestore } from "../lib/trash/trashCommands";
 import {
   runTasksAdd,
   runTasksDelete,
   runTasksMove,
   runTasksUpdate,
-} from "../lib/writeCommands";
+} from "../lib/mutations/writeCommands";
 import type { CliContext } from "./context";
 
 export async function handleTasksAdd(

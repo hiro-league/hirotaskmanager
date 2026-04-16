@@ -5,7 +5,7 @@ import {
   addClientNameOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
-} from "../lib/command-helpers";
+} from "../lib/core/command-helpers";
 
 export function registerStatusCommands(
   program: Command,

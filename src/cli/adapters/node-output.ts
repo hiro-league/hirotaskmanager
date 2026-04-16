@@ -1,4 +1,4 @@
-import { printJson } from "../lib/output";
+import { printJson } from "../lib/output/output";
 import type { OutputPort } from "../ports/output";
 
 /** Stdout/stderr implementation using `process` streams (Bun/Node). */

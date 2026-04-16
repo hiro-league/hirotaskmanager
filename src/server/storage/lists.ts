@@ -1,9 +1,10 @@
 import type { Board, List } from "../../shared/models";
+import { normalizePrincipal } from "../../shared/principal";
 import type { RestoreOutcome } from "../../shared/trashApi";
 import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
-import { boardExists } from "./helpers";
-import { loadBoard } from "./board";
+import { boardExists } from "./system/helpers";
+import { loadBoard } from "./board/board";
 
 export type ListWriteResult = {
   boardId: number;
@@ -27,13 +28,6 @@ type ListRow = {
   created_by_label?: string | null;
 };
 
-function normalizePrincipal(
-  raw: string | null | undefined,
-): import("../../shared/provenance").CreatorPrincipalType | undefined {
-  if (raw === "web" || raw === "cli" || raw === "system") return raw;
-  return undefined;
-}
-
 function mapListRow(row: ListRow): List {
   return {
     listId: row.id,
@@ -55,6 +49,15 @@ function readBoardUpdatedAt(boardId: number): string | null {
     .query("SELECT updated_at FROM board WHERE id = ?")
     .get(boardId) as { updated_at: string } | null;
   return row?.updated_at ?? null;
+}
+
+// Trash routes need board ownership for trashed rows without embedding raw SQL in the route layer.
+export function findBoardIdForTrashedList(listId: number): number | null {
+  const db = getDb();
+  const row = db
+    .query("SELECT board_id FROM list WHERE id = ? AND deleted_at IS NOT NULL")
+    .get(listId) as { board_id: number } | null;
+  return row?.board_id ?? null;
 }
 
 /** Phase 2: small list writes read back one list row instead of reloading the full board. */

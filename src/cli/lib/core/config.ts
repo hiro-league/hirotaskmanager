@@ -1,0 +1,80 @@
+import {
+  getDefaultAuthDir,
+  getDefaultDataDir,
+  getProfileConfigFilePath,
+  getProfileRootDir,
+  getServerPidFilePath,
+  hasProfileConfigFile,
+  readProfileConfig,
+  resolveApiKey as resolveRuntimeApiKey,
+  resolveAuthDir as resolveRuntimeAuthDir,
+  resolveOpenBrowser as resolveRuntimeOpenBrowser,
+  resolvePort as resolveRuntimePort,
+  resolveDataDir as resolveRuntimeDataDir,
+  resolveProfileName,
+  resolveRuntimeKind,
+  setRuntimeConfigSelection,
+  writeProfileConfig,
+  type RuntimeConfigFile,
+  type RuntimeKind,
+} from "../../../shared/runtimeConfig";
+
+import type { ConfigOverrides } from "../../types/config";
+
+export type { ConfigOverrides } from "../../types/config";
+export type CliConfigFile = RuntimeConfigFile;
+
+export function setRuntimeProfile(profile: string | undefined): void {
+  setRuntimeConfigSelection({ profile });
+}
+
+export function setRuntimeCliPort(port: number | undefined): void {
+  setRuntimeConfigSelection({ port });
+}
+
+export function setRuntimeKind(kind: RuntimeKind | undefined): void {
+  setRuntimeConfigSelection({ kind });
+}
+
+export {
+  getProfileConfigFilePath as getCliConfigFilePath,
+  getProfileRootDir as getCliHomeDir,
+  getServerPidFilePath,
+  hasProfileConfigFile as hasCliConfigFile,
+  readProfileConfig as readConfigFile,
+  resolveProfileName,
+  resolveRuntimeKind,
+  writeProfileConfig as writeConfigFile,
+};
+
+export function getDefaultInstalledDataDir(
+  overrides: ConfigOverrides = {},
+): string {
+  return getDefaultDataDir({ ...overrides, kind: "installed" });
+}
+
+export function getDefaultInstalledAuthDir(
+  overrides: ConfigOverrides = {},
+): string {
+  return getDefaultAuthDir({ ...overrides, kind: "installed" });
+}
+
+export function resolvePort(overrides: ConfigOverrides = {}): number {
+  return resolveRuntimePort(overrides);
+}
+
+export function resolveDataDir(overrides: ConfigOverrides = {}): string {
+  return resolveRuntimeDataDir(overrides);
+}
+
+export function resolveAuthDir(overrides: ConfigOverrides = {}): string {
+  return resolveRuntimeAuthDir(overrides);
+}
+
+export function resolveOpenBrowser(overrides: ConfigOverrides = {}): boolean {
+  return resolveRuntimeOpenBrowser(overrides);
+}
+
+export function resolveApiKey(overrides: ConfigOverrides = {}): string | undefined {
+  return resolveRuntimeApiKey(overrides);
+}

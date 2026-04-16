@@ -1,4 +1,4 @@
-import { runSearch } from "../lib/read/search";
+import { runSearch } from "../lib/queries/search";
 import type { CliContext } from "./context";
 
 export async function handleSearch(

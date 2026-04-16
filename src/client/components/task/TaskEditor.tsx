@@ -1,37 +1,19 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import type { RefObject } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Star } from "lucide-react";
-import MDEditor, { type RefMDEditor } from "@uiw/react-md-editor";
-import "@uiw/react-md-editor/markdown-editor.css";
+import type { RefMDEditor } from "@uiw/react-md-editor";
 import {
-  effectiveDefaultTaskGroupId,
   formatGroupDisplayLabel,
   formatTaskIdForDisplay,
-  noneTaskPriorityId,
   priorityDisplayLabel,
   sortPrioritiesByValue,
   sortTaskGroupsForDisplay,
   type Task,
 } from "../../../shared/models";
-import { clampTaskTitleInput, normalizeStoredTaskTitle } from "../../../shared/taskTitle";
+import { clampTaskTitleInput } from "../../../shared/taskTitle";
 import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
-import { useCreateTask, useDeleteTask, useUpdateTask } from "@/api/mutations";
+import { useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
-import {
-  boardTaskDetailKey,
-  fetchBoardTask,
-  useStatuses,
-  useStatusWorkflowOrder,
-} from "@/api/queries";
+import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskFieldSwatchSelect } from "@/components/task/TaskFieldSwatchSelect";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
@@ -50,14 +32,14 @@ import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { usePreferencesStore } from "@/store/preferences";
 import { createTaskMarkdownPreviewComponents } from "@/components/task/taskMarkdownPreviewComponents";
 import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
-import { statusDotClass } from "@/components/board/laneStatusTheme";
+import { TaskMarkdownField } from "@/components/task/TaskMarkdownField";
+import {
+  RELEASE_SELECT_AUTO,
+  RELEASE_SELECT_NONE,
+  useTaskEditorForm,
+} from "@/components/task/useTaskEditorForm";
+import { statusDotClass } from "@/components/board/lanes/laneStatusTheme";
 import { cn } from "@/lib/utils";
-
-// Release select values mirror API omit vs null vs id (see task create contract in server routes).
-/** Create: omit `releaseId` in API body so server can auto-assign from board rules. */
-const RELEASE_SELECT_AUTO = "__auto__";
-/** Explicit unassigned / no release (`releaseId: null` in API). */
-const RELEASE_SELECT_NONE = "__none__";
 
 /**
  * Release date shown beside the name in the task editor (muted segment; `TaskFieldSwatchSelect` `dateLabel`).
@@ -73,7 +55,7 @@ function formatReleaseDateLabelForSelect(
   return d.toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-/** Main-field tab order; MD toolbar buttons are pushed out of the tab order via `useMdEditorToolbarTabSkip`. */
+/** Main-field tab order; MD toolbar buttons are pushed out of the tab order via `TaskMarkdownField`. */
 const TASK_FIELD_TAB = {
   emoji: 1,
   title: 2,
@@ -87,30 +69,6 @@ const TASK_FIELD_TAB = {
   moveToTrash: 10,
 } as const;
 
-function useMdEditorToolbarTabSkip(
-  rootRef: RefObject<HTMLElement | null>,
-  enabled: boolean,
-): void {
-  useEffect(() => {
-    if (!enabled) return;
-    const root = rootRef.current;
-    if (!root) return;
-    const apply = () => {
-      for (const tb of root.querySelectorAll<HTMLElement>(".w-md-editor-toolbar")) {
-        for (const el of tb.querySelectorAll<HTMLElement>(
-          "button, a[href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex='-1'])",
-        )) {
-          if (el.tabIndex >= 0) el.tabIndex = -1;
-        }
-      }
-    };
-    apply();
-    const mo = new MutationObserver(apply);
-    mo.observe(root, { childList: true, subtree: true });
-    return () => mo.disconnect();
-  }, [enabled, rootRef]);
-}
-
 interface TaskEditorProps {
   board: TaskEditorBoardData;
   open: boolean;
@@ -119,15 +77,6 @@ interface TaskEditorProps {
   /** Required when mode is create */
   createContext?: { listId: number; status: string };
   task?: Task | null;
-}
-
-interface Baseline {
-  title: string;
-  body: string;
-  group: string;
-  priority: string;
-  release: string;
-  emoji: string | null;
 }
 
 export function TaskEditor({
@@ -139,9 +88,8 @@ export function TaskEditor({
   task,
 }: TaskEditorProps) {
   const titleId = useId();
-  const createTask = useCreateTask();
-  const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
+  const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
   const completion = useBoardTaskCompletionCelebrationOptional();
@@ -154,114 +102,41 @@ export function TaskEditor({
     [mdColorMode],
   );
 
-  // Board list uses `GET /api/boards/:id?slim=1` (truncated bodies). Load full task when editing.
-  const taskDetailQuery = useQuery({
-    queryKey: boardTaskDetailKey(board.boardId, task?.taskId ?? 0),
-    queryFn: () => fetchBoardTask(board.boardId, task!.taskId),
-    enabled: open && mode === "edit" && task != null,
+  const {
+    title,
+    setTitle,
+    body,
+    setBody,
+    emoji,
+    setEmoji,
+    group,
+    setGroup,
+    priority,
+    setPriority,
+    release,
+    setRelease,
+    isDirty,
+    handleSave,
+    taskDetailQuery,
+    createTask,
+  } = useTaskEditorForm({
+    board,
+    open,
+    mode,
+    createContext,
+    task,
+    onClose,
   });
 
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  /** Task icon; null clears. */
-  const [emoji, setEmoji] = useState<string | null>(null);
-  /** Select value — matches `String(taskGroup.groupId)`. */
-  const [group, setGroup] = useState("");
-  /** Select value — matches `String(taskPriority.priorityId)` (default builtin `none`). */
-  const [priority, setPriority] = useState("");
-  /** `RELEASE_SELECT_*` or `String(releaseId)` for edit/create. */
-  const [release, setRelease] = useState(RELEASE_SELECT_AUTO);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const mdEditorRef = useRef<RefMDEditor>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const taskMdEditorWrapRef = useRef<HTMLDivElement>(null);
-  const baselineRef = useRef<Baseline>({
-    title: "",
-    body: "",
-    group: "",
-    priority: "",
-    release: RELEASE_SELECT_AUTO,
-    emoji: null,
-  });
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [showDiscard, setShowDiscard] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   const [titleInputFocused, setTitleInputFocused] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    if (mode === "edit" && task) {
-      if (taskDetailQuery.isPending) {
-        setTitle(task.title);
-        // Avoid letting the user edit a possibly slim `body` from the board payload.
-        setBody("");
-        setEmoji(task.emoji ?? null);
-        setGroup(String(task.groupId));
-        setPriority(String(task.priorityId));
-        const rel =
-          task.releaseId != null ? String(task.releaseId) : RELEASE_SELECT_NONE;
-        setRelease(rel);
-        baselineRef.current = {
-          title: task.title,
-          body: "",
-          group: String(task.groupId),
-          priority: String(task.priorityId),
-          release: rel,
-          emoji: task.emoji ?? null,
-        };
-        return;
-      }
-      const t = taskDetailQuery.data ?? task;
-      setTitle(t.title);
-      setBody(t.body);
-      setEmoji(t.emoji ?? null);
-      setGroup(String(t.groupId));
-      setPriority(String(t.priorityId));
-      const rel =
-        t.releaseId != null ? String(t.releaseId) : RELEASE_SELECT_NONE;
-      setRelease(rel);
-      baselineRef.current = {
-        title: t.title,
-        body: t.body,
-        group: String(t.groupId),
-        priority: String(t.priorityId),
-        release: rel,
-        emoji: t.emoji ?? null,
-      };
-    } else if (mode === "create" && createContext) {
-      setTitle("");
-      setBody("");
-      setEmoji(null);
-      // Creation always starts from the board default group; the board filter only affects visibility.
-      const defaultGroup = String(effectiveDefaultTaskGroupId(board));
-      setGroup(defaultGroup);
-      const defaultPri = String(
-        noneTaskPriorityId(board.taskPriorities) ??
-          sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId,
-      );
-      setPriority(defaultPri);
-      setRelease(RELEASE_SELECT_AUTO);
-      baselineRef.current = {
-        title: "",
-        body: "",
-        group: defaultGroup,
-        priority: defaultPri,
-        release: RELEASE_SELECT_AUTO,
-        emoji: null,
-      };
-    }
-  }, [
-    open,
-    mode,
-    task,
-    createContext,
-    board.taskGroups,
-    board.taskPriorities,
-    board.defaultTaskGroupId,
-    taskDetailQuery.isPending,
-    taskDetailQuery.data,
-  ]);
 
   useEffect(() => {
     if (open) setEmojiFieldError(null);
@@ -270,33 +145,6 @@ export function TaskEditor({
   useEffect(() => {
     if (!open) setTitleInputFocused(false);
   }, [open]);
-
-  const isDirty = useMemo(() => {
-    if (!open) return false;
-    if (mode === "edit" && task) {
-      return (
-        title.trim() !== baselineRef.current.title.trim() ||
-        body !== baselineRef.current.body ||
-        group !== baselineRef.current.group ||
-        priority !== baselineRef.current.priority ||
-        release !== baselineRef.current.release ||
-        (emoji ?? null) !== (baselineRef.current.emoji ?? null)
-      );
-    }
-    if (mode === "create" && createContext) {
-      // Track board-owned selects as dirty so closing after a priority change
-      // does not silently discard a user choice.
-      return (
-        title.trim() !== "" ||
-        body.trim() !== "" ||
-        group !== baselineRef.current.group ||
-        priority !== baselineRef.current.priority ||
-        release !== baselineRef.current.release ||
-        (emoji ?? null) !== (baselineRef.current.emoji ?? null)
-      );
-    }
-    return false;
-  }, [open, mode, task, createContext, title, body, group, priority, release, emoji]);
 
   const busy =
     createTask.isPending ||
@@ -322,23 +170,6 @@ export function TaskEditor({
 
   const taskEditorActive = open && !showDiscard && !showDeleteConfirm;
 
-  useLayoutEffect(() => {
-    if (!open) {
-      bodyTextareaRef.current = null;
-      return;
-    }
-    // Imperative ref can lag the first frame; `@uiw` also exposes the node on internal state
-    // after a child effect — query the known class as a stable fallback.
-    bodyTextareaRef.current =
-      mdEditorRef.current?.textarea ??
-      taskMdEditorWrapRef.current?.querySelector<HTMLTextAreaElement>(
-        "textarea.w-md-editor-text-input",
-      ) ??
-      null;
-  });
-
-  useMdEditorToolbarTabSkip(taskMdEditorWrapRef, taskEditorActive);
-
   useShortcutOverlay(taskEditorActive, "task-editor", taskEditorKeyHandler);
   useModalFocusTrap({
     open,
@@ -356,71 +187,6 @@ export function TaskEditor({
   const backdropDismiss = useBackdropDismissClick(requestClose, { disabled: busy });
 
   useBodyScrollLock(open);
-
-  const handleSave = useCallback(async () => {
-    const trimmedTitle = normalizeStoredTaskTitle(title.trim() || "Untitled");
-    const now = new Date().toISOString();
-    const priorityNum = Number(priority);
-    const priorityId = Number.isFinite(priorityNum)
-      ? priorityNum
-      : (noneTaskPriorityId(board.taskPriorities) ??
-        sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId);
-    if (mode === "create" && createContext) {
-      const gid =
-        Number(group) || effectiveDefaultTaskGroupId(board);
-      const defaultNone = noneTaskPriorityId(board.taskPriorities);
-      let releasePayload: number | null | undefined;
-      if (release === RELEASE_SELECT_NONE) releasePayload = null;
-      else if (release !== RELEASE_SELECT_AUTO) releasePayload = Number(release);
-      else releasePayload = undefined;
-      await createTask.mutateAsync({
-        boardId: board.boardId,
-        listId: createContext.listId,
-        status: createContext.status,
-        title: trimmedTitle,
-        body,
-        groupId: gid,
-        ...(priorityId !== defaultNone ? { priorityId } : {}),
-        ...(releasePayload !== undefined ? { releaseId: releasePayload } : {}),
-        emoji: emoji ?? null,
-      });
-    } else if (mode === "edit" && task) {
-      const gid = Number(group) || task.groupId;
-      const nextReleaseId =
-        release === RELEASE_SELECT_NONE ? null : Number(release);
-      await updateTask.mutateAsync({
-        boardId: board.boardId,
-        task: {
-          ...task,
-          title: trimmedTitle,
-          body,
-          groupId: gid,
-          priorityId,
-          releaseId: nextReleaseId,
-          emoji: emoji ?? null,
-          updatedAt: now,
-        },
-      });
-    }
-    onClose();
-  }, [
-    mode,
-    createContext,
-    task,
-    board.boardId,
-    board.taskPriorities,
-    board.taskGroups,
-    board.defaultTaskGroupId,
-    title,
-    body,
-    emoji,
-    group,
-    priority,
-    release,
-    createTask,
-    updateTask,
-    onClose,
-  ]);
 
   const closedStatusId =
     statuses?.find((s) => s.isClosed)?.statusId ?? "closed";
@@ -505,7 +271,7 @@ export function TaskEditor({
       return;
     }
     setRelease(String(board.defaultReleaseId));
-  }, [board.defaultReleaseId, board.releases]);
+  }, [board.defaultReleaseId, board.releases, setRelease]);
 
   const applyWorkflowStatus = useCallback(
     async (nextStatusId: string) => {
@@ -744,30 +510,20 @@ export function TaskEditor({
             ) : null}
 
             {/* Default preview="live": split edit + preview; toolbar includes edit / live / preview + fullscreen. */}
-            <div
-              ref={taskMdEditorWrapRef}
-              className="task-md-editor min-h-[min(50vh,22rem)] w-full overflow-hidden rounded-md [&_.w-md-editor]:w-full [&_.w-md-editor]:rounded-md"
-            >
-              <MDEditor
-                ref={mdEditorRef}
-                value={body}
-                onChange={(v) => setBody(v ?? "")}
-                preview="live"
-                height={420}
-                visibleDragbar
-                autoFocus={mode === "edit" && taskEditorActive}
-                data-color-mode={mdColorMode}
-                previewOptions={{
-                  components: markdownPreviewComponents,
-                }}
-                textareaProps={{
-                  id: `${titleId}-body`,
-                  disabled: busy,
-                  "aria-label": "Task body (markdown)",
-                  tabIndex: TASK_FIELD_TAB.body,
-                }}
-              />
-            </div>
+            <TaskMarkdownField
+              titleId={titleId}
+              body={body}
+              onBodyChange={setBody}
+              disabled={busy}
+              bodyTabIndex={TASK_FIELD_TAB.body}
+              mdColorMode={mdColorMode}
+              markdownPreviewComponents={markdownPreviewComponents}
+              autoFocus={mode === "edit" && taskEditorActive}
+              toolbarTabSkipEnabled={taskEditorActive}
+              mdEditorRef={mdEditorRef}
+              bodyTextareaRef={bodyTextareaRef}
+              taskMdEditorWrapRef={taskMdEditorWrapRef}
+            />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="min-w-0">

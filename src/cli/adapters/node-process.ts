@@ -2,7 +2,7 @@ import {
   readServerStatus,
   startServer,
   stopServer,
-} from "../lib/process";
+} from "../lib/core/process";
 import type { ProcessPort } from "../ports/process";
 
 /** Bun.spawn + pid file + health polling for managed servers. */

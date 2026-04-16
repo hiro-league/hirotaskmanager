@@ -4,24 +4,36 @@ import type { ShortcutScope } from "./shortcutScopeTypes";
 export type { ShortcutScope };
 
 /** Actions wired in BoardView; registry runs use this instead of importing the store directly. */
+export type BoardShortcutBoard = Pick<
+  Board,
+  | "boardId"
+  | "boardLayout"
+  | "defaultReleaseId"
+  | "releases"
+  | "showStats"
+  | "taskGroups"
+  | "taskPriorities"
+  | "tasks"
+>;
+
 export interface BoardShortcutActions {
   openHelp: () => void;
   /** K or F3 — open board task search (same as header control). */
   openBoardSearch: () => void;
   toggleFilters: () => void;
   /** S — cycle the board-local task card view mode. */
-  cycleTaskCardViewMode: (board: Board) => void;
+  cycleTaskCardViewMode: (board: BoardShortcutBoard) => void;
   /** V — toggle lanes vs stacked board layout (same as header layout control). */
-  toggleBoardLayout: (board: Board) => void;
+  toggleBoardLayout: (board: BoardShortcutBoard) => void;
   /** 1 / Num 1 — cycle All → group1 → group2 → … → All. No-op if there are no groups. */
-  cycleTaskGroup: (board: Board) => void;
-  allTaskGroups: (board: Board) => void;
+  cycleTaskGroup: (board: BoardShortcutBoard) => void;
+  allTaskGroups: (board: BoardShortcutBoard) => void;
   /** 2 — cycle All → priority1 → priority2 → … → All using board-local numeric order. */
-  cycleTaskPriority: (board: Board) => void;
+  cycleTaskPriority: (board: BoardShortcutBoard) => void;
   /** Cycle the highlighted task's assigned group, debounced before persisting. */
-  cycleHighlightedTaskGroup: (board: Board) => void;
+  cycleHighlightedTaskGroup: (board: BoardShortcutBoard) => void;
   /** Cycle the highlighted task's assigned priority, debounced before persisting. */
-  cycleHighlightedTaskPriority: (board: Board) => void;
+  cycleHighlightedTaskPriority: (board: BoardShortcutBoard) => void;
   /** Tab — focus the hovered task or list, else fall back to the current highlight. */
   focusOrScrollHighlight: () => void;
   moveHighlight: (dir: "up" | "down" | "left" | "right") => void;
@@ -37,15 +49,15 @@ export interface BoardShortcutActions {
   /** T — open add-task composer for the highlighted task’s list or selected list. */
   addTaskAtHighlight: () => void;
   /** L — open the inline add-list composer after the highlighted list (task or list header). */
-  addListAfterHighlight: (board: Board) => void;
+  addListAfterHighlight: (board: BoardShortcutBoard) => void;
   /** C — complete highlighted task if not already closed. */
-  completeHighlightedTask: (board: Board) => void;
+  completeHighlightedTask: (board: BoardShortcutBoard) => void;
   /** N — show/hide board task statistics (T / O / C chips). */
-  toggleBoardStats: (board: Board) => void;
+  toggleBoardStats: (board: BoardShortcutBoard) => void;
   /** R — reopen highlighted task to canonical open if closed. */
-  reopenHighlightedTask: (board: Board) => void;
+  reopenHighlightedTask: (board: BoardShortcutBoard) => void;
   /** E — set highlighted task release to the board default (overwrite). */
-  assignDefaultReleaseToHighlightedTask: (board: Board) => void;
+  assignDefaultReleaseToHighlightedTask: (board: BoardShortcutBoard) => void;
 }
 
 /** Help dialog tab — must match {@link BoardShortcutDefinition.helpTab} on each registry entry. */
@@ -109,6 +121,6 @@ export interface BoardShortcutDefinition {
   preventDefault?: boolean;
   /** Key from KeyboardEvent.key, lowercased for letters */
   matchKey: (key: string) => boolean;
-  enabled?: (board: Board | null) => boolean;
-  run: (board: Board, actions: BoardShortcutActions) => void;
+  enabled?: (board: BoardShortcutBoard | null) => boolean;
+  run: (board: BoardShortcutBoard, actions: BoardShortcutActions) => void;
 }

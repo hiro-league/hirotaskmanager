@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppBindings } from "../auth";
 import { cliBoardReadError, isCliRequest } from "../cliPolicyGuard";
 import { parseListPagination } from "../lib/listPagination";
-import { entryByIdOrSlug } from "../storage/board";
+import { entryByIdOrSlug } from "../storage/board/board";
 import { searchTasksPaginated } from "../storage/search";
 
 export const searchRoute = new Hono<AppBindings>();

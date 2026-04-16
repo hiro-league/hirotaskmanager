@@ -1,4 +1,5 @@
 import { useDeleteTask } from "@/api/mutations";
+import { reportMutationError } from "@/lib/mutationErrorUi";
 import { taskDisplayTitle, type Board } from "../../../../shared/models";
 import { useBoardKeyboardNav } from "./BoardKeyboardNavContext";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -46,6 +47,7 @@ export function BoardTaskDeleteConfirm({
               nav.setHighlightedTaskId(null);
               onClose();
             },
+            onError: (err) => reportMutationError("delete task", err),
           },
         );
       }}

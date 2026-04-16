@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react";
-import type { Board } from "../../../../shared/models";
 import { boardShortcutRegistry } from "./boardShortcutRegistry";
-import type { BoardShortcutActions } from "./boardShortcutTypes";
+import type { BoardShortcutActions, BoardShortcutBoard } from "./boardShortcutTypes";
 import { isEditableKeyboardTarget } from "./isEditableKeyboardTarget";
 import { useShortcutScope } from "./ShortcutScopeContext";
 
 interface UseBoardShortcutKeydownOptions {
-  board: Board | null;
+  board: BoardShortcutBoard | null;
   actions: BoardShortcutActions;
 }
 

@@ -1,5 +1,5 @@
 import { CLI_ERR } from "../types/errors";
-import { CliError } from "../lib/output";
+import { CliError } from "../lib/output/output";
 import type { CliContext } from "./context";
 
 export async function handleServerStart(

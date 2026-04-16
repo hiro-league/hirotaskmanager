@@ -1,4 +1,4 @@
-import { confirmMutableAction } from "../lib/mutableActionConfirm";
+import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
 import {
   runReleasesAdd,
   runReleasesDelete,
@@ -6,7 +6,7 @@ import {
   runReleasesSetDefault,
   runReleasesShow,
   runReleasesUpdate,
-} from "../lib/writeCommands";
+} from "../lib/mutations/writeCommands";
 import type { CliContext } from "./context";
 
 export async function handleReleasesList(

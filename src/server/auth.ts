@@ -8,6 +8,7 @@ import {
   type AuthPrincipalType,
   type AuthSessionResponse,
 } from "../shared/auth";
+import type { BoardIndexEntry } from "../shared/models";
 import { ansi, colorEnabled, paint } from "../shared/terminalColors";
 import { resolveAuthDir } from "../shared/runtimeConfig";
 
@@ -28,6 +29,7 @@ export interface RequestAuthContext {
 export interface AppBindings {
   Variables: {
     auth: RequestAuthContext;
+    boardEntry?: BoardIndexEntry;
   };
 }
 

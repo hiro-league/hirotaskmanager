@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { paginateInMemory } from "../../shared/pagination";
 import { getRequestAuthContext, type AppBindings } from "../auth";
 import { parseListPagination } from "../lib/listPagination";
-import { getDb } from "../db";
 import {
   cliBoardReadError,
   cliDeleteBoardError,
@@ -14,14 +13,9 @@ import {
   publishBoardEvent,
   publishBoardIndexChanged,
 } from "../events";
-import {
-  recordBoardPurged,
-  recordBoardRestored,
-  recordListPurged,
-  recordListRestored,
-  recordTaskPurged,
-  recordTaskRestored,
-} from "../notifications/record";
+import { recordBoardPurged, recordBoardRestored } from "../notifications/recordBoard";
+import { recordListPurged, recordListRestored } from "../notifications/recordList";
+import { recordTaskPurged, recordTaskRestored } from "../notifications/recordTask";
 import {
   boardIndexEntryById,
   loadBoard,
@@ -31,13 +25,15 @@ import {
   readTrashedTasks,
   restoreBoardById,
 } from "../storage";
-import { readBoardCliPolicy } from "../storage/cliPolicy";
+import { readBoardCliPolicy } from "../storage/system/cliPolicy";
 import {
+  findBoardIdForTrashedList,
   purgeListOnBoard,
   readListSnapshotById,
   restoreListOnBoard,
 } from "../storage/lists";
 import {
+  findBoardIdForTrashedTask,
   purgeTaskOnBoard,
   readTaskSnapshotById,
   restoreTaskOnBoard,
@@ -125,25 +121,20 @@ trashRoute.post("/lists/:id/restore", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const db = getDb();
-  const loc = db
-    .query(
-      "SELECT board_id FROM list WHERE id = ? AND deleted_at IS NOT NULL",
-    )
-    .get(listId) as { board_id: number } | null;
-  if (!loc) return c.json({ error: "List not in Trash" }, 404);
+  const trashedBoardId = findBoardIdForTrashedList(listId);
+  if (trashedBoardId == null) return c.json({ error: "List not in Trash" }, 404);
 
-  const entry = await boardIndexEntryById(loc.board_id);
+  const entry = await boardIndexEntryById(trashedBoardId);
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
 
-  const listSnap = readListSnapshotById(loc.board_id, listId);
+  const listSnap = readListSnapshotById(trashedBoardId, listId);
   if (!listSnap) return c.json({ error: "List not found" }, 404);
   const blockedList = cliManageListError(c, entry.boardId, listSnap);
   if (blockedList) return blockedList;
 
-  const outcome = restoreListOnBoard(loc.board_id, listId);
+  const outcome = restoreListOnBoard(trashedBoardId, listId);
   if (!outcome.ok) {
     // No-cascade trash: list stays explicitly trashed while board is trashed; restore is blocked until the board is active again.
     if (outcome.reason === "conflict") {
@@ -176,25 +167,20 @@ trashRoute.post("/tasks/:id/restore", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const db = getDb();
-  const loc = db
-    .query(
-      "SELECT board_id FROM task WHERE id = ? AND deleted_at IS NOT NULL",
-    )
-    .get(taskId) as { board_id: number } | null;
-  if (!loc) return c.json({ error: "Task not in Trash" }, 404);
+  const trashedBoardId = findBoardIdForTrashedTask(taskId);
+  if (trashedBoardId == null) return c.json({ error: "Task not in Trash" }, 404);
 
-  const entry = await boardIndexEntryById(loc.board_id);
+  const entry = await boardIndexEntryById(trashedBoardId);
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
 
-  const taskSnap = readTaskSnapshotById(loc.board_id, taskId);
+  const taskSnap = readTaskSnapshotById(trashedBoardId, taskId);
   if (!taskSnap) return c.json({ error: "Task not found" }, 404);
   const blockedTask = cliManageTaskError(c, entry.boardId, taskSnap);
   if (blockedTask) return blockedTask;
 
-  const outcome = restoreTaskOnBoard(loc.board_id, taskId);
+  const outcome = restoreTaskOnBoard(trashedBoardId, taskId);
   if (!outcome.ok) {
     // Blocked when board or list is still trashed (effective hide without auto-restoring children).
     if (outcome.reason === "conflict") {
@@ -245,25 +231,20 @@ trashRoute.delete("/lists/:id", async (c) => {
   if (!Number.isFinite(listId)) {
     return c.json({ error: "Invalid list id" }, 400);
   }
-  const db = getDb();
-  const loc = db
-    .query(
-      "SELECT board_id FROM list WHERE id = ? AND deleted_at IS NOT NULL",
-    )
-    .get(listId) as { board_id: number } | null;
-  if (!loc) return c.json({ error: "List not in Trash" }, 404);
+  const boardId = findBoardIdForTrashedList(listId);
+  if (boardId == null) return c.json({ error: "List not in Trash" }, 404);
 
-  const entry = await boardIndexEntryById(loc.board_id);
+  const entry = await boardIndexEntryById(boardId);
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
 
-  const listSnap = readListSnapshotById(loc.board_id, listId);
+  const listSnap = readListSnapshotById(boardId, listId);
   if (!listSnap) return c.json({ error: "List not found" }, 404);
   const blockedList = cliManageListError(c, entry.boardId, listSnap);
   if (blockedList) return blockedList;
 
-  const result = purgeListOnBoard(loc.board_id, listId);
+  const result = purgeListOnBoard(boardId, listId);
   if (!result) return c.json({ error: "List is not in Trash" }, 404);
   publishBoardEvent({
     kind: "list-purged",
@@ -282,25 +263,20 @@ trashRoute.delete("/tasks/:id", async (c) => {
   if (!Number.isFinite(taskId)) {
     return c.json({ error: "Invalid task id" }, 400);
   }
-  const db = getDb();
-  const loc = db
-    .query(
-      "SELECT board_id FROM task WHERE id = ? AND deleted_at IS NOT NULL",
-    )
-    .get(taskId) as { board_id: number } | null;
-  if (!loc) return c.json({ error: "Task not in Trash" }, 404);
+  const boardId = findBoardIdForTrashedTask(taskId);
+  if (boardId == null) return c.json({ error: "Task not in Trash" }, 404);
 
-  const entry = await boardIndexEntryById(loc.board_id);
+  const entry = await boardIndexEntryById(boardId);
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
 
-  const taskSnap = readTaskSnapshotById(loc.board_id, taskId);
+  const taskSnap = readTaskSnapshotById(boardId, taskId);
   if (!taskSnap) return c.json({ error: "Task not found" }, 404);
   const blockedTask = cliManageTaskError(c, entry.boardId, taskSnap);
   if (blockedTask) return blockedTask;
 
-  const result = purgeTaskOnBoard(loc.board_id, taskId);
+  const result = purgeTaskOnBoard(boardId, taskId);
   if (!result) return c.json({ error: "Task is not in Trash" }, 404);
   publishBoardEvent({
     kind: "task-purged",

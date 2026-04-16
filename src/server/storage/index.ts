@@ -1,29 +1,32 @@
 export {
-  ensureDataDir,
-  listStatuses,
   readBoardIndex,
   entryByIdOrSlug,
   boardIndexEntryById,
   loadBoard,
   loadBoardWithoutTasks,
-  loadBoardDescribe,
   generateSlug,
+  createBoardWithDefaults,
+  patchBoard,
+} from "./board/board";
+export { ensureDataDir, listStatuses } from "./system/statuses";
+export { loadBoardDescribe } from "./board/boardDescribe";
+export {
   trashBoardById,
   restoreBoardById,
   purgeBoardById,
-  createBoardWithDefaults,
-  patchBoard,
+} from "./trash/boardTrash";
+export {
   patchBoardViewPrefs,
   patchBoardTaskPriorities,
   patchBoardTaskGroupConfig,
-} from "./board";
+} from "./board/boardViewPrefs";
 export {
   createBoardRelease,
   updateBoardRelease,
   deleteBoardRelease,
   listReleasesForBoard,
   type UpdateBoardReleaseResult,
-} from "./releases";
+} from "./board/releases";
 export {
   createListOnBoard,
   moveListOnBoard,
@@ -55,4 +58,4 @@ export {
   readTrashedBoards,
   readTrashedLists,
   readTrashedTasks,
-} from "./trash";
+} from "./trash/trash";

@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import {
   resolvePort,
+  resolveProfileName,
   setRuntimeConfigSelection,
   type RuntimeKind,
 } from "../shared/runtimeConfig";
@@ -15,7 +16,7 @@ import {
 } from "../shared/serverStatus";
 import { authMiddleware, requireWebSession, type AppBindings } from "./auth";
 import { cliBoardReadError } from "./cliPolicyGuard";
-import { getDb, runMigrations } from "./db";
+import { getDb, getDbFilePath, runMigrations } from "./db";
 import { createBoardEventsResponse } from "./events";
 import { authRoute } from "./routes/auth";
 import { cliGlobalPolicyRoute } from "./routes/cliGlobalPolicy";
@@ -155,6 +156,9 @@ export async function startTaskManagerServer(options: {
 
   // Let the installed launcher print its own startup status so first-run output stays compact.
   if (process.env.TASKMANAGER_SILENT_STARTUP_LOG !== "1") {
+    // Resolved profile and absolute DB path (same values the server just opened).
+    console.log(`Profile: ${resolveProfileName()}`);
+    console.log(`Database: ${path.resolve(getDbFilePath())}`);
     console.log(
       `${options.kind === "installed" ? "TaskManager" : "TaskManager dev API"} server listening on http://localhost:${server.port}`,
     );

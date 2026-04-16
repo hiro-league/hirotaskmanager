@@ -1,12 +1,12 @@
-import { confirmMutableAction } from "../lib/mutableActionConfirm";
-import { runListsPurge, runListsRestore } from "../lib/trashCommands";
+import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import { runListsPurge, runListsRestore } from "../lib/trash/trashCommands";
 import {
   runListsAdd,
   runListsDelete,
   runListsList,
   runListsMove,
   runListsUpdate,
-} from "../lib/writeCommands";
+} from "../lib/mutations/writeCommands";
 import type { CliContext } from "./context";
 
 export async function handleListsList(

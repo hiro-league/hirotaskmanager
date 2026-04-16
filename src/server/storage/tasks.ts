@@ -5,12 +5,13 @@ import {
 } from "../../shared/models";
 import type { Board, Task } from "../../shared/models";
 import type { CreatorPrincipalType } from "../../shared/provenance";
+import { normalizePrincipal } from "../../shared/principal";
 import { normalizeStoredTaskTitle } from "../../shared/taskTitle";
 import type { RowProvenance } from "../provenance";
 import { getDb, withTransaction } from "../db";
-import { boardExists, statusIsClosed } from "./helpers";
-import { loadBoard } from "./board";
-import { releaseBelongsToBoard } from "./releases";
+import { boardExists, statusIsClosed } from "./system/helpers";
+import { loadBoard } from "./board/board";
+import { releaseBelongsToBoard } from "./board/releases";
 
 type TaskRow = {
   id: number;
@@ -31,13 +32,6 @@ type TaskRow = {
   created_by_label?: string | null;
 };
 
-function normalizeTaskPrincipal(
-  raw: string | null | undefined,
-): CreatorPrincipalType | undefined {
-  if (raw === "web" || raw === "cli" || raw === "system") return raw;
-  return undefined;
-}
-
 export type TaskWriteResult = {
   boardId: number;
   boardUpdatedAt: string;
@@ -49,6 +43,15 @@ export type TaskDeleteResult = {
   boardUpdatedAt: string;
   deletedTaskId: number;
 };
+
+// Trash routes need board ownership for trashed rows without embedding raw SQL in the route layer.
+export function findBoardIdForTrashedTask(taskId: number): number | null {
+  const db = getDb();
+  const row = db
+    .query("SELECT board_id FROM task WHERE id = ? AND deleted_at IS NOT NULL")
+    .get(taskId) as { board_id: number } | null;
+  return row?.board_id ?? null;
+}
 
 function mapTaskRow(t: TaskRow): Task {
   return {
@@ -68,7 +71,7 @@ function mapTaskRow(t: TaskRow): Task {
     createdAt: t.created_at,
     updatedAt: t.updated_at,
     closedAt: t.closed_at ?? undefined,
-    createdByPrincipal: normalizeTaskPrincipal(t.created_by_principal) ?? "web",
+    createdByPrincipal: normalizePrincipal(t.created_by_principal) ?? "web",
     createdByLabel: t.created_by_label,
     releaseId: t.release_id ?? null,
   };

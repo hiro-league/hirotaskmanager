@@ -43,6 +43,41 @@ function mergeSnippets(...parts: string[]): string {
 }
 
 /**
+ * Shared `FROM` / `JOIN` / `WHERE` for FTS task search so `COUNT` and paged `SELECT`
+ * stay in sync (avoids drift when filters change).
+ */
+function buildSearchFromClause(
+  boardId: number | undefined,
+  opts: { excludeCliNoneBoards: boolean },
+): { fromWhere: string; bindAfterMatch: number[] } {
+  const cliFilter = opts.excludeCliNoneBoards
+    ? "AND EXISTS (SELECT 1 FROM board_cli_policy p WHERE p.board_id = b.id AND p.read_board != 0)"
+    : "";
+
+  const joins = `
+FROM task_search
+INNER JOIN board AS b ON b.id = task_search.board_id
+INNER JOIN task AS t ON t.id = task_search.task_id
+INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id`;
+
+  if (boardId !== undefined) {
+    return {
+      fromWhere: `${joins}
+WHERE task_search MATCH ? AND task_search.board_id = ?
+  AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
+      bindAfterMatch: [boardId],
+    };
+  }
+
+  return {
+    fromWhere: `${joins}
+WHERE task_search MATCH ?
+  AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
+    bindAfterMatch: [],
+  };
+}
+
+/**
  * Search indexed task fields with total count and SQL `LIMIT`/`OFFSET` paging.
  */
 export function searchTasksPaginated(options: {
@@ -109,36 +144,10 @@ function countSearch(
   boardId: number | undefined,
   opts: { excludeCliNoneBoards: boolean },
 ): number {
-  const cliFilter = opts.excludeCliNoneBoards
-    ? "AND EXISTS (SELECT 1 FROM board_cli_policy p WHERE p.board_id = b.id AND p.read_board != 0)"
-    : "";
-
-  if (boardId !== undefined) {
-    const row = db
-      .query(
-        `SELECT COUNT(*) AS c
-         FROM task_search
-         INNER JOIN board AS b ON b.id = task_search.board_id
-         INNER JOIN task AS t ON t.id = task_search.task_id
-         INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-         WHERE task_search MATCH ? AND task_search.board_id = ?
-           AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
-      )
-      .get(matchQuery, boardId) as { c: number } | null;
-    return row?.c ?? 0;
-  }
-
+  const { fromWhere, bindAfterMatch } = buildSearchFromClause(boardId, opts);
   const row = db
-    .query(
-      `SELECT COUNT(*) AS c
-       FROM task_search
-       INNER JOIN board AS b ON b.id = task_search.board_id
-       INNER JOIN task AS t ON t.id = task_search.task_id
-       INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-       WHERE task_search MATCH ?
-         AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}`,
-    )
-    .get(matchQuery) as { c: number } | null;
+    .query(`SELECT COUNT(*) AS c${fromWhere}`)
+    .get(matchQuery, ...bindAfterMatch) as { c: number } | null;
   return row?.c ?? 0;
 }
 
@@ -150,6 +159,7 @@ function selectSearchPage(
   offset: number,
   opts: { excludeCliNoneBoards: boolean },
 ): SearchHit[] {
+  const { fromWhere, bindAfterMatch } = buildSearchFromClause(boardId, opts);
   const bm25Expr = `bm25(task_search, ${BM25_W.join(", ")})`;
   const snipCols = `
            snippet(task_search, 2, '«', '»', ' … ', 36) AS snip_title,
@@ -157,35 +167,6 @@ function selectSearchPage(
            snippet(task_search, 4, '«', '»', ' … ', 28) AS snip_list,
            snippet(task_search, 5, '«', '»', ' … ', 28) AS snip_group,
            snippet(task_search, 6, '«', '»', ' … ', 20) AS snip_status`;
-  const cliFilter = opts.excludeCliNoneBoards
-    ? "AND EXISTS (SELECT 1 FROM board_cli_policy p WHERE p.board_id = b.id AND p.read_board != 0)"
-    : "";
-
-  if (boardId !== undefined) {
-    const rows = db
-      .query(
-        `SELECT
-           task_search.task_id AS task_id,
-           task_search.board_id AS board_id,
-           b.slug AS board_slug,
-           b.name AS board_name,
-           l.id AS list_id,
-           l.name AS list_name,
-           t.title AS title,
-           ${bm25Expr} AS score,
-           ${snipCols}
-         FROM task_search
-         INNER JOIN board AS b ON b.id = task_search.board_id
-         INNER JOIN task AS t ON t.id = task_search.task_id
-         INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-         WHERE task_search MATCH ? AND task_search.board_id = ?
-           AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
-         ORDER BY score
-         LIMIT ? OFFSET ?`,
-      )
-      .all(matchQuery, boardId, limit, offset) as SearchRow[];
-    return rows.map(mapRow);
-  }
 
   const rows = db
     .query(
@@ -199,16 +180,11 @@ function selectSearchPage(
          t.title AS title,
          ${bm25Expr} AS score,
          ${snipCols}
-       FROM task_search
-       INNER JOIN board AS b ON b.id = task_search.board_id
-       INNER JOIN task AS t ON t.id = task_search.task_id
-       INNER JOIN list AS l ON l.id = t.list_id AND l.board_id = t.board_id
-       WHERE task_search MATCH ?
-         AND b.deleted_at IS NULL AND l.deleted_at IS NULL AND t.deleted_at IS NULL ${cliFilter}
+       ${fromWhere}
        ORDER BY score
        LIMIT ? OFFSET ?`,
     )
-    .all(matchQuery, limit, offset) as SearchRow[];
+    .all(matchQuery, ...bindAfterMatch, limit, offset) as SearchRow[];
   return rows.map(mapRow);
 }
 

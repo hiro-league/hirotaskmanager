@@ -17,3 +17,8 @@ opencode.json
 
 # Packages
 # packages/
+
+# Playwright (Phase 6+)
+e2e/.scratch/
+playwright-report/
+test-results/

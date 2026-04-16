@@ -1,0 +1,40 @@
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+/**
+ * jsdom does not implement ResizeObserver; @dnd-kit and some board components
+ * register observers at module load. Phase 5 route/page smoke tests import those modules.
+ */
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
+/** ThemeRoot / board UI use `matchMedia` for system dark preference. */
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}
+
+/** ShortcutHelpDialog scrolls the help table on open; jsdom refs may lack scrollTo. */
+if (typeof HTMLElement !== "undefined") {
+  const proto = HTMLElement.prototype as HTMLElement & { scrollTo?: unknown };
+  if (typeof proto.scrollTo !== "function") {
+    proto.scrollTo = function () {};
+  }
+}
+
+afterEach(() => {
+  cleanup();
+});

@@ -9,8 +9,8 @@ import {
   addClientNameOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
-} from "../lib/command-helpers";
-import { CLI_DEFAULTS } from "../lib/constants";
+} from "../lib/core/command-helpers";
+import { CLI_DEFAULTS } from "../lib/core/constants";
 
 export function registerTrashCommands(
   program: Command,

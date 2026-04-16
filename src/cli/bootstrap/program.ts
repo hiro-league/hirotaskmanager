@@ -8,9 +8,9 @@ import { registerStatusCommands } from "../commands/statuses";
 import { registerTaskCommands } from "../commands/tasks";
 import { registerTrashCommands } from "../commands/trash";
 import { createDefaultCliContext } from "../handlers/context";
-import { hasCliConfigFile, resolveProfileName, resolveRuntimeKind } from "../lib/config";
-import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
-import { CliError, exitWithError, resetCliOutputFormat } from "../lib/output";
+import { hasCliConfigFile, resolveProfileName, resolveRuntimeKind } from "../lib/core/config";
+import { syncCliOutputFormatFromGlobals } from "../lib/output/cliFormat";
+import { CliError, exitWithError, resetCliOutputFormat } from "../lib/output/output";
 import { CLI_ERR } from "../types/errors";
 
 export function shouldRequireLauncherSetupForHirotm(options: {

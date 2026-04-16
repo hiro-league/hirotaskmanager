@@ -5,32 +5,34 @@
 
 Each refactor is ranked by **impact** (how much it improves readability, extensibility, and robustness) weighted against **effort**. The order is most-impactful-first.
 
+> **Performance safeguard notice.** Several refactors touch files that carry
+> board-performance optimizations documented in `docs/board-performance-plan.md`
+> and `docs/performance-fixes.md`. Each item below includes a
+> **⚠ Perf safeguards** section when relevant so implementors know which
+> invariants must survive the split.
+
 ---
 
-## 1. Split `routes/boards.ts` into sub-routers (~1,586 LOC → ~5 files)
+## 1. ~~Split `routes/boards.ts` into sub-routers~~ ✅ Done
 
-**Problem.** Every board sub-resource (releases, lists, tasks, describe, stats, view prefs, groups, priorities) lives in a single Hono router. The file has ~1,586 lines, 40+ imports, and touches validation, policy, storage, SSE, and notifications for every domain. Adding a new board feature means scrolling through hundreds of unrelated routes.
+Completed. The monolithic `routes/boards.ts` has been split into:
 
-**What to do.**
+| File | Routes |
+|------|--------|
+| `routes/boards/index.ts` | `GET /`, `POST /`, board-level CRUD, describe, stats |
+| `routes/boards/lists.ts` | List CRUD, move, reorder |
+| `routes/boards/tasks.ts` | Task CRUD, move, reorder |
+| `routes/boards/releases.ts` | Release CRUD |
+| `routes/boards/settings.ts` | View prefs, groups, priorities |
+| `routes/boards/shared.ts` | `resolveBoardEntry` middleware, mutation-response helpers, `parseBoardFetchBodyPreview` |
 
-| New file | Routes it owns |
-|----------|---------------|
-| `routes/boards/index.ts` | `GET /`, `POST /`, board-level CRUD, slug, describe |
-| `routes/boards/lists.ts` | `POST /:id/lists`, `PATCH /:id/lists/:lid`, move, reorder, delete |
-| `routes/boards/tasks.ts` | `POST /:id/tasks`, `PATCH /:id/tasks/:tid`, move, reorder, delete |
-| `routes/boards/releases.ts` | Release CRUD on a board |
-| `routes/boards/settings.ts` | View prefs, groups, priorities, CLI policy |
+A `resolveBoardEntry` Hono middleware resolves the board index entry, runs CLI read-policy, and attaches it to the Hono context via `c.set("boardEntry", entry)`. All sub-routers use `requireBoardEntry(c)` to read it.
 
-Extract a shared `resolveBoardEntry(c)` middleware or helper that loads the board index entry, runs CLI read-policy, and attaches it to the Hono context—eliminating ~30 repeated blocks of:
-
-```typescript
-const entry = entryByIdOrSlug(boardRef);
-if (!entry) return c.json({ error: "Board not found" }, 404);
-const blockedRead = cliBoardReadError(c, entry);
-if (blockedRead) return blockedRead;
-```
-
-**Impact.** Reduces cognitive load for every future feature; makes route-level testing straightforward; eliminates the biggest god-file in the codebase.
+> **Note for docs maintainers:** `docs/performance-fixes.md` (Fix #7) and
+> `docs/board-performance-plan.md` (Phase 2 item 7) still reference the old
+> `src/server/routes/boards.ts` path. The slim-fetch logic (`parseBoardFetchBodyPreview`,
+> `loadBoardAfterGranularWrite`, granular mutation response header gate) now lives
+> in `routes/boards/shared.ts` and `routes/boards/index.ts`.
 
 ---
 
@@ -51,6 +53,12 @@ if (blockedRead) return blockedRead;
 `BoardView.tsx` becomes an orchestrator: loads data, provides contexts, and composes `BoardHeader` + `BoardCanvas` + column layout.
 
 **Impact.** The most-visited file during feature development becomes navigable; shortcuts logic becomes unit-testable without rendering the full board.
+
+**⚠ Perf safeguards.**
+
+- `BoardView` composes five nested providers (`ShortcutScopeProvider` → `BoardStatsDisplayProvider` → `BoardTaskKeyboardBridgeProvider` → `BoardKeyboardNavProvider` → `BoardTaskCompletionCelebrationProvider`). Perf plan Phase 3 item 11 aims to flatten this cascade. Extracted modules (`BoardHeader`, `BoardShortcutBindings`) must **not** introduce additional context providers that deepen the nesting or add new render triggers around the column tree.
+- `BoardShortcutBindings` currently reads `board` via closure (not a prop). If extracted to its own file, pass only the minimum slice it needs (e.g. `boardId`, `taskGroups`, `taskPriorities`) so it doesn't defeat `React.memo` boundaries established by perf fix #2. Do **not** pass a full `Board` object as a prop.
+- `BoardView` passes `board` to `BoardColumns`/`BoardColumnsStacked`, which internally spread it via `boardColumnSpreadProps(board)`. The extracted `BoardCanvas` (if created) must preserve this — never pass `board` deeper than the column-layout component.
 
 ---
 
@@ -78,6 +86,12 @@ export function createSseHub<S extends { send(chunk: Uint8Array): void; close():
 Then `events.ts` and `notificationEvents.ts` each become thin files that configure their own hub shape (board subscriber has `boardId`; notification subscriber does not) and export their domain-specific `publish*` / `create*Response` functions.
 
 **Impact.** Eliminates the most obvious copy-paste in the server; makes it trivial to add future SSE channels (e.g., per-user events, CLI progress streams).
+
+**⚠ Perf safeguards.**
+
+- `notificationEvents.ts` bridges into `events.ts` via `publishNotificationToAllSubscribers` so board-scoped SSE subscribers also receive notification events. The unified `sseHub` must preserve this cross-channel bridge — do not isolate the two hubs so completely that the board stream stops receiving notification pushes.
+- Board SSE subscribers carry a `boardId` field used for per-board filtering in `publishBoardEvent` / `publishBoardChanged`. The hub's `broadcast` filter callback must support this per-subscriber field discrimination. A generic `filter?: (s: S) => boolean` parameter (as shown) is sufficient.
+- Granular SSE events (`task-created`, `task-updated`, `list-created`, `release-upserted`, etc.) were added in the performance work to support reduced-refetch on the client (`useBoardChangeStream`). Verify that the `encodeSseEvent` output format (`event: <kind>\ndata: <json>\n\n`) does not change, as the client parses it by event type.
 
 ---
 
@@ -116,6 +130,13 @@ The `BoardKeyboardNavProvider` composes these three hooks and exposes the same c
 
 **Impact.** Keyboard navigation bugs become isolatable to the specific hook that owns the state; new keyboard features (e.g., multi-select) can be added without touching the others.
 
+**⚠ Perf safeguards — critical.**
+
+- **Ref-backed highlight & hover (perf fixes #1, #1b).** `highlightedTaskId`, `highlightedListId`, `hoveredTaskId`, and `hoveredListId` are stored in `useRef`, **not** `useState`. The setters only mutate refs and update DOM ring classes imperatively via `classList.add`/`remove` + `style.setProperty`. Extracted hooks (`useBoardHighlightState`, `useBoardColumnMap`) must **never** promote these values back to React state — doing so would re-introduce the full-board re-render on every hover/arrow-key move that perf fix #1 eliminated (measured: 20 commits × 536–637 ms each before fix).
+- **Imperative ring rendering.** `setKeyboardRing` applies `KEYBOARD_RING_CLASSES` and `--tw-ring-color` directly on registered DOM elements. `syncTaskHighlightVisual` / `syncListHighlightVisual` remove the ring from the previous element and apply it to the new one — all without a React render. The extracted `useBoardHighlightState` must own both the ref and the DOM manipulation; it must not emit a context value change that consumers read during render.
+- **Virtualized task reveal (perf fix #4).** `taskRevealersRef` maps task IDs to reveal callbacks registered by virtualized bands. When keyboard navigation targets an offscreen task, the revealer scrolls the virtualizer to bring it into view before the nav layer expects `registerTaskElement()` to exist. The extracted `useTaskRevealRegistry` must keep the same `registerTaskRevealer` / reveal-before-highlight contract, and must not introduce a React render to trigger the reveal.
+- **`buildTasksByListStatusIndex` (perf fix #3).** `BoardKeyboardNavProvider` builds its own `tasksByListStatus` index memoized on `board.tasks`. The extracted `useBoardColumnMap` should accept this index as a parameter (or build its own from the same `board.tasks` ref), not re-scan the full tasks array per band.
+
 ---
 
 ## 6. Split `BoardListStackedColumn.tsx` (~1,023 LOC) and `ListStatusBand.tsx` (~788 LOC)
@@ -142,6 +163,17 @@ For `ListStatusBand.tsx`:
 
 **Impact.** Each layout's rendering pipeline becomes understandable in isolation; performance profiling can target specific sub-components rather than one monolith.
 
+**⚠ Perf safeguards — critical.**
+
+- **`React.memo` boundaries (perf fix #2).** Both `BoardListStackedColumn` and `ListStatusBand` are wrapped in `React.memo` and receive sliced props via `BoardColumnSpreadProps` / `BoardBandSpreadProps` — never a full `Board` object. Extracted sub-components (`StackedTaskList`, `BandTaskList`, etc.) must either:
+  - (a) Be wrapped in `React.memo` themselves and receive only the subset of sliced props they need, or
+  - (b) Be non-memoized children that receive no props whose identity changes on unrelated board updates (i.e. they only read from the parent's already-stable slices).
+  Do **not** re-introduce a `board` prop at any level of the extracted tree.
+- **Virtualization (perf fix #4).** Both components use `useVirtualizedBand` (which wraps `@tanstack/react-virtual`) for task-row windowing. The extracted `StackedTaskList` / `BandTaskList` must own the virtualizer instance and the scroll viewport div — the virtualizer measures its container's scroll position, so the DOM nesting between the scroll container and the virtual items must not change. Verify that `estimateSize`, `overscan`, and the `data-task-card-root` attribute survive the extraction.
+- **Horizontal column gating (perf fix #4 addendum).** `BoardListStackedColumn` uses `useColumnInViewport` (IntersectionObserver-based) to gate whether `ListStackedBody` mounts at all. The column shell div (`w-72 shrink-0`) must stay mounted even when the body is gated — it preserves scroll width and column-reorder DnD. If the body is extracted to `StackedTaskList.tsx`, the gate logic must remain in the parent column component, not move into the child.
+- **Progressive column mounting (perf fix #9B).** `BoardColumnsStacked` renders only the first 8 columns immediately and fills the rest via `requestIdleCallback`. Extracted sub-components are unaffected as long as the column-shell / placeholder boundary stays in `BoardColumnsStacked`.
+- **Lazy emoji dropdown (perf fix #6).** `ListHeader` passes `lazyMountDropdown` to `EmojiPickerMenuButton`. If `StackedListHeader.tsx` is extracted, it must preserve this prop so the emoji Radix portal is not eagerly mounted for every list on load.
+
 ---
 
 ## 7. Deduplicate lanes vs. stacked DnD hooks
@@ -167,6 +199,12 @@ Then `useLanesBoardDnd` and `useStackedBoardDnd` become thin wrappers: they call
 
 **Impact.** Bug fixes to filter/hash logic apply once; adding a third layout mode (e.g., Kanban by priority) reuses the same base hook.
 
+**⚠ Perf safeguards.**
+
+- **FNV-1a hash (perf fix #8).** Both hooks now use `hashTasksForDndLayoutDeps(tasks)` (from `boardTaskDndDeps.ts`) instead of the old per-task string concatenation + `join("|")`. The shared `useBoardDndContainerContext` must use this hash for `containerMapDeps` — do not revert to string-based signatures.
+- **Structural map equality (perf fix #8).** `useBoardTaskDndReact` uses `taskContainerMapsEqual(a, b)` for no-op drag detection and pending-map reconciliation. The shared hook must pass through or compose this comparison — do not re-introduce `serializeTaskContainerMap` (deleted in perf fix #8).
+- **Pre-indexed `tasksByListStatus` (perf fix #3).** Both hooks build the index via `buildTasksByListStatusIndex(board.tasks)` and return it so column children get O(1) per-band lookups. The shared hook must continue to build and return this index — it is the enabler for `React.memo` on bands (perf fix #2).
+
 ---
 
 ## 8. Split `storage/board.ts` (~1,181 LOC) by concern
@@ -186,6 +224,11 @@ Then `useLanesBoardDnd` and `useStackedBoardDnd` become thin wrappers: they call
 Keep `storage/index.ts` as the public barrel—external imports don't change.
 
 **Impact.** Finding where a storage bug lives becomes O(1) instead of O(scroll); new board sub-features get their own focused file.
+
+**⚠ Perf safeguards.**
+
+- **Slim `loadBoard` (perf fix #7).** `loadBoard(boardId, options?)` accepts an optional `{ taskBodyMaxChars }` that triggers a `SUBSTR(t.body, 1, n)` branch in the task SELECT. This option and the `LoadBoardOptions` type must stay in whichever file owns `loadBoard` (proposed: the core `storage/board.ts`). The route-level `parseBoardFetchBodyPreview` in `routes/boards/shared.ts` depends on it.
+- **`loadBoardWithoutTasks` (describe path).** If `loadBoardDescribe` moves to `storage/boardDescribe.ts`, it should import `loadBoardWithoutTasks` from the core module — do not duplicate the board-row query.
 
 ---
 
@@ -211,29 +254,16 @@ Keep `storage/index.ts` as the public barrel—external imports don't change.
 
 ---
 
-## 10. Slice the preferences store or extract domain hooks
+## 10. ~~Slice the preferences store or extract domain hooks~~ ✅ Done
 
-**Problem.** `store/preferences.ts` (~631 LOC) is a single Zustand store with ~25 persisted keys covering: theme, sidebar, card size, board layout, per-board group/priority/release/date filters, notification settings, and more. Every `set*` action and `useResolved*` selector lives in one file. It is the most frequently edited non-component file in the client.
+Completed using the lighter **separate persisted stores** path:
 
-**What to do.**
+- `store/boardFilters.ts` now owns the board-scoped persisted state: group, priority, release, date, and task-card view preferences.
+- `store/preferences.ts` now focuses on global UI preferences: theme, sidebar, notification settings, filter-strip collapse, and shortcut-help dismissal.
+- The `useResolved*` hooks and task-card view helpers were moved next to the board-filters store, while `preferences.ts` re-exports them so existing imports stay stable where possible.
+- Direct board-filter mutations/readers (`BoardTaskDateFilter`, switchers, shortcut bindings, sidebar prune, shortcut registry) now use `useBoardFiltersStore`.
 
-Option A — **Zustand slices** (preferred if store stays unified):
-
-```
-store/
-  preferences.ts          — createStore + combine slices + persist
-  slices/themeSlice.ts    — theme, systemDark
-  slices/boardFiltersSlice.ts — per-board group/priority/release/date filters
-  slices/notificationSlice.ts — source filter, panel scope, sounds
-  slices/layoutSlice.ts   — sidebar, card size, board layout, stats visibility
-```
-
-Option B — **Separate persisted stores** (if slices feel over-engineered):
-Split into `store/boardFilters.ts` (the largest and most complex slice) and leave the rest in `preferences.ts`.
-
-Either way, move the `useResolved*` hooks to sit next to their slice so the selector + default-resolution logic is colocated.
-
-**Impact.** Reduces merge conflicts when multiple features touch preferences; makes it obvious where to add new per-board settings; each slice can be tested in isolation.
+**Impact.** Reduces merge conflicts in the most frequently edited client store, makes new board-local settings easier to place, and keeps selector/default-resolution logic colocated with the board preference state.
 
 ---
 
@@ -248,11 +278,10 @@ These are worth doing but didn't make the cut because they're either lower lever
 | `ReleasesEditorDialog.tsx` (~852 LOC) | Full CRUD + color picker + delete confirm | Split table body into `ReleasesTable.tsx` |
 | `BoardSearchDialog.tsx` | Manual `fetch` + `useState` instead of `useQuery` | Migrate to `useQuery({ enabled: !!debouncedQuery })` for caching/retry |
 | `cliPolicyGuard.ts` | ~10 near-identical `cli*Error` functions | Table-driven: `cliPolicyError(c, boardId, field, label)` |
-| `notifications/record.ts` (~534 LOC) | Long but mechanical `record*` functions | Split by entity: `recordBoard.ts`, `recordList.ts`, `recordTask.ts` |
-| Dialog error handling | Several editor dialogs only handle `onSuccess`, no `onError` toast | Add global `onError` default in mutation factory, or explicit toasts |
+| `src/server/notifications/record.ts` (~533 LOC) | Many `record*` entry points (`commit`, payload helpers, board/list/task variants) in one file; safe to split because boundaries are already named | Split by entity: e.g. `recordBoard.ts`, `recordList.ts`, `recordTask.ts`, shared `commit` + payload utilities in a small `recordShared.ts` if needed |
+| Dialog error handling | Several editor dialogs wire mutations with `onSuccess` only; failures are silent or console-only | Default `onError` in the shared mutation helper / query client, or explicit `toast.error` + logging per dialog; align with `general-coding-rules` (log + user-visible feedback) |
 | `storage/search.ts` | Duplicate `JOIN`/`WHERE` between `countSearch` and `selectSearchPage` | Extract `buildSearchFromClause(boardId?)` |
 | Add-list duplication | `BoardColumns` and `BoardColumnsStacked` duplicate add-list composer state | Extract `useAddListComposer(boardId)` |
-| `boardShortcutRegistry.ts` exports store-coupled helpers | `cycleTaskGroupForBoard` etc. call `usePreferencesStore.getState()` | Move helpers to `boardShortcutActions.ts` or colocate with preferences |
 
 ---
 
@@ -261,8 +290,8 @@ These are worth doing but didn't make the cut because they're either lower lever
 Given AI-agent speed, these can realistically be done in 2–3 sessions:
 
 1. **Refactors 3, 4, 9** — Small, self-contained, no UI changes. Good warm-up.
-2. **Refactors 1, 8** — Server-side file splits. Run `bun test` after each.
-3. **Refactors 2, 5, 6** — Client component splits. Visual regression check via dev server.
+2. ~~**Refactors 1, 8**~~ → **Refactor 8** — Refactor 1 is done. Run `bun test` after #8.
+3. **Refactors 2, 5, 6** — Client component splits. Visual regression check via dev server. **Read the ⚠ Perf safeguards carefully** — these three touch the most performance-critical client code.
 4. **Refactors 7, 10** — Hook and store restructuring. Verify DnD and filter behavior.
 
-Each refactor is independent—they can be done in any order without conflicts.
+Each refactor is independent—they can be done in any order without conflicts. However, refactors 5 and 6 share performance invariants with refactor 2 (all touch the board column/provider tree), so doing them in the same session reduces the risk of one undoing another's perf contract.

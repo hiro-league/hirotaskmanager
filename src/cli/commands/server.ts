@@ -5,7 +5,7 @@ import {
   handleServerStatus,
   handleServerStop,
 } from "../handlers/server";
-import { addClientNameOption, addDevOption, addProfileOption, cliAction } from "../lib/command-helpers";
+import { addClientNameOption, addDevOption, addProfileOption, cliAction } from "../lib/core/command-helpers";
 
 export function registerServerCommands(
   program: Command,

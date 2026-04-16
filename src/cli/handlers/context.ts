@@ -1,8 +1,8 @@
 import { createHttpApiAdapter } from "../adapters/http-api";
 import { createNodeOutputAdapter } from "../adapters/node-output";
 import { createNodeProcessAdapter } from "../adapters/node-process";
-import { resolveDataDir, resolvePort } from "../lib/config";
-import { captureCliRuntime } from "../lib/runtime";
+import { resolveDataDir, resolvePort } from "../lib/core/config";
+import { captureCliRuntime } from "../lib/core/runtime";
 import type { CliContext, CliRuntime } from "../types/context";
 
 export type { CliContext, CliRuntime };

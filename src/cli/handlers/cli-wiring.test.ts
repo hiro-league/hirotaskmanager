@@ -3,8 +3,8 @@
  * Ensures `resolvePort` wiring matches real CLI usage.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { createTestCliRuntime } from "../lib/runtime";
-import { captureStdout } from "../lib/testHelpers";
+import { createTestCliRuntime } from "../lib/core/runtime";
+import { captureStdout } from "../lib/core/testHelpers";
 import { createDefaultCliContext } from "./context";
 import { handleBoardsUpdate } from "./boards";
 import type { CliContext } from "./context";

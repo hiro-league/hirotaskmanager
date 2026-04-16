@@ -6,14 +6,19 @@
  *
  * Usage:
  *   bun run scripts/seed-perf-board.ts --lists 50 --per-list 200
- *   DATA_DIR=/path bun run scripts/seed-perf-board.ts --lists 10 --per-list 100
+ *   bun run scripts/seed-perf-board.ts --profile dev --lists 10 --per-list 100 --name "Big"
+ *   TASKMANAGER_DATA_DIR=/path bun run scripts/seed-perf-board.ts …  (overrides profile data dir)
+ *
+ * `--profile` matches `hirotm --profile`: data resolves to ~/.taskmanager/profiles/<name>/data
+ * unless TASKMANAGER_DATA_DIR or profile config.json `data_dir` overrides it.
  */
 import { parseArgs } from "node:util";
 import { coerceTaskStatus } from "../src/shared/models";
-import { runMigrations, getDb, withTransaction } from "../src/server/db";
-import { generateSlug, createBoardWithDefaults } from "../src/server/storage/board";
+import { resolveProfileName, setRuntimeConfigSelection } from "../src/shared/runtimeConfig";
+import { runMigrations, getDb, withTransaction, resolveDataDir, getDbFilePath } from "../src/server/db";
+import { generateSlug, createBoardWithDefaults } from "../src/server/storage/board/board";
 import { createListOnBoard } from "../src/server/storage/lists";
-import { statusWorkflowOrder, statusIsClosed } from "../src/server/storage/helpers";
+import { statusWorkflowOrder, statusIsClosed } from "../src/server/storage/system/helpers";
 
 function usage(): void {
   console.error(`Usage: bun run scripts/seed-perf-board.ts [options]
@@ -22,6 +27,7 @@ Options:
   --lists <n>       Number of lists (default: 10)
   --per-list <n>    Tasks per list; total tasks = lists × per-list (default: 100)
   --name <text>     Board title (default: Perf seed …)
+  --profile <name>  Runtime profile for DB path (same as hirotm; default: default)
   --help            Show this message
 `);
 }
@@ -65,6 +71,7 @@ async function main(): Promise<void> {
       lists: { type: "string" },
       "per-list": { type: "string" },
       name: { type: "string" },
+      profile: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
     strict: true,
@@ -83,12 +90,19 @@ async function main(): Promise<void> {
     values.name?.trim() ||
     `Perf seed ${lists}×${perList} (${total} tasks)`;
 
+  const profileArg = values.profile?.trim();
+  if (profileArg) {
+    // Align DB path with hirotm --profile <name> (~/.taskmanager/profiles/<name>/data, etc.).
+    setRuntimeConfigSelection({ profile: profileArg });
+  }
+
   runMigrations();
   const db = getDb();
 
   const slug = await generateSlug(boardName.replace(/\s+/g, "-").toLowerCase());
   const board = await createBoardWithDefaults(boardName, slug, null);
-  const boardId = board.id;
+  // Board model uses boardId (not id); undefined here broke priority/list queries.
+  const boardId = board.boardId;
 
   for (let i = 0; i < lists; i++) {
     createListOnBoard(boardId, { name: `List ${i + 1}` });
@@ -187,7 +201,9 @@ async function main(): Promise<void> {
         lists,
         perList,
         totalTasks: total,
-        dataDir: process.env.DATA_DIR ?? "(cwd)/data",
+        profile: resolveProfileName(),
+        dataDir: resolveDataDir(),
+        dbPath: getDbFilePath(),
       },
       null,
       2,

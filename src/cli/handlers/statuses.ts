@@ -1,4 +1,4 @@
-import { runStatusesList } from "../lib/read/statuses";
+import { runStatusesList } from "../lib/queries/statuses";
 import type { CliContext } from "./context";
 
 export async function handleStatusesList(

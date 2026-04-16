@@ -1,19 +1,8 @@
+import { countGraphemes } from "./grapheme";
+
 /** Max grapheme clusters allowed in optional emoji metadata (boards/lists/groups/tasks). */
 export const MAX_EMOJI_GRAPHEMES = 10;
-
-function countGraphemes(s: string): number {
-  try {
-    if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-      const seg = new Intl.Segmenter("en", { granularity: "grapheme" });
-      let n = 0;
-      for (const _ of seg.segment(s)) n++;
-      return n;
-    }
-  } catch {
-    // Fall back below.
-  }
-  return [...s].length;
-}
+export { countGraphemes } from "./grapheme";
 
 export type ParseEmojiFieldResult =
   | { ok: true; value: string | null }

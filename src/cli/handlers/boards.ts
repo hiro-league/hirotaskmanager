@@ -2,25 +2,25 @@ import {
   parseBoardDescribeEntities,
   type BoardDescribeResponse,
 } from "../../shared/boardDescribe";
-import { requireNdjsonWhenQuiet } from "../lib/command-helpers";
-import { getCliQuiet } from "../lib/cliFormat";
-import { confirmMutableAction } from "../lib/mutableActionConfirm";
-import { runBoardsList } from "../lib/read/boards";
-import { runBoardsTasksList } from "../lib/read/tasks";
+import { requireNdjsonWhenQuiet } from "../lib/core/command-helpers";
+import { getCliQuiet } from "../lib/output/cliFormat";
+import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import { runBoardsList } from "../lib/queries/boards";
+import { runBoardsTasksList } from "../lib/queries/tasks";
 import {
   runBoardsAdd,
   runBoardsDelete,
   runBoardsGroups,
   runBoardsPriorities,
   runBoardsUpdate,
-} from "../lib/writeCommands";
+} from "../lib/mutations/writeCommands";
 import {
   runBoardsPurge,
   runBoardsRestore,
-} from "../lib/trashCommands";
-import { printBoardDescribeResponse } from "../lib/boardDescribeOutput";
+} from "../lib/trash/trashCommands";
+import { printBoardDescribeResponse } from "../lib/output/boardDescribeOutput";
 import { CLI_ERR } from "../types/errors";
-import { CliError } from "../lib/output";
+import { CliError } from "../lib/output/output";
 import type { CliContext } from "./context";
 
 export async function handleBoardsList(

@@ -5,7 +5,7 @@ import { EMPTY_BOARD_CLI_POLICY } from "../shared/cliPolicy";
 import type { List, Task } from "../shared/models";
 import type { AppBindings } from "./auth";
 import { getRequestAuthContext } from "./auth";
-import { readBoardCliPolicy, readCliGlobalPolicy } from "./storage/cliPolicy";
+import { readBoardCliPolicy, readCliGlobalPolicy } from "./storage/system/cliPolicy";
 
 export function isCliRequest(c: Context<AppBindings>): boolean {
   return getRequestAuthContext(c).principal === "cli";
@@ -20,14 +20,27 @@ const MSG_WRITE = "This action is not allowed for the CLI on this board. Ask the
 const MSG_CREATE_BOARD =
   "CLI board creation is disabled. Ask the owner to enable it in TaskManager CLI settings (web app).";
 
+/**
+ * CLI denied when the given board policy flag is false. Web requests always pass.
+ * @param message `"read"` uses {@link MSG_READ}; `"write"` uses {@link MSG_WRITE}.
+ */
+export function cliPolicyError(
+  c: Context<AppBindings>,
+  boardId: number,
+  field: keyof BoardCliPolicy,
+  message: "read" | "write" = "write",
+): Response | undefined {
+  if (!isCliRequest(c)) return undefined;
+  if (policyForBoard(boardId)[field]) return undefined;
+  return c.json({ error: message === "read" ? MSG_READ : MSG_WRITE }, 403);
+}
+
 /** Web principal always passes. CLI requires `read_board`. */
 export function cliBoardReadError(
   c: Context<AppBindings>,
   entry: BoardIndexEntry,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(entry.boardId).readBoard) return undefined;
-  return c.json({ error: MSG_READ }, 403);
+  return cliPolicyError(c, entry.boardId, "readBoard", "read");
 }
 
 /** Replaces legacy coarse write check — use granular helpers below for new code paths. */
@@ -66,45 +79,35 @@ export function cliEditBoardMetadataError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).editBoard) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "editBoard");
 }
 
 export function cliManageStructureError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).manageStructure) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "manageStructure");
 }
 
 export function cliDeleteBoardError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).deleteBoard) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "deleteBoard");
 }
 
 export function cliCreateTasksError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).createTasks) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "createTasks");
 }
 
 export function cliCreateListsError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).createLists) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "createLists");
 }
 
 function canManageTask(p: BoardCliPolicy, task: Task): boolean {
@@ -146,9 +149,7 @@ export function cliManageAnyListsError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).manageAnyLists) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "manageAnyLists");
 }
 
 /** Task move/reorder when placement is constrained to CLI-managed tasks only is handled elsewhere; bulk reorder uses manage any tasks. */
@@ -156,7 +157,5 @@ export function cliManageAnyTasksError(
   c: Context<AppBindings>,
   boardId: number,
 ): Response | undefined {
-  if (!isCliRequest(c)) return undefined;
-  if (policyForBoard(boardId).manageAnyTasks) return undefined;
-  return c.json({ error: MSG_WRITE }, 403);
+  return cliPolicyError(c, boardId, "manageAnyTasks");
 }

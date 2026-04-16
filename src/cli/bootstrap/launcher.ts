@@ -16,13 +16,13 @@ import {
   resolveProfileName,
   writeConfigFile,
   type CliConfigFile,
-} from "../lib/config";
-import { parsePortOption } from "../lib/command-helpers";
+} from "../lib/core/config";
+import { parsePortOption } from "../lib/core/command-helpers";
 import { CLI_ERR } from "../types/errors";
-import { CLI_DEFAULTS } from "../lib/constants";
-import { CliError, exitWithError } from "../lib/output";
-import { readServerStatus, startServer, stopServer } from "../lib/process";
-import { canPromptInteractively } from "../lib/tty";
+import { CLI_DEFAULTS } from "../lib/core/constants";
+import { CliError, exitWithError } from "../lib/output/output";
+import { readServerStatus, startServer, stopServer } from "../lib/core/process";
+import { canPromptInteractively } from "../lib/core/tty";
 import type { ServerStartMode } from "../ports/process";
 import {
   formatBooleanPrompt,
@@ -38,7 +38,7 @@ import {
   printSavedProfileSummary,
   spinForMoment,
   startInlineSpinner,
-} from "../lib/launcherUi";
+} from "../lib/output/launcherUi";
 
 /** Phase 3: installed-app launcher logic (formerly all of app.ts). */
 

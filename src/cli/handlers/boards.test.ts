@@ -3,11 +3,11 @@ import type { PaginatedListBody } from "../../shared/pagination";
 import type { BoardIndexEntry, Task } from "../../shared/models";
 import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
 import type { BoardDescribeResponse } from "../../shared/boardDescribe";
-import { CLI_DEFAULTS } from "../lib/constants";
-import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
-import { createTestCliRuntime } from "../lib/runtime";
-import { resetCliOutputFormat, CliError } from "../lib/output";
-import { captureStdout } from "../lib/testHelpers";
+import { CLI_DEFAULTS } from "../lib/core/constants";
+import { syncCliOutputFormatFromGlobals } from "../lib/output/cliFormat";
+import { createTestCliRuntime } from "../lib/core/runtime";
+import { resetCliOutputFormat, CliError } from "../lib/output/output";
+import { captureStdout } from "../lib/core/testHelpers";
 import { createDefaultCliContext } from "./context";
 import { CLI_ERR } from "../types/errors";
 import {

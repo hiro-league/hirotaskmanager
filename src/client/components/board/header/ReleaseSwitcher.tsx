@@ -1,0 +1,48 @@
+import { RELEASE_FILTER_UNTAGGED } from "../../../../shared/boardFilters";
+import type { Board } from "../../../../shared/models";
+import {
+  useBoardFiltersStore,
+  useResolvedActiveReleaseIds,
+} from "@/store/preferences";
+import { BoardHeaderMultiSelect } from "./BoardHeaderMultiSelect";
+
+interface ReleaseSwitcherProps {
+  board: Board;
+  headerHovered?: boolean;
+  onOpenReleasesEditor?: () => void;
+}
+
+export function ReleaseSwitcher({
+  board,
+  headerHovered,
+  onOpenReleasesEditor,
+}: ReleaseSwitcherProps) {
+  const setActive = useBoardFiltersStore((s) => s.setActiveReleaseIdsForBoard);
+  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
+  const options = [
+    { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
+    ...board.releases.map((r) => ({
+      id: String(r.releaseId),
+      label: r.name,
+      color: r.color ?? undefined,
+    })),
+  ];
+
+  return (
+    <BoardHeaderMultiSelect
+      sectionLabel="Release"
+      allLabel="All Releases"
+      chooseAriaLabel="Choose releases"
+      clearAllLabel="Clear all releases"
+      removeItemAriaLabel={(label) => `Remove ${label}`}
+      options={options}
+      selectedIds={activeReleaseIds ?? []}
+      headerHovered={headerHovered}
+      onChange={(nextSelectedIds) =>
+        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+      }
+      onOpenEditor={onOpenReleasesEditor}
+      editButtonAriaLabel="Edit releases"
+    />
+  );
+}

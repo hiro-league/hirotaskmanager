@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Status } from "../../shared/models";
-import { syncCliOutputFormatFromGlobals } from "../lib/cliFormat";
-import { createTestCliRuntime } from "../lib/runtime";
-import { resetCliOutputFormat } from "../lib/output";
-import { captureStdout } from "../lib/testHelpers";
+import { syncCliOutputFormatFromGlobals } from "../lib/output/cliFormat";
+import { createTestCliRuntime } from "../lib/core/runtime";
+import { resetCliOutputFormat } from "../lib/output/output";
+import { captureStdout } from "../lib/core/testHelpers";
 import { createDefaultCliContext } from "./context";
 import { handleStatusesList } from "./statuses";
 import type { CliContext } from "./context";

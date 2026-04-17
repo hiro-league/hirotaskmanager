@@ -5,21 +5,19 @@ import {
   type Task,
 } from "../../../../shared/models";
 import type { BoardBandSpreadProps } from "../boardColumnData";
+import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
 import {
-  useResolvedActiveReleaseIds,
-  useResolvedActiveTaskGroupIds,
-  useResolvedActiveTaskPriorityIds,
-  useResolvedTaskCardViewMode,
-  useResolvedTaskDateFilter,
-} from "@/store/preferences";
-import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
+  TaskCard,
+  taskCardInlineEditFor,
+  taskReleasePill,
+} from "@/components/task/TaskCard";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import {
   listStatusTasksSortedFromIndex,
   type BoardTaskFilterState,
 } from "../boardStatusUtils";
 import { SortableBandContent } from "./BandTaskList";
-import { BandComposer, BandFab } from "./BandComposer";
+import { Composer } from "./Composer";
 import { useBandController } from "./useBandController";
 
 interface ListStatusBandProps extends BoardBandSpreadProps {
@@ -47,11 +45,14 @@ export const ListStatusBand = memo(function ListStatusBand({
   containerId,
   sortableIds,
 }: ListStatusBandProps) {
-  const activeGroupIds = useResolvedActiveTaskGroupIds(boardId, taskGroups);
-  const activePriorityIds = useResolvedActiveTaskPriorityIds(boardId, taskPriorities);
-  const activeReleaseIds = useResolvedActiveReleaseIds(boardId, releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(boardId);
-  const taskCardViewMode = useResolvedTaskCardViewMode(boardId);
+  // Single context read vs five store hooks per band (§2.4).
+  const {
+    activeGroupIds,
+    activePriorityIds,
+    activeReleaseIds,
+    dateFilterResolved,
+    taskCardViewMode,
+  } = useBoardFilterResolution();
 
   const taskMap = useMemo(() => {
     const m = new Map<number, Task>();
@@ -147,12 +148,17 @@ export const ListStatusBand = memo(function ListStatusBand({
           groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
           releasePill={taskReleasePill({ releases }, task)}
           onOpen={() => ctrl.openStaticEditor(task)}
-          editingTitle={ctrl.editingTitleTaskId === task.taskId}
-          titleDraft={ctrl.editingTitleTaskId === task.taskId ? ctrl.editingTitleDraft : undefined}
-          onTitleDraftChange={ctrl.setEditingTitleDraft}
-          onTitleCommit={() => void ctrl.commitInlineTitleEdit()}
-          onTitleCancel={ctrl.cancelInlineTitleEdit}
-          titleEditBusy={ctrl.titleEditBusy}
+          inlineEdit={taskCardInlineEditFor(
+            task.taskId,
+            ctrl.editingTitleTaskId,
+            ctrl.editingTitleDraft,
+            {
+              setDraft: ctrl.setEditingTitleDraft,
+              commit: () => void ctrl.commitInlineTitleEdit(),
+              cancel: ctrl.cancelInlineTitleEdit,
+              busy: ctrl.titleEditBusy,
+            },
+          )}
           onCompleteFromCircle={
             ctrl.isOpenBand
               ? (anchorEl) => ctrl.completeFromList(task, anchorEl)
@@ -176,7 +182,7 @@ export const ListStatusBand = memo(function ListStatusBand({
         {sortableBand ?? staticCards}
 
         {ctrl.isOpenBand && ctrl.adding && (
-          <BandComposer
+          <Composer
             title={ctrl.title}
             setTitle={ctrl.setTitle}
             inputRef={ctrl.inputRef}
@@ -195,7 +201,7 @@ export const ListStatusBand = memo(function ListStatusBand({
     return (
       <>
         {scrollContent}
-        {ctrl.showFab && <BandFab onOpen={ctrl.openComposerAtBottom} />}
+        {ctrl.showFab && <Composer.Fab onOpen={ctrl.openComposerAtBottom} />}
         {taskEditor}
       </>
     );

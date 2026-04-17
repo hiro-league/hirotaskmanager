@@ -113,7 +113,7 @@ Permissions: extend **`BoardCliPolicy`** (or add `releases` section) parallel to
 
 **SSE (implemented):**
 
-- **`task-created` / `task-updated`** — payload includes `taskId` and `boardUpdatedAt`. The client refetches that task via `GET /api/boards/:boardId/tasks/:taskId`, which includes `releaseId`, then invalidates the full board query so the cache converges with other writers (CLI, second tab).
+- **`task-created` / `task-updated`** — payload includes `taskId` and `boardUpdatedAt`. The client refetches that task via `GET /api/tasks/:taskId`, which includes `releaseId`, then invalidates the full board query so the cache converges with other writers (CLI, second tab).
 - **`release-upserted`** — after `POST`/`PATCH` `/api/boards/:id/releases`, the server emits `{ kind: "release-upserted", release, boardUpdatedAt }`. Open tabs merge `release` into `board.releases` (same sort as `listReleasesForBoard`) and bump `board.updatedAt`, without refetching the entire board payload. Stats queries for that board are invalidated.
 - **`DELETE` release** — still emits **`board-changed`** (full board invalidation) because tasks may be bulk-cleared or reassigned and board default/auto-assign flags may change.
 

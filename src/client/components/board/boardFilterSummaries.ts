@@ -6,6 +6,7 @@ import {
   sortPrioritiesByValue,
   type Board,
 } from "../../../shared/models";
+import { formatMonthDayShortMaybeYear } from "@/lib/intlDateFormat";
 import type { TaskDateFilterResolved } from "./boardStatusUtils";
 
 export interface BoardFilterSummaryChip {
@@ -26,13 +27,7 @@ function formatYmdForBadge(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
   const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(dt.getFullYear() !== new Date().getFullYear()
-      ? { year: "numeric" as const }
-      : {}),
-  });
+  return formatMonthDayShortMaybeYear(dt);
 }
 
 function formatTaskDateFilterBadge(
@@ -74,10 +69,10 @@ export function buildBoardFilterSummaries(
       groupDisplayLabelForId(board.taskGroups, Number(groupId)),
     ) ?? null;
   const activePriorityLabels =
-    activeTaskPriorityIds?.map((priorityId) => {
+    activeTaskPriorityIds?.flatMap((priorityId) => {
       const label = priorityLabelForId(board.taskPriorities, Number(priorityId));
-      return label ? priorityDisplayLabel(label) : "";
-    }).filter(Boolean) ?? null;
+      return label ? [priorityDisplayLabel(label)] : [];
+    }) ?? null;
   const activePriorityColor =
     activeTaskPriorityIds && activeTaskPriorityIds.length === 1
       ? sortPrioritiesByValue(board.taskPriorities).find(
@@ -85,11 +80,12 @@ export function buildBoardFilterSummaries(
         )?.color
       : undefined;
   const activeReleaseLabels =
-    activeReleaseIds?.map((releaseId) => {
-      if (releaseId === RELEASE_FILTER_UNTAGGED) return "Unassigned";
+    activeReleaseIds?.flatMap((releaseId) => {
+      if (releaseId === RELEASE_FILTER_UNTAGGED) return ["Unassigned"];
       const release = board.releases.find((entry) => String(entry.releaseId) === releaseId);
-      return release?.name ?? "";
-    }).filter(Boolean) ?? null;
+      const name = release?.name ?? "";
+      return name ? [name] : [];
+    }) ?? null;
   const activeReleaseColor =
     activeReleaseIds &&
     activeReleaseIds.length === 1 &&

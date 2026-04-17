@@ -5,7 +5,7 @@ import {
   type Task,
 } from "../../../../shared/models";
 import type { TaskCardViewMode } from "@/store/preferences";
-import { taskReleasePill } from "@/components/task/TaskCard";
+import { taskCardInlineEditFor, taskReleasePill } from "@/components/task/TaskCard";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { cn } from "@/lib/utils";
 import { parseTaskSortableId } from "../dnd/dndIds";
@@ -25,8 +25,8 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
   viewMode,
   onComplete,
   onEdit,
-  editingTitle,
-  titleDraft,
+  editingTitleTaskId,
+  editingTitleDraft,
   onTitleDraftChange,
   onTitleCommit,
   onTitleCancel,
@@ -42,8 +42,8 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
-  editingTitle: boolean;
-  titleDraft?: string;
+  editingTitleTaskId: number | null;
+  editingTitleDraft: string;
   onTitleDraftChange: (value: string) => void;
   onTitleCommit: () => void;
   onTitleCancel: () => void;
@@ -65,12 +65,12 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
       groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
       releasePill={taskReleasePill({ releases }, task)}
       onOpen={handleOpen}
-      editingTitle={editingTitle}
-      titleDraft={titleDraft}
-      onTitleDraftChange={onTitleDraftChange}
-      onTitleCommit={onTitleCommit}
-      onTitleCancel={onTitleCancel}
-      titleEditBusy={titleEditBusy}
+      inlineEdit={taskCardInlineEditFor(task.taskId, editingTitleTaskId, editingTitleDraft, {
+        setDraft: onTitleDraftChange,
+        commit: onTitleCommit,
+        cancel: onTitleCancel,
+        busy: titleEditBusy,
+      })}
       onCompleteFromCircle={
         task.status === "open" ? handleCompleteFromCircle : undefined
       }
@@ -188,8 +188,8 @@ export const SortableBandContent = memo(function SortableBandContent({
                   viewMode={viewMode}
                   onComplete={onComplete}
                   onEdit={onEdit}
-                  editingTitle={editingTitleTaskId === task.taskId}
-                  titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
+                  editingTitleTaskId={editingTitleTaskId}
+                  editingTitleDraft={editingTitleDraft}
                   onTitleDraftChange={onTitleDraftChange}
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
@@ -217,8 +217,8 @@ export const SortableBandContent = memo(function SortableBandContent({
               viewMode={viewMode}
               onComplete={onComplete}
               onEdit={onEdit}
-              editingTitle={editingTitleTaskId === task.taskId}
-              titleDraft={editingTitleTaskId === task.taskId ? editingTitleDraft : undefined}
+              editingTitleTaskId={editingTitleTaskId}
+              editingTitleDraft={editingTitleDraft}
               onTitleDraftChange={onTitleDraftChange}
               onTitleCommit={onTitleCommit}
               onTitleCancel={onTitleCancel}

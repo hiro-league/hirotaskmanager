@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { startTransition, useRef } from "react";
 import { ArrowRight, Calendar } from "lucide-react";
 import type { Board } from "../../../../shared/models";
 import {
@@ -10,6 +10,7 @@ import {
   BOARD_HEADER_SECTION_EDIT_ICON_SLOT_CLASS,
   boardHeaderToggleButtonClass,
 } from "./boardHeaderButtonStyles";
+import { formatMonthDayShort } from "@/lib/intlDateFormat";
 import { todayDateKeyLocal, type TaskDateFilterMode } from "../boardStatusUtils";
 import { cn } from "@/lib/utils";
 
@@ -37,10 +38,7 @@ function nextMode(current: TaskDateFilterMode): TaskDateFilterMode {
 function formatDayMonth(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  return formatMonthDayShort(new Date(y, m - 1, d));
 }
 
 function formatCompactDateLabel(ymd: string): string {
@@ -125,7 +123,7 @@ export function BoardTaskDateFilter({ board }: BoardTaskDateFilterProps) {
   const endDate = raw?.endDate ?? todayDateKeyLocal();
 
   const persist = (next: TaskDateFilterPersisted) => {
-    setFilter(board.boardId, next);
+    startTransition(() => setFilter(board.boardId, next));
   };
 
   const toggleFilter = () => {

@@ -46,18 +46,37 @@ function ListColumnBody({
   void boardVisibleStatuses; // lanes shell does not need prefs; prop kept for memo key parity with stacked spread
   const bandsRef = useRef<HTMLDivElement>(null);
   const bandHeightsRef = useRef<number[]>([]);
+  const isTaskDragActiveRef = useRef(isTaskDragActive);
+  isTaskDragActiveRef.current = isTaskDragActive;
   const boardStatsDisplay = useBoardStatsDisplayOptional();
 
-  // Snapshot band heights after every non-dragging paint so we can freeze
-  // them the moment a task drag begins, preventing flex-grow reflow from
-  // triggering dnd-kit measureRect → setState infinite loops.
+  // Snapshot band heights when layout can change (not on every commit — §2.1). ResizeObserver
+  // covers window resize; ref gate skips updates during task drag when we use frozen heights.
   useLayoutEffect(() => {
-    if (!isTaskDragActive && bandsRef.current) {
-      bandHeightsRef.current = Array.from(bandsRef.current.children).map(
-        (el) => (el as HTMLElement).getBoundingClientRect().height,
+    const el = bandsRef.current;
+    if (!el) return;
+
+    const snapshot = () => {
+      if (isTaskDragActiveRef.current) return;
+      bandHeightsRef.current = Array.from(el.children).map(
+        (c) => (c as HTMLElement).getBoundingClientRect().height,
       );
-    }
-  });
+    };
+
+    snapshot();
+    const ro = new ResizeObserver(snapshot);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [weights, visibleStatuses, listId]);
+
+  useLayoutEffect(() => {
+    if (isTaskDragActive) return;
+    const el = bandsRef.current;
+    if (!el) return;
+    bandHeightsRef.current = Array.from(el.children).map(
+      (c) => (c as HTMLElement).getBoundingClientRect().height,
+    );
+  }, [isTaskDragActive]);
 
   const listStatsRow =
     showStats &&

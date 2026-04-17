@@ -1,7 +1,7 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useRef,
   type ReactNode,
 } from "react";
@@ -70,7 +70,7 @@ export function BoardTaskKeyboardBridgeProvider({
 }
 
 export function useBoardTaskKeyboardBridge(): BoardTaskKeyboardBridgeValue {
-  const ctx = useContext(BoardTaskKeyboardBridgeContext);
+  const ctx = use(BoardTaskKeyboardBridgeContext);
   if (!ctx) {
     throw new Error(
       "useBoardTaskKeyboardBridge must be used within BoardTaskKeyboardBridgeProvider",
@@ -80,5 +80,5 @@ export function useBoardTaskKeyboardBridge(): BoardTaskKeyboardBridgeValue {
 }
 
 export function useBoardTaskKeyboardBridgeOptional(): BoardTaskKeyboardBridgeValue | null {
-  return useContext(BoardTaskKeyboardBridgeContext);
+  return use(BoardTaskKeyboardBridgeContext);
 }

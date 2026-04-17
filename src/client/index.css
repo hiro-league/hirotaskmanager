@@ -58,6 +58,8 @@
 }
 
 :root {
+  /* Hint UA for native widgets + scrollbars until theme class is applied (pairs with index.html color-scheme meta). */
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
@@ -103,6 +105,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.21 0.006 285.885);
@@ -182,9 +185,39 @@
   html {
     @apply font-sans;
   }
+
+  /*
+   * Touch / mobile hygiene (Web Interface Guidelines): insets for notches + home indicator;
+   * #root fills the padded viewport so h-dvh shells can use h-full instead.
+   */
+  #root {
+    box-sizing: border-box;
+    height: 100dvh;
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+    padding-left: max(0px, env(safe-area-inset-left));
+  }
+
+  /* Faster taps (no 300ms delay) without breaking canvas / custom touch gestures. */
+  button,
+  a[href],
+  [role="button"] {
+    touch-action: manipulation;
+  }
   /* Apply the requested heading font globally without changing theme colors. */
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
+  }
+
+  /* Honor system “reduce motion” for transitions/animations not covered by component-level checks. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 

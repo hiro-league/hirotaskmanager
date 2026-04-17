@@ -11,7 +11,7 @@ import {
   createDefaultTaskPriorities,
 } from "../../../shared/models";
 import * as queries from "../queries";
-import { usePatchList } from "./lists";
+import { usePatchList, useReorderLists } from "./lists";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -87,6 +87,76 @@ describe("usePatchList cache behavior", () => {
         .toMatchObject({
           name: "Col",
         });
+    });
+  });
+});
+
+function boardWithTwoLists(boardId: number): Board {
+  const b = minimalBoard(boardId);
+  return {
+    ...b,
+    lists: [
+      { listId: 1, name: "First", order: 0, emoji: null },
+      { listId: 2, name: "Second", order: 1, emoji: null },
+    ],
+  };
+}
+
+describe("useReorderLists cache behavior", () => {
+  let fetchJsonSpy: Mock;
+
+  beforeEach(() => {
+    fetchJsonSpy = vi.spyOn(queries, "fetchJson") as Mock;
+  });
+
+  test("applies optimistic list order before the server responds", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const board = boardWithTwoLists(1);
+    qc.setQueryData(queries.boardKeys.detail(1), board);
+
+    fetchJsonSpy.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves — observe optimistic cache only */
+        }),
+    );
+
+    const { result } = renderHook(() => useReorderLists(), {
+      wrapper: createWrapper(qc),
+    });
+
+    void result.current.mutate({ boardId: 1, orderedListIds: [2, 1] });
+
+    await waitFor(() => {
+      const next = qc.getQueryData<Board>(queries.boardKeys.detail(1));
+      expect(next?.lists.map((l) => l.listId)).toEqual([2, 1]);
+      expect(next?.lists.map((l) => l.order)).toEqual([0, 1]);
+    });
+  });
+
+  test("rolls back list order when the reorder request fails", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const board = boardWithTwoLists(1);
+    qc.setQueryData(queries.boardKeys.detail(1), board);
+
+    fetchJsonSpy.mockRejectedValue(new Error("network"));
+
+    const { result } = renderHook(() => useReorderLists(), {
+      wrapper: createWrapper(qc),
+    });
+
+    await expect(
+      result.current.mutateAsync({ boardId: 1, orderedListIds: [2, 1] }),
+    ).rejects.toThrow(/network/);
+
+    await waitFor(() => {
+      expect(qc.getQueryData<Board>(queries.boardKeys.detail(1))?.lists).toEqual(
+        board.lists,
+      );
     });
   });
 });

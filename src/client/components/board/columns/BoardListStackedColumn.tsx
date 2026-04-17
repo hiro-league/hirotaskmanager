@@ -1,4 +1,3 @@
-import { Plus, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -13,17 +12,14 @@ import {
   type List,
   type Task,
 } from "../../../../shared/models";
-import { clampTaskTitleInput } from "../../../../shared/taskTitle";
+import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
+import { usePreferencesStore } from "@/store/preferences";
 import {
-  useResolvedActiveReleaseIds,
-  useResolvedActiveTaskGroupIds,
-  useResolvedActiveTaskPriorityIds,
-  useResolvedTaskCardViewMode,
-  useResolvedTaskDateFilter,
-  usePreferencesStore,
-} from "@/store/preferences";
-import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
-import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
+  TaskCard,
+  taskCardInlineEditFor,
+  taskReleasePill,
+} from "@/components/task/TaskCard";
+import { Composer } from "@/components/board/lanes/Composer";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { ListHeader } from "@/components/list/ListHeader";
@@ -34,7 +30,7 @@ import {
   boardListColumnOverlayShellClass,
   stackedListColumnMinHeightClass,
 } from "../dnd/boardDragOverlayShell";
-import { parseTaskSortableId } from "../dnd/dndIds";
+import { EMPTY_SORTABLE_IDS, parseTaskSortableId } from "../dnd/dndIds";
 import type { BoardColumnSpreadProps } from "../boardColumnData";
 import {
   type BoardTaskFilterState,
@@ -46,6 +42,7 @@ import { useStackedListTaskActions } from "../lanes/useStackedListTaskActions";
 import { useBoardColumnSortableReact } from "../dnd/useBoardColumnSortableReact";
 import { useColumnInViewport } from "../lanes/useColumnInViewport";
 import { useStatusWorkflowOrder } from "@/api/queries";
+import { subscribeWindowResize } from "@/lib/useWindowResize";
 
 interface ListStackedBodyProps extends BoardColumnSpreadProps {
   list: List;
@@ -58,8 +55,6 @@ interface ListStackedBodyProps extends BoardColumnSpreadProps {
   taskContainerId?: string;
   forDragOverlay?: boolean;
 }
-
-const EMPTY_SORTABLE_IDS: string[] = [];
 
 function ListStackedBody({
   boardId,
@@ -82,11 +77,13 @@ function ListStackedBody({
   forDragOverlay = false,
 }: ListStackedBodyProps) {
   void _boardVisibleStatuses;
-  const taskCardViewMode = useResolvedTaskCardViewMode(boardId);
-  const activeGroupIds = useResolvedActiveTaskGroupIds(boardId, taskGroups);
-  const activePriorityIds = useResolvedActiveTaskPriorityIds(boardId, taskPriorities);
-  const activeReleaseIds = useResolvedActiveReleaseIds(boardId, releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(boardId);
+  const {
+    activeGroupIds,
+    activePriorityIds,
+    activeReleaseIds,
+    dateFilterResolved,
+    taskCardViewMode,
+  } = useBoardFilterResolution();
   const headerCollapsed = usePreferencesStore((s) => s.boardFilterStripCollapsed);
   const boardStatsDisplay = useBoardStatsDisplayOptional();
 
@@ -152,53 +149,16 @@ function ListStackedBody({
 
   const quickAddComposer =
     actions.canAddOpen && actions.adding ? (
-      <div
-        ref={actions.addCardRef}
-        className="mt-2 shrink-0 rounded-md border border-border bg-background p-2 shadow-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex flex-col gap-1">
-          <textarea
-            ref={actions.inputRef}
-            rows={3}
-            className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
-            placeholder="Enter a title or paste a link"
-            value={actions.title}
-            disabled={actions.createIsPending}
-            onChange={(e) => actions.setTitle(clampTaskTitleInput(e.target.value))}
-            onBlur={actions.handleTextareaBlur}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                actions.submitTask();
-              }
-              if (e.key === "Escape") actions.cancelAdd();
-            }}
-          />
-          <div className="flex justify-end">
-            <TaskTitleCharsLeft value={actions.title} />
-          </div>
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            disabled={actions.createIsPending || !actions.title.trim()}
-            onClick={() => actions.submitTask()}
-          >
-            Add task
-          </button>
-          <button
-            type="button"
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Cancel"
-            disabled={actions.createIsPending}
-            onClick={actions.cancelAdd}
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </div>
-      </div>
+      <Composer
+        title={actions.title}
+        setTitle={actions.setTitle}
+        inputRef={actions.inputRef}
+        addCardRef={actions.addCardRef}
+        isPending={actions.createIsPending}
+        onSubmit={() => actions.submitTask()}
+        onCancel={actions.cancelAdd}
+        onBlur={actions.handleTextareaBlur}
+      />
     ) : null;
 
   const hasListStatsRow =
@@ -224,9 +184,9 @@ function ListStackedBody({
     };
 
     updateBodyMaxHeight();
-    window.addEventListener("resize", updateBodyMaxHeight);
+    const unsubResize = subscribeWindowResize(updateBodyMaxHeight);
     return () => {
-      window.removeEventListener("resize", updateBodyMaxHeight);
+      unsubResize();
     };
   }, [forDragOverlay, headerCollapsed, hasListStatsRow]);
 
@@ -300,12 +260,17 @@ function ListStackedBody({
                       groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
                       releasePill={taskReleasePill({ releases }, task)}
                       onOpen={() => actions.openStaticEditor(task)}
-                      editingTitle={actions.editingTitleTaskId === task.taskId}
-                      titleDraft={actions.editingTitleTaskId === task.taskId ? actions.editingTitleDraft : undefined}
-                      onTitleDraftChange={actions.setEditingTitleDraft}
-                      onTitleCommit={() => void actions.commitInlineTitleEdit()}
-                      onTitleCancel={actions.cancelInlineTitleEdit}
-                      titleEditBusy={actions.titleEditBusy}
+                      inlineEdit={taskCardInlineEditFor(
+                        task.taskId,
+                        actions.editingTitleTaskId,
+                        actions.editingTitleDraft,
+                        {
+                          setDraft: actions.setEditingTitleDraft,
+                          commit: () => void actions.commitInlineTitleEdit(),
+                          cancel: actions.cancelInlineTitleEdit,
+                          busy: actions.titleEditBusy,
+                        },
+                      )}
                     />
                     {staticQuickAddInsertIndex === index + 1 ? quickAddComposer : null}
                   </div>
@@ -316,25 +281,7 @@ function ListStackedBody({
         </div>
 
         {showFab && (
-          <button
-            type="button"
-            aria-label="Add task"
-            className={cn(
-              "absolute bottom-3 right-3 z-10",
-              "flex size-11 shrink-0 items-center justify-center rounded-full",
-              "bg-primary text-primary-foreground shadow-md ring-1 ring-border/60",
-              "opacity-0 pointer-events-none transition-opacity duration-150",
-              "group-hover/list-col:opacity-100 group-hover/list-col:pointer-events-auto",
-              "hover:opacity-90",
-              "focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.openComposerAtQuickAddPosition();
-            }}
-          >
-            <Plus className="size-6" strokeWidth={2.5} aria-hidden />
-          </button>
+          <Composer.Fab onOpen={actions.openComposerAtQuickAddPosition} />
         )}
       </div>
     </>

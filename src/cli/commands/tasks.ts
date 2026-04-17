@@ -8,6 +8,7 @@ import {
   handleTasksMove,
   handleTasksPurge,
   handleTasksRestore,
+  handleTasksShow,
   handleTasksUpdate,
 } from "../handlers/tasks";
 import {
@@ -25,7 +26,7 @@ export function registerTaskCommands(
 ): void {
   const tasksCommand = program
     .command("tasks")
-    .description("List, create, and update tasks on boards");
+    .description("List, show, create, and update tasks on boards");
 
   addClientNameOption(
     tasksCommand
@@ -106,6 +107,17 @@ export function registerTaskCommands(
         pageAll: options.pageAll,
         fields: options.fields,
       })),
+  );
+
+  addClientNameOption(
+    tasksCommand
+      .command("show")
+      .description("Show one task by global id")
+      .argument("<task-id>", "Numeric task id")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    cliAction((taskId: string, options: { fields?: string }) =>
+      handleTasksShow(ctx, taskId, options)),
   );
 
   addClientNameOption(

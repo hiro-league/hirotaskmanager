@@ -181,7 +181,7 @@ Key design decisions:
 
 **Problem:** `GET /api/boards/:id` sends full `task.body` for every task. The board view only uses a 100-char preview (`previewBody` in `TaskCard.tsx`). With 1000 tasks this can be megabytes of unused text.
 
-**Fix:** Add a query parameter (e.g. `?slim=1` or `?bodyPreview=120`) to the board endpoint. When set, the server truncates each task's body to the preview length before serializing. Full body is fetched on-demand when the task editor opens (already has `GET /api/boards/:id/tasks/:taskId`).
+**Fix:** Add a query parameter (e.g. `?slim=1` or `?bodyPreview=120`) to the board endpoint. When set, the server truncates each task's body to the preview length before serializing. Full body is fetched on-demand when the task editor opens (`GET /api/tasks/:taskId`).
 
 **Files:** `boards.ts` (server route), `board.ts` (storage — `loadBoard`), `queries.ts` (client fetch).
 

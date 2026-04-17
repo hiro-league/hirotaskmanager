@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, use, type ReactNode } from "react";
 import type { TaskCountStat } from "../../../shared/boardStats";
 
 export interface BoardStatsDisplayValue {
@@ -37,5 +37,5 @@ export function BoardStatsDisplayProvider({
 
 /** List columns read per-list stats; returns null when stats are hidden or unavailable. */
 export function useBoardStatsDisplayOptional(): BoardStatsDisplayValue | null {
-  return useContext(BoardStatsDisplayContext);
+  return use(BoardStatsDisplayContext);
 }

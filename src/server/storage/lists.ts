@@ -85,6 +85,26 @@ export function readListById(boardId: number, listId: number): List | null {
   return row ? mapListRow(row) : null;
 }
 
+/**
+ * Live list by global row id (`GET /api/lists/:listId`). Resolves `board_id` for routing / CLI policy.
+ */
+export function readLiveListWithBoard(
+  listId: number,
+): { boardId: number; list: List } | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT l.board_id, l.id, l.name, l.sort_order, l.color, l.emoji, l.created_by_principal, l.created_by_label
+       FROM list l
+       INNER JOIN board b ON b.id = l.board_id
+       WHERE l.id = ? AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
+    )
+    .get(listId) as (ListRow & { board_id: number }) | null;
+  if (!row) return null;
+  const { board_id: boardId, ...listCols } = row;
+  return { boardId, list: mapListRow(listCols as ListRow) };
+}
+
 export function createListOnBoard(
   boardId: number,
   input: { name: string; emoji?: string | null },

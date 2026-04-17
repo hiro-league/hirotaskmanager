@@ -35,6 +35,16 @@ Use this to discover lists on a board before mutation.
 - `--fields <keys>`: project only selected fields.
 - Supports global `--quiet` with `--format ndjson`.
 
+### `lists show`
+
+Format:
+
+```bash
+hirotm lists show <list-id> [--fields <keys>]
+```
+
+Print one list by global numeric id (`GET /api/lists/:listId`). The server resolves which board the list belongs to and enforces CLI policy for that board (`readBoard`).
+
 ### `lists add`
 
 Format:

@@ -114,7 +114,12 @@ export function NotificationToasts() {
   if (toasts.length === 0 && !systemToast) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[140] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2">
+    // aria-live: new toasts are announced (Web Interface Guidelines — async updates).
+    <div
+      aria-live="polite"
+      aria-relevant="additions"
+      className="pointer-events-none fixed bottom-4 right-4 z-[140] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+    >
       {systemToast ? (
         <SystemToastCard
           key={systemToast.id}

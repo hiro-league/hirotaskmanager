@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Search } from "lucide-react";
 import type { Board } from "../../../../shared/models";
-import {
-  boardSearchQueryKey,
-  fetchBoardSearchHits,
-} from "@/api/search";
+import { useBoardSearchHits } from "@/api/useBoardSearchHits";
 import { useBoardTaskKeyboardBridge } from "@/components/board/shortcuts/BoardTaskKeyboardBridge";
 import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
 import { useDialogCloseRequest } from "@/components/board/shortcuts/useDialogCloseRequest";
@@ -41,15 +44,14 @@ export function BoardSearchDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(debouncedQuery);
   const { requestOpenTaskEditor } = useBoardTaskKeyboardBridge();
 
-  const searchQuery = useQuery({
-    queryKey: boardSearchQueryKey(board.boardId, debouncedQuery, MAX_LIMIT),
-    queryFn: () =>
-      fetchBoardSearchHits(debouncedQuery, board.boardId, { limit: MAX_LIMIT }),
-    enabled: open && debouncedQuery.length > 0,
-    staleTime: 60_000,
-    retry: false,
+  const searchQuery = useBoardSearchHits({
+    boardId: board.boardId,
+    q: deferredSearchQuery,
+    limit: MAX_LIMIT,
+    enabled: open,
   });
 
   const hits = searchQuery.data ?? [];

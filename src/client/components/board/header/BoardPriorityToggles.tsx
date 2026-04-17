@@ -1,3 +1,4 @@
+import { startTransition, useMemo } from "react";
 import {
   priorityDisplayLabel,
   sortPrioritiesByValue,
@@ -7,6 +8,7 @@ import {
   useBoardFiltersStore,
   useResolvedActiveTaskPriorityIds,
 } from "@/store/preferences";
+import { EMPTY_SORTABLE_IDS } from "@/components/board/dnd/dndIds";
 import { BoardHeaderMultiSelect } from "./BoardHeaderMultiSelect";
 
 interface BoardPriorityTogglesProps {
@@ -26,12 +28,19 @@ export function BoardPriorityToggles({
     board.boardId,
     board.taskPriorities,
   );
-  const orderedPriorities = sortPrioritiesByValue(board.taskPriorities);
-  const options = orderedPriorities.map((priority) => ({
-    id: String(priority.priorityId),
-    label: priorityDisplayLabel(priority.label),
-    color: priority.color,
-  }));
+  const orderedPriorities = useMemo(
+    () => sortPrioritiesByValue(board.taskPriorities),
+    [board.taskPriorities],
+  );
+  const options = useMemo(
+    () =>
+      orderedPriorities.map((priority) => ({
+        id: String(priority.priorityId),
+        label: priorityDisplayLabel(priority.label),
+        color: priority.color,
+      })),
+    [orderedPriorities],
+  );
 
   return (
     <BoardHeaderMultiSelect
@@ -41,10 +50,15 @@ export function BoardPriorityToggles({
       clearAllLabel="Clear all priorities"
       removeItemAriaLabel={(label) => `Remove ${label}`}
       options={options}
-      selectedIds={activePriorityIds ?? []}
+      selectedIds={activePriorityIds ?? EMPTY_SORTABLE_IDS}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        startTransition(() =>
+          setActive(
+            board.boardId,
+            nextSelectedIds.length > 0 ? nextSelectedIds : undefined,
+          ),
+        )
       }
       onOpenEditor={onOpenPriorityEditor}
       editButtonAriaLabel="Edit task priorities"

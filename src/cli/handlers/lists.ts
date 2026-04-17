@@ -1,4 +1,5 @@
 import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import { runListsShow } from "../lib/queries/lists";
 import { runListsPurge, runListsRestore } from "../lib/trash/trashCommands";
 import {
   runListsAdd,
@@ -8,6 +9,14 @@ import {
   runListsUpdate,
 } from "../lib/mutations/writeCommands";
 import type { CliContext } from "./context";
+
+export async function handleListsShow(
+  ctx: CliContext,
+  listId: string,
+  options: { fields?: string },
+): Promise<void> {
+  await runListsShow(ctx, listId, options);
+}
 
 export async function handleListsList(
   ctx: CliContext,

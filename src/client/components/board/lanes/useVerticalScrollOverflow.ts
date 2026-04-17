@@ -6,6 +6,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { subscribeWindowResize } from "@/lib/useWindowResize";
 
 /**
  * True when the scroll container has more content than fits (vertical).
@@ -58,10 +59,11 @@ export function useVerticalScrollOverflow(
     const ro = new ResizeObserver(measure);
     ro.observe(sc);
     if (inner) ro.observe(inner);
-    window.addEventListener("resize", measure);
+    // Shared window resize dispatcher (client-event-listeners) — avoids N listeners per lane.
+    const unsubResize = subscribeWindowResize(measure);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", measure);
+      unsubResize();
     };
   }, [enabled, measure, scrollRef, contentRef]);
 

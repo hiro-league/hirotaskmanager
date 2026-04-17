@@ -342,17 +342,6 @@ boardTasksRoute.put("/:id/tasks/move", async (c) => {
   return c.json(saved);
 });
 
-boardTasksRoute.get("/:id/tasks/:taskId", async (c) => {
-  const entry = requireBoardEntry(c);
-  const taskId = Number(c.req.param("taskId"));
-  if (!Number.isFinite(taskId)) {
-    return c.json({ error: "Invalid task id" }, 400);
-  }
-  const task = readTaskById(entry.boardId, taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
-  return c.json(task);
-});
-
 boardTasksRoute.patch("/:id/tasks/:taskId", async (c) => {
   const entry = requireBoardEntry(c);
   const taskId = Number(c.req.param("taskId"));

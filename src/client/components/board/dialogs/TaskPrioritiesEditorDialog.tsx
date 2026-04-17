@@ -243,6 +243,8 @@ export function TaskPrioritiesEditorDialog({
                   </label>
                   <input
                     type="number"
+                    autoComplete="off"
+                    spellCheck={false}
                     className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text disabled:cursor-not-allowed disabled:opacity-60"
                     value={row.value}
                     disabled={busy || row.isSystem}
@@ -265,6 +267,8 @@ export function TaskPrioritiesEditorDialog({
                   <div className="mt-1 flex items-center gap-2">
                     <input
                       type="text"
+                      autoComplete="off"
+                      spellCheck={false}
                       className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
                       value={row.label}
                       disabled={busy}
@@ -316,6 +320,8 @@ export function TaskPrioritiesEditorDialog({
                     />
                     <input
                       type="text"
+                      autoComplete="off"
+                      spellCheck={false}
                       className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm text-foreground select-text"
                       value={row.color}
                       disabled={busy}

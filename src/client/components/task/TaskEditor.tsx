@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useBlocker } from "react-router-dom";
 import { Star } from "lucide-react";
 import type { RefMDEditor } from "@uiw/react-md-editor";
 import {
@@ -32,13 +42,22 @@ import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
 import { usePreferencesStore } from "@/store/preferences";
 import { createTaskMarkdownPreviewComponents } from "@/components/task/taskMarkdownPreviewComponents";
 import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
-import { TaskMarkdownField } from "@/components/task/TaskMarkdownField";
+
+const TaskMarkdownField = lazy(() =>
+  import("@/components/task/TaskMarkdownField").then((m) => ({
+    default: m.TaskMarkdownField,
+  })),
+);
 import {
   RELEASE_SELECT_AUTO,
   RELEASE_SELECT_NONE,
   useTaskEditorForm,
 } from "@/components/task/useTaskEditorForm";
 import { statusDotClass } from "@/components/board/lanes/laneStatusTheme";
+import {
+  formatDateMedium,
+  formatDateTimeMediumShort,
+} from "@/lib/intlDateFormat";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,7 +71,7 @@ function formatReleaseDateLabelForSelect(
   if (!raw) return undefined;
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+  return formatDateMedium(d);
 }
 
 /** Main-field tab order; MD toolbar buttons are pushed out of the tab order via `TaskMarkdownField`. */
@@ -151,6 +170,25 @@ export function TaskEditor({
     updateTask.isPending ||
     deleteTask.isPending ||
     (mode === "edit" && taskDetailQuery.isPending);
+
+  const shouldBlockNavigation = open && isDirty && !busy;
+  const navigatorBlocker = useBlocker(shouldBlockNavigation);
+
+  useEffect(() => {
+    if (navigatorBlocker.state === "blocked") {
+      setShowDiscard(true);
+    }
+  }, [navigatorBlocker.state]);
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [shouldBlockNavigation]);
 
   const requestClose = useDialogCloseRequest({
     busy,
@@ -416,6 +454,8 @@ export function TaskEditor({
                     id={`${titleId}-title`}
                     ref={titleInputRef}
                     tabIndex={TASK_FIELD_TAB.title}
+                    autoComplete="off"
+                    spellCheck={false}
                     className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground select-text"
                     value={title}
                     disabled={busy}
@@ -502,28 +542,33 @@ export function TaskEditor({
             {mode === "edit" && task && isDone && task.closedAt ? (
               <p className="text-xs text-muted-foreground">
                 Completed{" "}
-                {new Date(task.closedAt).toLocaleString(undefined, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                {formatDateTimeMediumShort(new Date(task.closedAt))}
               </p>
             ) : null}
 
-            {/* Default preview="live": split edit + preview; toolbar includes edit / live / preview + fullscreen. */}
-            <TaskMarkdownField
-              titleId={titleId}
-              body={body}
-              onBodyChange={setBody}
-              disabled={busy}
-              bodyTabIndex={TASK_FIELD_TAB.body}
-              mdColorMode={mdColorMode}
-              markdownPreviewComponents={markdownPreviewComponents}
-              autoFocus={mode === "edit" && taskEditorActive}
-              toolbarTabSkipEnabled={taskEditorActive}
-              mdEditorRef={mdEditorRef}
-              bodyTextareaRef={bodyTextareaRef}
-              taskMdEditorWrapRef={taskMdEditorWrapRef}
-            />
+            {/* Default preview="live": split edit + preview; `@uiw/react-md-editor` loads with this chunk (bundle-conditional). */}
+            <Suspense
+              fallback={
+                <div className="flex min-h-[min(50vh,22rem)] w-full items-center justify-center rounded-md border border-border bg-muted/30 px-3 py-8 text-sm text-muted-foreground">
+                  Loading editor…
+                </div>
+              }
+            >
+              <TaskMarkdownField
+                titleId={titleId}
+                body={body}
+                onBodyChange={setBody}
+                disabled={busy}
+                bodyTabIndex={TASK_FIELD_TAB.body}
+                mdColorMode={mdColorMode}
+                markdownPreviewComponents={markdownPreviewComponents}
+                autoFocus={mode === "edit" && taskEditorActive}
+                toolbarTabSkipEnabled={taskEditorActive}
+                mdEditorRef={mdEditorRef}
+                bodyTextareaRef={bodyTextareaRef}
+                taskMdEditorWrapRef={taskMdEditorWrapRef}
+              />
+            </Suspense>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="min-w-0">
@@ -642,9 +687,17 @@ export function TaskEditor({
 
       <DiscardChangesDialog
         open={showDiscard}
-        onCancel={() => setShowDiscard(false)}
+        onCancel={() => {
+          setShowDiscard(false);
+          if (navigatorBlocker.state === "blocked") {
+            navigatorBlocker.reset();
+          }
+        }}
         onDiscard={() => {
           setShowDiscard(false);
+          if (navigatorBlocker.state === "blocked") {
+            navigatorBlocker.proceed();
+          }
           onClose();
         }}
       />

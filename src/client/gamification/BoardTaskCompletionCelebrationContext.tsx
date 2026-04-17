@@ -1,25 +1,21 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useRef,
+  useState,
+  type ComponentType,
   type ReactNode,
-  type RefObject,
 } from "react";
-import { emojiPresets, optimizeConfigForMobile, useReward } from "partycles";
 import {
-  pickWeightedCompletionAnimationIndex,
   playCompletionSound,
   prefersReducedMotion,
 } from "./completionRewards";
+import type { CelebrateTaskCompletionOptions } from "./celebrateTaskCompletionTypes";
+import type { BoardTaskCompletionCelebrationRewardsProps } from "./BoardTaskCompletionCelebrationRewards";
 
-export type CelebrateTaskCompletionOptions = {
-  /** Prefer the “Mark complete” button (`data-task-complete-button`) for this task. */
-  taskId?: number;
-  /** Emit from this element (e.g. click target or task editor dialog). Overrides `taskId` when set. */
-  anchorEl?: HTMLElement | null;
-};
+export type { CelebrateTaskCompletionOptions };
 
 export type BoardTaskCompletionCelebrationContextValue = {
   /** Random sound + weighted Partycles burst from the resolved anchor (see Partycles `useReward` + [demo](https://jonathanleane.github.io/partycles/)). */
@@ -29,53 +25,9 @@ export type BoardTaskCompletionCelebrationContextValue = {
 const BoardTaskCompletionCelebrationContext =
   createContext<BoardTaskCompletionCelebrationContextValue | null>(null);
 
-/** Move the shared anchor to the center of `target` so particles originate like the library’s button examples. */
-function positionAnchorFromTarget(
-  anchorMount: HTMLDivElement,
-  target: HTMLElement,
-): void {
-  const r = target.getBoundingClientRect();
-  anchorMount.style.position = "fixed";
-  anchorMount.style.left = `${r.left + r.width / 2}px`;
-  anchorMount.style.top = `${r.top + r.height / 2}px`;
-  anchorMount.style.width = "1px";
-  anchorMount.style.height = "1px";
-  anchorMount.style.transform = "translate(-50%, -50%)";
-  anchorMount.style.zIndex = "100";
-  anchorMount.style.pointerEvents = "none";
-}
-
-function fallbackAnchorViewport(anchorMount: HTMLDivElement): void {
-  anchorMount.style.position = "fixed";
-  anchorMount.style.left = "50vw";
-  anchorMount.style.top = "35vh";
-  anchorMount.style.width = "1px";
-  anchorMount.style.height = "1px";
-  anchorMount.style.transform = "translate(-50%, -50%)";
-  anchorMount.style.zIndex = "100";
-  anchorMount.style.pointerEvents = "none";
-}
-
-function resolveCompletionAnchor(
-  opts?: CelebrateTaskCompletionOptions,
-): HTMLElement | null {
-  if (opts?.anchorEl) return opts.anchorEl;
-  if (opts?.taskId != null && typeof document !== "undefined") {
-    const sid = String(opts.taskId);
-    const btn = document.querySelector(
-      `[data-task-card-root][data-task-id="${sid}"] [data-task-complete-button]`,
-    );
-    if (btn instanceof HTMLElement) return btn;
-    const card = document.querySelector(
-      `[data-task-card-root][data-task-id="${sid}"]`,
-    );
-    if (card instanceof HTMLElement) return card;
-  }
-  return null;
-}
-
 /**
  * Mount once per board view: invisible anchor for Particles + `celebrateTaskCompletion`.
+ * `partycles` loads on first completion via dynamic import of `BoardTaskCompletionCelebrationRewards`.
  */
 export function BoardTaskCompletionCelebrationProvider({
   children,
@@ -85,138 +37,43 @@ export function BoardTaskCompletionCelebrationProvider({
   /** Per-board: when true, skip completion audio (particles still run unless reduced motion). */
   celebrationSoundsMuted: boolean;
 }) {
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-  const anchor = anchorRef as RefObject<HTMLElement>;
+  const [RewardsComponent, setRewardsComponent] = useState<ComponentType<
+    BoardTaskCompletionCelebrationRewardsProps
+  > | null>(null);
+  const particleRunnerRef = useRef<
+    ((opts?: CelebrateTaskCompletionOptions) => void) | null
+  >(null);
+  const pendingRef = useRef<CelebrateTaskCompletionOptions[]>([]);
+  const rewardsLoadStartedRef = useRef(false);
 
-  // Order must match `pickWeightedCompletionAnimationIndex()` mapping in completionRewards.ts
-  const confetti = useReward(
-    anchor,
-    "confetti",
-    optimizeConfigForMobile({
-      particleCount: 42,
-      spread: 56,
-      effects: { flutter: true },
-    }),
-  );
-  const magicdust = useReward(
-    anchor,
-    "magicdust",
-    optimizeConfigForMobile({
-      particleCount: 32,
-      colors: ["#a855f7", "#6366f1", "#38bdf8"],
-    }),
-  );
-  const stars = useReward(
-    anchor,
-    "stars",
-    optimizeConfigForMobile({
-      particleCount: 28,
-      physics: { gravity: 0.35 },
-      effects: { twinkle: true },
-    }),
-  );
-  const crystals = useReward(
-    anchor,
-    "crystals",
-    optimizeConfigForMobile({ particleCount: 22, elementSize: 24 }),
-  );
-  const coins = useReward(
-    anchor,
-    "coins",
-    optimizeConfigForMobile({
-      particleCount: 24,
-      physics: { gravity: 0.45 },
-      effects: { spin3D: true },
-    }),
-  );
-  const paint = useReward(
-    anchor,
-    "paint",
-    optimizeConfigForMobile({ particleCount: 26, startVelocity: 32 }),
-  );
-  const galaxy = useReward(
-    anchor,
-    "galaxy",
-    optimizeConfigForMobile({ particleCount: 48, spread: 180 }),
-  );
-  const fireworks = useReward(
-    anchor,
-    "fireworks",
-    optimizeConfigForMobile({ particleCount: 36, spread: 130 }),
-  );
-  const hearts = useReward(
-    anchor,
-    "hearts",
-    optimizeConfigForMobile({
-      particleCount: 18,
-      colors: ["#f43f5e", "#ec4899", "#fb7185"],
-      effects: { pulse: true },
-    }),
-  );
-  const emoji = useReward(
-    anchor,
-    "emoji",
-    optimizeConfigForMobile({
-      particleCount: 22,
-      colors: emojiPresets.celebration,
-    }),
-  );
-  const mortar = useReward(
-    anchor,
-    "mortar",
-    optimizeConfigForMobile({
-      particleCount: 3,
-      spread: 50,
-      physics: { gravity: 0.35 },
-    }),
-  );
-
-  const rewardControllers = useMemo(
-    () => [
-      confetti,
-      magicdust,
-      stars,
-      crystals,
-      coins,
-      paint,
-      galaxy,
-      fireworks,
-      hearts,
-      emoji,
-      mortar,
-    ],
-    [
-      confetti,
-      magicdust,
-      stars,
-      crystals,
-      coins,
-      paint,
-      galaxy,
-      fireworks,
-      hearts,
-      emoji,
-      mortar,
-    ],
+  const onRewardsReady = useCallback(
+    (runParticles: (opts?: CelebrateTaskCompletionOptions) => void) => {
+      particleRunnerRef.current = runParticles;
+      for (const o of pendingRef.current) {
+        runParticles(o);
+      }
+      pendingRef.current = [];
+    },
+    [],
   );
 
   const celebrateTaskCompletion = useCallback(
     (opts?: CelebrateTaskCompletionOptions) => {
       playCompletionSound(celebrationSoundsMuted);
       if (prefersReducedMotion()) return;
-      const el = anchorRef.current;
-      if (!el) return;
-      const target = resolveCompletionAnchor(opts);
-      if (target) {
-        positionAnchorFromTarget(el, target);
-      } else {
-        fallbackAnchorViewport(el);
+      if (particleRunnerRef.current) {
+        particleRunnerRef.current(opts);
+        return;
       }
-      const idx = pickWeightedCompletionAnimationIndex();
-      const ctrl = rewardControllers[idx];
-      if (ctrl) void ctrl.reward();
+      pendingRef.current.push(opts ?? {});
+      if (!rewardsLoadStartedRef.current) {
+        rewardsLoadStartedRef.current = true;
+        void import("./BoardTaskCompletionCelebrationRewards").then((m) => {
+          setRewardsComponent(() => m.BoardTaskCompletionCelebrationRewards);
+        });
+      }
     },
-    [celebrationSoundsMuted, rewardControllers],
+    [celebrationSoundsMuted],
   );
 
   const value = useMemo(
@@ -228,19 +85,16 @@ export function BoardTaskCompletionCelebrationProvider({
 
   return (
     <BoardTaskCompletionCelebrationContext.Provider value={value}>
-      {/* Particles anchor — positioned in JS to match button/dialog like Partycles examples. */}
-      <div
-        ref={anchorRef}
-        aria-hidden
-        className="pointer-events-none overflow-visible"
-      />
+      {RewardsComponent ? (
+        <RewardsComponent onReady={onRewardsReady} />
+      ) : null}
       {children}
     </BoardTaskCompletionCelebrationContext.Provider>
   );
 }
 
 export function useBoardTaskCompletionCelebration(): BoardTaskCompletionCelebrationContextValue {
-  const ctx = useContext(BoardTaskCompletionCelebrationContext);
+  const ctx = use(BoardTaskCompletionCelebrationContext);
   if (!ctx) {
     throw new Error(
       "useBoardTaskCompletionCelebration must be used within BoardTaskCompletionCelebrationProvider",
@@ -250,5 +104,5 @@ export function useBoardTaskCompletionCelebration(): BoardTaskCompletionCelebrat
 }
 
 export function useBoardTaskCompletionCelebrationOptional(): BoardTaskCompletionCelebrationContextValue | null {
-  return useContext(BoardTaskCompletionCelebrationContext);
+  return use(BoardTaskCompletionCelebrationContext);
 }

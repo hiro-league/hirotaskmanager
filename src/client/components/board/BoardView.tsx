@@ -1,31 +1,41 @@
 import {
+  startTransition,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
-import { Navigate } from "react-router-dom";
-import { useBoard, useBoardStats } from "@/api/queries";
+import { useShallow } from "zustand/react/shallow";
+import { useBoardStats, useSuspenseBoard } from "@/api/queries";
 import { useBoardChangeStream } from "@/api/useBoardChangeStream";
 import { usePatchBoard } from "@/api/mutations";
 import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
+import {
+  BoardDialogsProvider,
+  useBoardDialogs,
+} from "@/context/BoardDialogsContext";
+import { BoardFilterResolutionProvider } from "@/context/BoardFilterResolutionContext";
+import { BoardEditingProvider } from "@/context/BoardEditingContext";
 import { useBoardSearch } from "@/context/BoardSearchContext";
-import { OPEN_SHORTCUT_HELP_EVENT } from "@/lib/shortcutHelpEvents";
 import {
   usePreferencesStore,
   useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
   useResolvedActiveTaskPriorityIds,
+  useResolvedTaskCardViewMode,
   useResolvedTaskDateFilter,
 } from "@/store/preferences";
 import { resolvedBoardColor } from "../../../shared/boardColor";
-import type { BoardStatsFilter } from "../../../shared/boardStats";
-import { resolvedBoardLayout } from "../../../shared/models";
+import type { BoardStatsFilter, TaskCountStat } from "../../../shared/boardStats";
+import { type Board, resolvedBoardLayout } from "../../../shared/models";
 import { BoardCanvas } from "./BoardCanvas";
-import { BoardColumns } from "./columns/BoardColumns";
-import { BoardColumnsStacked } from "./columns/BoardColumnsStacked";
+import { BoardColumnsResolved } from "./columns/BoardColumnsResolved";
+import { BoardLayoutProvider } from "@/context/BoardLayoutContext";
 import { BoardEditDialog } from "./dialogs/BoardEditDialog";
 import { BoardHeader } from "./header/BoardHeader";
 import { BoardNotificationDeepLink } from "./BoardNotificationDeepLink";
@@ -53,11 +63,15 @@ import { useBoardHeaderScrollMetrics } from "./useBoardHeaderScrollMetrics";
 import {
   BoardTaskCompletionCelebrationProvider,
 } from "@/gamification";
+import { BoardQueryErrorBoundary } from "./BoardQueryErrorBoundary";
 
-/** Board GET returns 404 JSON when the board is gone or in Trash; send users to the Trash page instead of a raw error. */
-function isBoardDetailNotFound(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.toLowerCase().includes("not found");
+function BoardViewLoadingFallback() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col p-8">
+      <div className="h-8 w-48 animate-pulse rounded-md bg-muted" />
+      <div className="mt-4 h-4 w-72 animate-pulse rounded-md bg-muted" />
+    </div>
+  );
 }
 
 interface BoardViewProps {
@@ -65,106 +79,67 @@ interface BoardViewProps {
 }
 
 export function BoardView({ boardId }: BoardViewProps) {
-  const { data, isLoading, isError, error, isFetching } = useBoard(boardId);
-  useBoardChangeStream(boardId, data?.boardId ?? null);
-  const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
-  const patchBoard = usePatchBoard();
-  const themePreference = usePreferencesStore((state) => state.themePreference);
-  const systemDark = useSystemDark();
-  const dark = resolveDark(themePreference, systemDark);
-  const stackedLayout = data ? resolvedBoardLayout(data) === "stacked" : false;
-
-  const filterCollapsed = usePreferencesStore(
-    (state) => state.boardFilterStripCollapsed,
-  );
-  const toggleFilterStrip = usePreferencesStore(
-    (state) => state.toggleBoardFilterStripCollapsed,
-  );
-  const boardShortcutHelpDismissed = usePreferencesStore(
-    (state) => state.boardShortcutHelpDismissed,
-  );
-  const setBoardShortcutHelpDismissed = usePreferencesStore(
-    (state) => state.setBoardShortcutHelpDismissed,
-  );
-
-  const [boardEditOpen, setBoardEditOpen] = useState(false);
-  const [groupsEditorOpen, setGroupsEditorOpen] = useState(false);
-  const [prioritiesEditorOpen, setPrioritiesEditorOpen] = useState(false);
-  const [releasesEditorOpen, setReleasesEditorOpen] = useState(false);
-  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
-  const [editingBoardName, setEditingBoardName] = useState(false);
-  const [boardNameDraft, setBoardNameDraft] = useState("");
-  /** Whether the help dialog was opened automatically (on board open) vs via H. */
-  const [helpOpenReason, setHelpOpenReason] = useState<
-    "none" | "auto" | "manual"
-  >("none");
-  const [statsEntryToken, setStatsEntryToken] = useState(0);
-  const boardNameInputRef = useRef<HTMLInputElement>(null);
-  const boardNameBlurModeRef = useRef<"commit" | "cancel">("commit");
-  const [boardEmojiFieldError, setBoardEmojiFieldError] = useState<string | null>(
-    null,
-  );
-  const boardHeaderRef = useRef<HTMLDivElement>(null);
-
-  const openHelp = useCallback(() => {
-    setHelpOpenReason("manual");
-    setShortcutHelpOpen(true);
-  }, []);
-
-  useEffect(() => {
-    const onOpenFromHeader = () => {
-      setHelpOpenReason("manual");
-      setShortcutHelpOpen(true);
-    };
-    window.addEventListener(OPEN_SHORTCUT_HELP_EVENT, onOpenFromHeader);
-    return () => window.removeEventListener(OPEN_SHORTCUT_HELP_EVENT, onOpenFromHeader);
-  }, []);
-
-  const { scrollRef, panning, boardCanvasPanHandlers } =
-    useBoardCanvasPanScroll();
-  const headerScroll = useBoardHeaderScrollMetrics({
-    boardId: data?.boardId ?? null,
-    stackedLayout,
-    scrollRef,
-    headerRef: boardHeaderRef,
-  });
+  const { closeSearch } = useBoardSearch();
 
   useEffect(() => {
     closeSearch();
   }, [boardId, closeSearch]);
 
-  useEffect(() => {
-    if (!data || !boardId) return;
-    if (boardShortcutHelpDismissed) return;
-    setHelpOpenReason("auto");
-    setShortcutHelpOpen(true);
-  }, [boardId, data?.boardId, boardShortcutHelpDismissed]);
+  if (!boardId) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+        <h1 className="text-balance text-lg font-medium text-foreground">
+          No board selected
+        </h1>
+        <p className="max-w-sm text-pretty text-sm">
+          Choose a board from the sidebar or create a new one.
+        </p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    setEditingBoardName(false);
-    setBoardNameDraft(data?.name ?? "");
-  }, [data?.boardId]);
-
-  useEffect(() => {
-    if (!editingBoardName) {
-      setBoardNameDraft(data?.name ?? "");
-    }
-  }, [data?.name, editingBoardName]);
-
-  useEffect(() => {
-    if (!editingBoardName) return;
-    boardNameInputRef.current?.focus();
-    boardNameInputRef.current?.select();
-  }, [editingBoardName]);
-
-  const handleShortcutHelpClose = useCallback(
-    (result?: { dontShowAgain: boolean }) => {
-      setShortcutHelpOpen(false);
-      setHelpOpenReason("none");
-      if (result?.dontShowAgain) setBoardShortcutHelpDismissed(true);
-    },
-    [setBoardShortcutHelpDismissed],
+  return (
+    <BoardQueryErrorBoundary key={boardId}>
+      <Suspense fallback={<BoardViewLoadingFallback />}>
+        <BoardViewBody boardId={boardId} />
+      </Suspense>
+    </BoardQueryErrorBoundary>
   );
+}
+
+function BoardViewBody({ boardId }: { boardId: string }) {
+  const { data } = useSuspenseBoard(boardId);
+  useBoardChangeStream(boardId, data.boardId);
+  const { open: boardSearchOpen, openSearch, closeSearch } = useBoardSearch();
+  const patchBoard = usePatchBoard();
+  const { themePreference, filterCollapsed, toggleFilterStrip: toggleFilterStripStore } =
+    usePreferencesStore(
+      useShallow((s) => ({
+        themePreference: s.themePreference,
+        filterCollapsed: s.boardFilterStripCollapsed,
+        toggleFilterStrip: s.toggleBoardFilterStripCollapsed,
+      })),
+    );
+  const systemDark = useSystemDark();
+  const dark = resolveDark(themePreference, systemDark);
+  const stackedLayout = resolvedBoardLayout(data) === "stacked";
+
+  const toggleFilterStrip = useCallback(() => {
+    startTransition(() => toggleFilterStripStore());
+  }, [toggleFilterStripStore]);
+  const [statsEntryToken, setStatsEntryToken] = useState(0);
+  const [boardEmojiFieldError, setBoardEmojiFieldError] = useState<string | null>(
+    null,
+  );
+  const boardHeaderRef = useRef<HTMLDivElement>(null);
+
+  const { scrollRef, boardCanvasPanHandlers } = useBoardCanvasPanScroll();
+  const headerScroll = useBoardHeaderScrollMetrics({
+    boardId: data.boardId,
+    stackedLayout,
+    scrollRef,
+    headerRef: boardHeaderRef,
+  });
 
   const [taskDeleteConfirmId, setTaskDeleteConfirmId] = useState<number | null>(
     null,
@@ -173,24 +148,41 @@ export function BoardView({ boardId }: BoardViewProps) {
     null,
   );
   const activeTaskGroupIds = useResolvedActiveTaskGroupIds(
-    data?.boardId ?? boardId ?? "",
-    data?.taskGroups ?? [],
+    String(data.boardId),
+    data.taskGroups,
   );
   const activeTaskPriorityIds = useResolvedActiveTaskPriorityIds(
-    data?.boardId ?? boardId ?? "",
-    data?.taskPriorities ?? [],
+    String(data.boardId),
+    data.taskPriorities,
   );
   const activeReleaseIds = useResolvedActiveReleaseIds(
-    data?.boardId ?? boardId ?? "",
-    data?.releases ?? [],
+    String(data.boardId),
+    data.releases,
   );
-  const dateFilterResolved = useResolvedTaskDateFilter(
-    data?.boardId ?? boardId ?? "",
+  const dateFilterResolved = useResolvedTaskDateFilter(String(data.boardId));
+  const taskCardViewMode = useResolvedTaskCardViewMode(String(data.boardId));
+
+  const boardFilterResolution = useMemo(
+    () => ({
+      activeGroupIds: activeTaskGroupIds,
+      activePriorityIds: activeTaskPriorityIds,
+      activeReleaseIds: activeReleaseIds,
+      dateFilterResolved,
+      taskCardViewMode,
+    }),
+    [
+      activeTaskGroupIds,
+      activeTaskPriorityIds,
+      activeReleaseIds,
+      dateFilterResolved,
+      taskCardViewMode,
+    ],
   );
+
   const prevStatsVisibleRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    const visible = Boolean(data?.showStats);
+    const visible = Boolean(data.showStats);
     if (prevStatsVisibleRef.current === null) {
       prevStatsVisibleRef.current = visible;
       return;
@@ -199,10 +191,9 @@ export function BoardView({ boardId }: BoardViewProps) {
       setStatsEntryToken((value) => value + 1);
     }
     prevStatsVisibleRef.current = visible;
-  }, [data?.showStats]);
+  }, [data.showStats]);
 
   const statsFilter = useMemo((): BoardStatsFilter | null => {
-    if (!data) return null;
     return {
       activeGroupIds: activeTaskGroupIds,
       activePriorityIds: activeTaskPriorityIds,
@@ -210,20 +201,27 @@ export function BoardView({ boardId }: BoardViewProps) {
       dateFilter: dateFilterResolved,
     };
   }, [
-    data,
     activeTaskGroupIds,
     activeTaskPriorityIds,
     activeReleaseIds,
     dateFilterResolved,
   ]);
 
-  const boardStatsQuery = useBoardStats(data?.boardId ?? null, statsFilter, {
-    enabled: Boolean(data?.showStats),
+  const boardStatsQuery = useBoardStats(data.boardId, statsFilter, {
+    enabled: Boolean(data.showStats),
   });
 
+  /** O(1) per column vs `.find` per list (react-best-practices P4.2). */
+  const listStatsByListId = useMemo(() => {
+    if (!data.showStats) return null;
+    const lists = boardStatsQuery.data?.lists;
+    if (!lists) return new Map<number, TaskCountStat>();
+    return new Map(lists.map((e) => [e.listId, e.stats]));
+  }, [data.showStats, boardStatsQuery.data?.lists]);
+
   const boardStatsDisplay = useMemo((): BoardStatsDisplayValue => {
-    if (!data?.showStats) {
-      const empty = { total: 0, open: 0, closed: 0 };
+    if (!data.showStats) {
+      const empty: TaskCountStat = { total: 0, open: 0, closed: 0 };
       return {
         board: null,
         listStat: () => empty,
@@ -236,16 +234,13 @@ export function BoardView({ boardId }: BoardViewProps) {
     }
     const query = boardStatsQuery;
     const statsError = query.isError;
+    const emptyListStat: TaskCountStat = { total: 0, open: 0, closed: 0 };
     return {
       board: statsError ? null : (query.data?.board ?? null),
       listStat: (listId: number) =>
-        statsError
-          ? { total: 0, open: 0, closed: 0 }
-          : (query.data?.lists.find((entry) => entry.listId === listId)?.stats ?? {
-              total: 0,
-              open: 0,
-              closed: 0,
-            }),
+        statsError || !listStatsByListId
+          ? emptyListStat
+          : (listStatsByListId.get(listId) ?? emptyListStat),
       entryToken: statsEntryToken,
       fetching: query.isFetching,
       pending: query.isPending,
@@ -253,36 +248,10 @@ export function BoardView({ boardId }: BoardViewProps) {
         query.isPending || (query.isFetching && query.isPlaceholderData),
       statsError,
     };
-  }, [data?.showStats, boardStatsQuery, statsEntryToken]);
-
-  const cancelBoardRename = useCallback(() => {
-    boardNameBlurModeRef.current = "cancel";
-    setEditingBoardName(false);
-    setBoardNameDraft(data?.name ?? "");
-  }, [data?.name]);
-
-  const commitBoardRename = useCallback(async () => {
-    if (!data) return;
-    boardNameBlurModeRef.current = "commit";
-    setEditingBoardName(false);
-    const trimmed = boardNameDraft.trim();
-    if (!trimmed || trimmed === data.name) {
-      setBoardNameDraft(data.name);
-      return;
-    }
-    try {
-      await patchBoard.mutateAsync({
-        boardId: data.boardId,
-        name: trimmed,
-      });
-    } catch {
-      setBoardNameDraft(data.name);
-    }
-  }, [boardNameDraft, data, patchBoard]);
+  }, [data.showStats, boardStatsQuery, listStatsByListId, statsEntryToken]);
 
   const pickBoardEmoji = useCallback(
     async (next: string | null) => {
-      if (!data) return;
       setBoardEmojiFieldError(null);
       try {
         await patchBoard.mutateAsync({
@@ -296,49 +265,19 @@ export function BoardView({ boardId }: BoardViewProps) {
     [data, patchBoard],
   );
 
-  const boardThemeStyle: CSSProperties = {
-    ...getBoardThemeStyle(resolvedBoardColor(data ?? {}), dark),
-    background: "var(--board-canvas-image)",
-  };
-  const boardSurfaceId = data ? `board-surface-${data.boardId}` : null;
+  const boardThemeStyle = useMemo(
+    (): CSSProperties => ({
+      ...getBoardThemeStyle(resolvedBoardColor(data), dark),
+      background: "var(--board-canvas-image)",
+    }),
+    [data, dark],
+  );
+  const boardSurfaceId = `board-surface-${data.boardId}`;
   const boardStats = boardStatsQuery.data?.board ?? {
     total: 0,
     open: 0,
     closed: 0,
   };
-
-  if (!boardId) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
-        <p className="text-lg font-medium text-foreground">No board selected</p>
-        <p className="max-w-sm text-sm">
-          Choose a board from the sidebar or create a new one.
-        </p>
-      </div>
-    );
-  }
-
-  if (isLoading || (isFetching && !data)) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col p-8">
-        <div className="h-8 w-48 animate-pulse rounded-md bg-muted" />
-        <div className="mt-4 h-4 w-72 animate-pulse rounded-md bg-muted" />
-      </div>
-    );
-  }
-
-  if (isError || !data) {
-    if (boardId && isError && isBoardDetailNotFound(error)) {
-      return <Navigate to="/trash" replace />;
-    }
-    return (
-      <div className="flex min-h-0 flex-1 flex-col p-8">
-        <p className="text-destructive">
-          {error instanceof Error ? error.message : "Could not load this board."}
-        </p>
-      </div>
-    );
-  }
 
   const filterSummaries = buildBoardFilterSummaries(
     data,
@@ -351,128 +290,185 @@ export function BoardView({ boardId }: BoardViewProps) {
   return (
     <ShortcutScopeProvider>
       <BoardStatsDisplayProvider value={boardStatsDisplay}>
-        <BoardTaskKeyboardBridgeProvider>
-          <BoardKeyboardNavProvider
-            board={data}
-            layout={stackedLayout ? "stacked" : "lanes"}
-          >
-            <BoardTaskCompletionCelebrationProvider
-              celebrationSoundsMuted={data.muteCelebrationSounds}
-            >
-              <BoardShortcutBindings
-                boardId={data.boardId}
-                boardLayout={data.boardLayout}
-                defaultReleaseId={data.defaultReleaseId}
-                releases={data.releases}
-                showStats={data.showStats}
-                taskGroups={data.taskGroups}
-                taskPriorities={data.taskPriorities}
-                tasks={data.tasks}
-                openHelp={openHelp}
-                openBoardSearch={openSearch}
-                toggleFilters={toggleFilterStrip}
-                setTaskDeleteConfirmId={setTaskDeleteConfirmId}
-                setListDeleteConfirmId={setListDeleteConfirmId}
-              />
-              <BoardNotificationDeepLink board={data} />
-              <div
-                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
-                style={boardThemeStyle}
-              >
-                <BoardHeader
-                  board={data}
-                  boardSurfaceId={boardSurfaceId}
-                  filterCollapsed={filterCollapsed}
-                  boardEmojiFieldError={boardEmojiFieldError}
-                  onBoardEmojiValidationError={setBoardEmojiFieldError}
-                  patchBoardPending={patchBoard.isPending}
-                  pickBoardEmoji={pickBoardEmoji}
-                  editingBoardName={editingBoardName}
-                  setEditingBoardName={setEditingBoardName}
-                  boardNameDraft={boardNameDraft}
-                  setBoardNameDraft={setBoardNameDraft}
-                  boardNameInputRef={boardNameInputRef}
-                  boardNameBlurModeRef={boardNameBlurModeRef}
-                  commitBoardRename={commitBoardRename}
-                  cancelBoardRename={cancelBoardRename}
-                  boardHeaderRef={boardHeaderRef}
-                  headerScroll={headerScroll}
-                  boardStatsDisplay={boardStatsDisplay}
-                  boardStats={boardStats}
-                  filterSummaries={filterSummaries}
-                  toggleFilterStrip={toggleFilterStrip}
-                  onOpenBoardEdit={() => setBoardEditOpen(true)}
-                  onOpenGroupsEditor={() => setGroupsEditorOpen(true)}
-                  onOpenPrioritiesEditor={() => setPrioritiesEditorOpen(true)}
-                  onOpenReleasesEditor={() => setReleasesEditorOpen(true)}
-                />
-
-                <BoardCanvas
-                  boardSurfaceId={boardSurfaceId}
-                  scrollRef={scrollRef}
-                  stackedLayout={stackedLayout}
-                  panning={panning}
-                  boardCanvasPanHandlers={boardCanvasPanHandlers}
+        <BoardLayoutProvider
+          boardId={data.boardId}
+          layout={stackedLayout ? "stacked" : "lanes"}
+        >
+          <BoardTaskKeyboardBridgeProvider>
+            <BoardFilterResolutionProvider value={boardFilterResolution}>
+              <BoardKeyboardNavProvider board={data}>
+                <BoardTaskCompletionCelebrationProvider
+                  celebrationSoundsMuted={data.muteCelebrationSounds}
                 >
-                  {stackedLayout ? (
-                    <BoardColumnsStacked board={data} />
-                  ) : (
-                    <BoardColumns board={data} />
-                  )}
-                </BoardCanvas>
+                  <BoardDialogsProvider board={data}>
+                    <BoardShortcutBindings
+                      boardId={data.boardId}
+                      boardLayout={data.boardLayout}
+                      defaultReleaseId={data.defaultReleaseId}
+                      releases={data.releases}
+                      showStats={data.showStats}
+                      taskGroups={data.taskGroups}
+                      taskPriorities={data.taskPriorities}
+                      tasks={data.tasks}
+                      openBoardSearch={openSearch}
+                      toggleFilters={toggleFilterStrip}
+                      setTaskDeleteConfirmId={setTaskDeleteConfirmId}
+                      setListDeleteConfirmId={setListDeleteConfirmId}
+                    />
+                    <BoardNotificationDeepLink board={data} />
+                    <div
+                      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg"
+                      style={boardThemeStyle}
+                    >
+                      <BoardEditingProvider key={data.boardId} board={data}>
+                        <BoardHeader
+                          board={data}
+                          shell={{
+                            boardHeaderRef,
+                            headerScroll,
+                            filterCollapsed,
+                            toggleFilterStrip,
+                          }}
+                          surface={{ boardSurfaceId }}
+                          emoji={{
+                            boardEmojiFieldError,
+                            onBoardEmojiValidationError: setBoardEmojiFieldError,
+                            patchBoardPending: patchBoard.isPending,
+                            pickBoardEmoji,
+                          }}
+                          filters={{ filterSummaries }}
+                          stats={{
+                            boardStatsDisplay,
+                            boardStats,
+                          }}
+                        />
+                      </BoardEditingProvider>
 
-                <BoardSearchDialog
-                  board={data}
-                  open={boardSearchOpen}
-                  onClose={closeSearch}
-                />
+                      <BoardCanvas
+                        boardSurfaceId={boardSurfaceId}
+                        scrollRef={scrollRef}
+                        boardCanvasPanHandlers={boardCanvasPanHandlers}
+                      >
+                        <BoardColumnsResolved board={data} />
+                      </BoardCanvas>
 
-                <ShortcutHelpDialog
-                  open={shortcutHelpOpen}
-                  onClose={handleShortcutHelpClose}
-                  showOnboardingExtras={helpOpenReason === "auto"}
-                />
-
-                <BoardEditDialog
-                  board={data}
-                  open={boardEditOpen}
-                  onClose={() => setBoardEditOpen(false)}
-                />
-
-                <TaskGroupsEditorDialog
-                  board={data}
-                  open={groupsEditorOpen}
-                  onClose={() => setGroupsEditorOpen(false)}
-                />
-
-                <TaskPrioritiesEditorDialog
-                  board={data}
-                  open={prioritiesEditorOpen}
-                  onClose={() => setPrioritiesEditorOpen(false)}
-                />
-
-                <ReleasesEditorDialog
-                  board={data}
-                  open={releasesEditorOpen}
-                  onClose={() => setReleasesEditorOpen(false)}
-                />
-
-                <BoardTaskDeleteConfirm
-                  board={data}
-                  taskId={taskDeleteConfirmId}
-                  onClose={() => setTaskDeleteConfirmId(null)}
-                />
-
-                <BoardListDeleteConfirm
-                  board={data}
-                  listId={listDeleteConfirmId}
-                  onClose={() => setListDeleteConfirmId(null)}
-                />
-              </div>
-            </BoardTaskCompletionCelebrationProvider>
-          </BoardKeyboardNavProvider>
-        </BoardTaskKeyboardBridgeProvider>
+                      <BoardViewDialogs
+                        board={data}
+                        boardSearchOpen={boardSearchOpen}
+                        closeSearch={closeSearch}
+                        taskDeleteConfirmId={taskDeleteConfirmId}
+                        setTaskDeleteConfirmId={setTaskDeleteConfirmId}
+                        listDeleteConfirmId={listDeleteConfirmId}
+                        setListDeleteConfirmId={setListDeleteConfirmId}
+                      />
+                    </div>
+                  </BoardDialogsProvider>
+                </BoardTaskCompletionCelebrationProvider>
+              </BoardKeyboardNavProvider>
+            </BoardFilterResolutionProvider>
+          </BoardTaskKeyboardBridgeProvider>
+        </BoardLayoutProvider>
       </BoardStatsDisplayProvider>
     </ShortcutScopeProvider>
+  );
+}
+
+function BoardViewDialogs({
+  board,
+  boardSearchOpen,
+  closeSearch,
+  taskDeleteConfirmId,
+  setTaskDeleteConfirmId,
+  listDeleteConfirmId,
+  setListDeleteConfirmId,
+}: {
+  board: Board;
+  boardSearchOpen: boolean;
+  closeSearch: () => void;
+  taskDeleteConfirmId: number | null;
+  setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
+  listDeleteConfirmId: number | null;
+  setListDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
+}) {
+  const {
+    shortcutHelpOpen,
+    helpOpenReason,
+    handleShortcutHelpClose,
+    boardEditOpen,
+    setBoardEditOpen,
+    groupsEditorOpen,
+    setGroupsEditorOpen,
+    prioritiesEditorOpen,
+    setPrioritiesEditorOpen,
+    releasesEditorOpen,
+    setReleasesEditorOpen,
+  } = useBoardDialogs();
+
+  const closeBoardEdit = useCallback(() => setBoardEditOpen(false), [setBoardEditOpen]);
+  const closeGroupsEditor = useCallback(() => setGroupsEditorOpen(false), [setGroupsEditorOpen]);
+  const closePrioritiesEditor = useCallback(
+    () => setPrioritiesEditorOpen(false),
+    [setPrioritiesEditorOpen],
+  );
+  const closeReleasesEditor = useCallback(() => setReleasesEditorOpen(false), [setReleasesEditorOpen]);
+  const closeTaskDeleteConfirm = useCallback(
+    () => setTaskDeleteConfirmId(null),
+    [setTaskDeleteConfirmId],
+  );
+  const closeListDeleteConfirm = useCallback(
+    () => setListDeleteConfirmId(null),
+    [setListDeleteConfirmId],
+  );
+
+  return (
+    <>
+      <BoardSearchDialog
+        board={board}
+        open={boardSearchOpen}
+        onClose={closeSearch}
+      />
+
+      <ShortcutHelpDialog
+        open={shortcutHelpOpen}
+        onClose={handleShortcutHelpClose}
+        showOnboardingExtras={helpOpenReason === "auto"}
+      />
+
+      <BoardEditDialog
+        board={board}
+        open={boardEditOpen}
+        onClose={closeBoardEdit}
+      />
+
+      <TaskGroupsEditorDialog
+        board={board}
+        open={groupsEditorOpen}
+        onClose={closeGroupsEditor}
+      />
+
+      <TaskPrioritiesEditorDialog
+        board={board}
+        open={prioritiesEditorOpen}
+        onClose={closePrioritiesEditor}
+      />
+
+      <ReleasesEditorDialog
+        board={board}
+        open={releasesEditorOpen}
+        onClose={closeReleasesEditor}
+      />
+
+      <BoardTaskDeleteConfirm
+        board={board}
+        taskId={taskDeleteConfirmId}
+        onClose={closeTaskDeleteConfirm}
+      />
+
+      <BoardListDeleteConfirm
+        board={board}
+        listId={listDeleteConfirmId}
+        onClose={closeListDeleteConfirm}
+      />
+    </>
   );
 }

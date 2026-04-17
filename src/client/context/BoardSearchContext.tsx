@@ -1,7 +1,7 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useState,
   type ReactNode,
@@ -33,7 +33,7 @@ export function BoardSearchProvider({ children }: { children: ReactNode }) {
 }
 
 export function useBoardSearch(): BoardSearchContextValue {
-  const ctx = useContext(BoardSearchContext);
+  const ctx = use(BoardSearchContext);
   if (!ctx) {
     throw new Error("useBoardSearch must be used within BoardSearchProvider");
   }
@@ -41,5 +41,5 @@ export function useBoardSearch(): BoardSearchContextValue {
 }
 
 export function useBoardSearchOptional(): BoardSearchContextValue | null {
-  return useContext(BoardSearchContext);
+  return use(BoardSearchContext);
 }

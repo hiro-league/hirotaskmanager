@@ -35,6 +35,7 @@ Use this page to map `hirotm` commands to the board CLI policy checks enforced b
 
 ### List commands
 
+- `lists show`: `readBoard` for the list’s board (resolved server-side from the list id)
 - `lists add`: `readBoard` + `createLists`
 - `lists delete`: `readBoard` + either `manageCliCreatedLists` for CLI-created lists or `manageAnyLists` for other lists
 - `lists restore`: `readBoard` + either `manageCliCreatedLists` for CLI-created lists or `manageAnyLists` for other lists
@@ -42,6 +43,7 @@ Use this page to map `hirotm` commands to the board CLI policy checks enforced b
 
 ### Task commands
 
+- `tasks show`: `readBoard` for the task’s board (resolved server-side from the task id)
 - `tasks add`: `readBoard` + `createTasks`
 - `tasks delete`: `readBoard` + either `manageCliCreatedTasks` for CLI-created tasks or `manageAnyTasks` for other tasks
 - `tasks restore`: `readBoard` + either `manageCliCreatedTasks` for CLI-created tasks or `manageAnyTasks` for other tasks

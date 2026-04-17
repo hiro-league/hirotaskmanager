@@ -1,9 +1,37 @@
 import type { Element, ElementContent } from "hast";
+import { lazy, Suspense } from "react";
 import type { Components } from "react-markdown";
 import type { ExtraProps } from "react-markdown";
 import type { ReactNode } from "react";
-import { getCodeString } from "rehype-rewrite";
-import { MermaidDiagram } from "./MermaidDiagram";
+
+const LazyMermaidDiagram = lazy(() =>
+  import("./MermaidDiagram").then((m) => ({ default: m.MermaidDiagram })),
+);
+
+/** Hoisted: runs per fenced code block in preview (react-best-practices P4.3). */
+const CODE_BLOCK_LANGUAGE_CLASS_RE = /language-(\w+)/;
+
+/**
+ * Equivalent to `rehype-rewrite` `getCodeString` for hast `ElementContent[]` trees.
+ * Inlined so the preview path does not depend on `rehype-rewrite` (bundle-conditional).
+ */
+function hastCodeChildrenToString(
+  children: ElementContent[] = [],
+  code = "",
+): string {
+  for (const node of children) {
+    if (node.type === "text") {
+      code += node.value;
+    } else if (
+      node.type === "element" &&
+      node.children &&
+      Array.isArray(node.children)
+    ) {
+      code += hastCodeChildrenToString(node.children as ElementContent[]);
+    }
+  }
+  return code;
+}
 
 /**
  * Recover fenced block text for Mermaid. `react-markdown` passes `children` as React
@@ -17,7 +45,10 @@ function mermaidSourceFromCodeNode(
 ): string {
   const el = node as Element | undefined;
   if (el?.children && Array.isArray(el.children)) {
-    return getCodeString(el.children as ElementContent[]).replace(/\n$/, "");
+    return hastCodeChildrenToString(el.children as ElementContent[]).replace(
+      /\n$/,
+      "",
+    );
   }
   if (typeof fallbackChildren === "string") {
     return fallbackChildren.replace(/\n$/, "");
@@ -34,12 +65,20 @@ export function createTaskMarkdownPreviewComponents(
 ): Partial<Components> {
   return {
     code({ className, children, node, ...rest }) {
-      const match = /language-(\w+)/.exec(className || "");
+      const match = CODE_BLOCK_LANGUAGE_CLASS_RE.exec(className || "");
       if (match?.[1]?.toLowerCase() === "mermaid") {
         const chart = mermaidSourceFromCodeNode(node, children);
         return (
           <div className="my-1 w-full min-w-0">
-            <MermaidDiagram chart={chart} colorMode={colorMode} />
+            <Suspense
+              fallback={
+                <div className="rounded-md border border-border bg-muted/30 px-3 py-6 text-center text-sm text-muted-foreground">
+                  Loading diagram…
+                </div>
+              }
+            >
+              <LazyMermaidDiagram chart={chart} colorMode={colorMode} />
+            </Suspense>
           </div>
         );
       }

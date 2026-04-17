@@ -54,7 +54,7 @@ describe("useTaskEditorForm", () => {
     const board = buildTaskEditorBoardData(buildTestBoard());
     const slim = buildTestTask({ title: "Original", body: "x" });
     const full = buildTestTask({ ...slim, body: "full body from API" });
-    vi.spyOn(queries, "fetchBoardTask").mockResolvedValue(full);
+    vi.spyOn(queries, "fetchTaskById").mockResolvedValue(full);
 
     const { result } = renderHook(
       () =>
@@ -80,7 +80,7 @@ describe("useTaskEditorForm", () => {
     expect(result.current.isDirty).toBe(true);
   });
 
-  test("edit mode loads full task body from fetchBoardTask when detail resolves", async () => {
+  test("edit mode loads full task body from fetchTaskById when detail resolves", async () => {
     const qc = createTestQueryClient();
     const board = buildTaskEditorBoardData(buildTestBoard());
     const slim = buildTestTask({
@@ -92,7 +92,7 @@ describe("useTaskEditorForm", () => {
       body: "full body from API",
     });
 
-    vi.spyOn(queries, "fetchBoardTask").mockResolvedValue(full);
+    vi.spyOn(queries, "fetchTaskById").mockResolvedValue(full);
 
     const { result } = renderHook(
       () =>

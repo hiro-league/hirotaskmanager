@@ -5,7 +5,7 @@ import {
 } from "../../../../shared/models";
 import { boardColumnSpreadProps } from "../boardColumnData";
 import { TaskCard, taskReleasePill } from "@/components/task/TaskCard";
-import { useResolvedTaskCardViewMode } from "@/store/preferences";
+import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
 import { boardTaskDragOverlayClass } from "./boardDragOverlayShell";
 import { BoardListColumnOverlay } from "../columns/BoardListColumn";
 import { BoardListStackedColumnOverlay } from "../columns/BoardListStackedColumn";
@@ -17,7 +17,7 @@ export function BoardTaskDragOverlay({
   board: Board;
   task: Task;
 }) {
-  const taskCardViewMode = useResolvedTaskCardViewMode(board.boardId);
+  const { taskCardViewMode } = useBoardFilterResolution();
   return (
     <div className={boardTaskDragOverlayClass}>
       <TaskCard

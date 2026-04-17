@@ -1,4 +1,6 @@
+import { startTransition, useMemo } from "react";
 import { RELEASE_FILTER_UNTAGGED } from "../../../../shared/boardFilters";
+import { EMPTY_SORTABLE_IDS } from "@/components/board/dnd/dndIds";
 import type { Board } from "../../../../shared/models";
 import {
   useBoardFiltersStore,
@@ -19,14 +21,17 @@ export function ReleaseSwitcher({
 }: ReleaseSwitcherProps) {
   const setActive = useBoardFiltersStore((s) => s.setActiveReleaseIdsForBoard);
   const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
-  const options = [
-    { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
-    ...board.releases.map((r) => ({
-      id: String(r.releaseId),
-      label: r.name,
-      color: r.color ?? undefined,
-    })),
-  ];
+  const options = useMemo(
+    () => [
+      { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
+      ...board.releases.map((r) => ({
+        id: String(r.releaseId),
+        label: r.name,
+        color: r.color ?? undefined,
+      })),
+    ],
+    [board.releases],
+  );
 
   return (
     <BoardHeaderMultiSelect
@@ -36,10 +41,15 @@ export function ReleaseSwitcher({
       clearAllLabel="Clear all releases"
       removeItemAriaLabel={(label) => `Remove ${label}`}
       options={options}
-      selectedIds={activeReleaseIds ?? []}
+      selectedIds={activeReleaseIds ?? EMPTY_SORTABLE_IDS}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        startTransition(() =>
+          setActive(
+            board.boardId,
+            nextSelectedIds.length > 0 ? nextSelectedIds : undefined,
+          ),
+        )
       }
       onOpenEditor={onOpenReleasesEditor}
       editButtonAriaLabel="Edit releases"

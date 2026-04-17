@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Board } from "../../../../shared/models";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
@@ -17,11 +17,13 @@ import {
   visibleStatusesForBoard,
 } from "../boardStatusUtils";
 import { BoardListColumn } from "./BoardListColumn";
-import { laneBandContainerId } from "../dnd/dndIds";
+import { EMPTY_SORTABLE_IDS, laneBandContainerId } from "../dnd/dndIds";
 import { StatusLabelColumn } from "./StatusLabelColumn";
 import { useBoardKeyboardNavOptional } from "../shortcuts/BoardKeyboardNavContext";
 import { useLanesBoardDnd } from "../dnd/useLanesBoardDnd";
 import { useAddListComposer } from "./useAddListComposer";
+
+const DRAG_OVERLAY_STYLE = { zIndex: 60 } as const;
 
 interface BoardColumnsProps {
   board: Board;
@@ -159,6 +161,8 @@ export function AddListSlot({
         <input
           ref={inputRef}
           type="text"
+          autoComplete="off"
+          spellCheck={false}
           className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground select-text"
           placeholder="Enter list name…"
           value={name}
@@ -226,21 +230,23 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     boardKeyboardNav?.setListColumnOrder(localListIds);
   }, [boardKeyboardNav, localListIds]);
 
-  const [weights, setWeights] = useState<number[]>(() =>
-    bandWeightsForBoard(board, workflowOrder),
-  );
-  const weightsRef = useRef(weights);
-  weightsRef.current = weights;
-
   const weightsSyncKey = JSON.stringify(board.statusBandWeights ?? null);
   const visKey = visibleStatuses.join("\0");
 
-  const boardRef = useRef(board);
-  boardRef.current = board;
+  const serverWeights = useMemo(
+    () => bandWeightsForBoard(board, workflowOrder),
+    // Intentionally omit `board` identity: refetches must not reset lane weights or clear drag (§2.3).
+    [board.boardId, visKey, weightsSyncKey, workflowOrder],
+  );
+  const [dragWeights, setDragWeights] = useState<number[] | null>(null);
 
   useEffect(() => {
-    setWeights(bandWeightsForBoard(boardRef.current, workflowOrder));
-  }, [board.boardId, visKey, weightsSyncKey, workflowOrder]);
+    setDragWeights(null);
+  }, [serverWeights]);
+
+  const weights = dragWeights ?? serverWeights;
+  const weightsRef = useRef(weights);
+  weightsRef.current = weights;
 
   const flushWeights = useCallback(() => {
     const b = qc.getQueryData<Board>(boardKeys.detail(board.boardId));
@@ -263,8 +269,9 @@ export function BoardColumns({ board }: BoardColumnsProps) {
   }, [board.boardId, qc, patchViewPrefs, workflowOrder]);
 
   const adjustAt = useCallback((i: number, deltaY: number) => {
-    setWeights((w) => {
-      if (i < 0 || i >= w.length - 1) return w;
+    setDragWeights((prev) => {
+      const w = prev ?? serverWeights;
+      if (i < 0 || i >= w.length - 1) return prev;
       const next = [...w];
       const k = 0.004;
       // Follow the pointer direction: dragging down grows the band above,
@@ -275,12 +282,34 @@ export function BoardColumns({ board }: BoardColumnsProps) {
       next[i + 1] = bot;
       return next;
     });
-  }, []);
+  }, [serverWeights]);
 
   const overlayTask =
     activeTaskId != null
       ? board.tasks.find((task) => task.taskId === activeTaskId)
       : undefined;
+
+  const laneTaskMapsByListId = useMemo(() => {
+    const out = new Map<number, Record<string, string[]>>();
+    for (const id of localListIds) {
+      out.set(
+        id,
+        Object.fromEntries(
+          visibleStatuses.map((status) => {
+            const laneId = laneBandContainerId(id, status);
+            return [laneId, displayTaskMap[laneId] ?? EMPTY_SORTABLE_IDS] as const;
+          }),
+        ),
+      );
+    }
+    return out;
+  }, [localListIds, visibleStatuses, displayTaskMap]);
+
+  /** O(1) list lookup vs `.find` inside flatMap (react-best-practices P4.2). */
+  const listsById = useMemo(
+    () => new Map(board.lists.map((l) => [l.listId, l] as const)),
+    [board.lists],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -304,7 +333,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
             />
             <div className="flex min-h-0 flex-row gap-4">
               {localListIds.flatMap((id, index) => {
-                const list = board.lists.find((l) => l.listId === id);
+                const list = listsById.get(id);
                 if (!list) return [];
                 const items = [
                   <BoardListColumn
@@ -316,12 +345,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
                     visibleStatuses={visibleStatuses}
                     weights={weights}
                     tasksByListStatus={tasksByListStatus}
-                    taskMap={Object.fromEntries(
-                      visibleStatuses.map((status) => [
-                        laneBandContainerId(id, status),
-                        displayTaskMap[laneBandContainerId(id, status)] ?? [],
-                      ]),
-                    )}
+                    taskMap={laneTaskMapsByListId.get(id)!}
                     isTaskDragActive={activeTaskId != null}
                   />,
                 ];
@@ -349,7 +373,7 @@ export function BoardColumns({ board }: BoardColumnsProps) {
             />
           </div>
         </div>
-        <ReactDragOverlay dropAnimation={null} style={{ zIndex: 60 }}>
+        <ReactDragOverlay dropAnimation={null} style={DRAG_OVERLAY_STYLE}>
           {overlayTask != null || activeListId != null ? (
             <BoardDragOverlayContent
               board={board}

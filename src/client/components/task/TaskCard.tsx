@@ -33,6 +33,40 @@ function taskCardBodyPaddingClass(viewMode: TaskCardViewMode): string {
   return viewMode === "small" ? "px-2 py-2" : "px-2.5 py-2";
 }
 
+/** Inline title edit controls for `TaskCard` — set only while that row is editing. */
+export interface TaskCardInlineEdit {
+  draft: string;
+  setDraft: (value: string) => void;
+  commit: () => void;
+  cancel: () => void;
+  busy?: boolean;
+}
+
+/**
+ * Builds `inlineEdit` when `editingTaskId` matches `taskId`; keeps call sites from
+ * repeating the same field bundle (see composition-patterns review #10).
+ */
+export function taskCardInlineEditFor(
+  taskId: number,
+  editingTaskId: number | null,
+  draft: string,
+  actions: {
+    setDraft: (value: string) => void;
+    commit: () => void;
+    cancel: () => void;
+    busy: boolean;
+  },
+): TaskCardInlineEdit | undefined {
+  if (editingTaskId !== taskId) return undefined;
+  return {
+    draft,
+    setDraft: actions.setDraft,
+    commit: actions.commit,
+    cancel: actions.cancel,
+    busy: actions.busy,
+  };
+}
+
 function previewBody(body: string, max = 100): string {
   const plain = body.replace(/\s+/g, " ").trim();
   if (!plain) return "";
@@ -128,13 +162,8 @@ interface TaskCardProps {
   /** Optional release chip (same styling as priority when color is set). */
   releasePill?: { label: string; color?: string | null } | null;
   onOpen: () => void;
-  /** When true, render an inline title-only editor instead of the normal task title. */
-  editingTitle?: boolean;
-  titleDraft?: string;
-  onTitleDraftChange?: (value: string) => void;
-  onTitleCommit?: () => void;
-  onTitleCancel?: () => void;
-  titleEditBusy?: boolean;
+  /** When set, render the inline title editor instead of the static title. */
+  inlineEdit?: TaskCardInlineEdit;
   /** When set, only for `open` tasks: click the empty circle to complete (does not open the editor). */
   onCompleteFromCircle?: (anchorEl: HTMLElement) => void;
   /** When true, dim the card to indicate it's being dragged. */
@@ -286,12 +315,7 @@ function TaskCardContent({
   releasePill,
   preview,
   onOpen,
-  editingTitle = false,
-  titleDraft = "",
-  onTitleDraftChange,
-  onTitleCommit,
-  onTitleCancel,
-  titleEditBusy = false,
+  inlineEdit,
 }: {
   task: Task;
   taskPriorities: TaskPriorityDefinition[];
@@ -300,12 +324,7 @@ function TaskCardContent({
   releasePill?: { label: string; color?: string | null } | null;
   preview: string;
   onOpen: () => void;
-  editingTitle?: boolean;
-  titleDraft?: string;
-  onTitleDraftChange?: (value: string) => void;
-  onTitleCommit?: () => void;
-  onTitleCancel?: () => void;
-  titleEditBusy?: boolean;
+  inlineEdit?: TaskCardInlineEdit;
 }) {
   const viewSpec = getTaskCardViewSpec(viewMode);
   const priorityRow = taskPriorities.find((p) => p.priorityId === task.priorityId);
@@ -317,24 +336,25 @@ function TaskCardContent({
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const titleBlurModeRef = useRef<"commit" | "cancel">("commit");
 
+  const isEditing = inlineEdit != null;
   useLayoutEffect(() => {
-    if (!editingTitle) return;
+    if (!isEditing) return;
     titleInputRef.current?.focus();
     titleInputRef.current?.select();
     titleBlurModeRef.current = "commit";
-  }, [editingTitle, task.taskId]);
+  }, [isEditing, task.taskId]);
 
   useLayoutEffect(() => {
-    if (!editingTitle) return;
+    if (!inlineEdit) return;
     autoSizeInlineTitleTextarea(titleInputRef.current);
-  }, [editingTitle, titleDraft]);
+  }, [isEditing, inlineEdit?.draft]);
 
   return (
     <div
       className="min-w-0 flex-1 text-left"
-      onClick={editingTitle ? undefined : onOpen}
+      onClick={inlineEdit ? undefined : onOpen}
     >
-      {editingTitle ? (
+      {inlineEdit ? (
         <div className="flex min-w-0 gap-1.5">
           {task.emoji ? (
             <span
@@ -352,12 +372,12 @@ function TaskCardContent({
               "min-w-0 flex-1 resize-y rounded border border-input bg-background px-2 py-1 text-foreground select-text",
               viewSpec.titleClassName,
             )}
-            value={titleDraft}
-            disabled={titleEditBusy}
+            value={inlineEdit.draft}
+            disabled={inlineEdit.busy}
             onChange={(e) => {
               // Auto-grow up to three lines, then keep the native resize handle available.
               autoSizeInlineTitleTextarea(e.currentTarget);
-              onTitleDraftChange?.(clampTaskTitleInput(e.target.value));
+              inlineEdit.setDraft(clampTaskTitleInput(e.target.value));
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -366,17 +386,17 @@ function TaskCardContent({
                 titleBlurModeRef.current = "commit";
                 return;
               }
-              onTitleCommit?.();
+              inlineEdit.commit();
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                onTitleCommit?.();
+                inlineEdit.commit();
               }
               if (e.key === "Escape") {
                 e.preventDefault();
                 titleBlurModeRef.current = "cancel";
-                onTitleCancel?.();
+                inlineEdit.cancel();
               }
             }}
           />
@@ -505,12 +525,7 @@ export const TaskCard = memo(function TaskCard({
   groupLabel,
   releasePill = null,
   onOpen,
-  editingTitle = false,
-  titleDraft,
-  onTitleDraftChange,
-  onTitleCommit,
-  onTitleCancel,
-  titleEditBusy = false,
+  inlineEdit,
   onCompleteFromCircle,
   isDragging,
   skipNavRegistration = false,
@@ -551,7 +566,7 @@ export const TaskCard = memo(function TaskCard({
         nav.setHoveredTaskId(null);
       }}
       onPointerDown={() => {
-        if (editingTitle) return;
+        if (inlineEdit != null) return;
         // Clicking into a task should make it current before any editor/dialog opens.
         nav?.selectTask(task.taskId);
       }}
@@ -606,12 +621,7 @@ export const TaskCard = memo(function TaskCard({
               releasePill={releasePill}
               preview={preview}
               onOpen={onOpen}
-              editingTitle={editingTitle}
-              titleDraft={titleDraft}
-              onTitleDraftChange={onTitleDraftChange}
-              onTitleCommit={onTitleCommit}
-              onTitleCancel={onTitleCancel}
-              titleEditBusy={titleEditBusy}
+              inlineEdit={inlineEdit}
             />
           </div>
         </div>
@@ -629,12 +639,7 @@ export const TaskCard = memo(function TaskCard({
             releasePill={releasePill}
             preview={preview}
             onOpen={onOpen}
-            editingTitle={editingTitle}
-            titleDraft={titleDraft}
-            onTitleDraftChange={onTitleDraftChange}
-            onTitleCommit={onTitleCommit}
-            onTitleCancel={onTitleCancel}
-            titleEditBusy={titleEditBusy}
+            inlineEdit={inlineEdit}
           />
         </div>
       )}

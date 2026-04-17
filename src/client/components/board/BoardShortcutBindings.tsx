@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -6,15 +7,20 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useQueryClient } from "@tanstack/react-query";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import {
   usePatchBoardViewPrefs,
   useUpdateTask,
 } from "@/api/mutations";
-import { useBoardFiltersStore } from "@/store/preferences";
+import {
+  useBoardFiltersStore,
+  type TaskCardViewMode,
+} from "@/store/preferences";
 import type { Board } from "../../../shared/models";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
+import { useBoardDialogs } from "@/context/BoardDialogsContext";
 import { useBoardTaskKeyboardBridgeOptional } from "./shortcuts/BoardTaskKeyboardBridge";
 import { useBoardKeyboardNavOptional } from "./shortcuts/BoardKeyboardNavContext";
 import { createBoardShortcutActions } from "./shortcuts/boardShortcutActions";
@@ -30,7 +36,6 @@ interface BoardShortcutBindingsProps {
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   tasks: Board["tasks"];
-  openHelp: () => void;
   openBoardSearch: () => void;
   toggleFilters: () => void;
   setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
@@ -46,20 +51,42 @@ export function BoardShortcutBindings({
   taskGroups,
   taskPriorities,
   tasks,
-  openHelp,
   openBoardSearch,
   toggleFilters,
   setTaskDeleteConfirmId,
   setListDeleteConfirmId,
 }: BoardShortcutBindingsProps) {
-  const setActiveTaskGroupIdsForBoard = useBoardFiltersStore(
-    (state) => state.setActiveTaskGroupIdsForBoard,
+  const { openHelp } = useBoardDialogs();
+  const {
+    setActiveTaskGroupIdsForBoard: setActiveTaskGroupIdsRaw,
+    setTaskCardViewModeForBoard: setTaskCardViewModeRaw,
+    setActiveTaskPriorityIdsForBoard: setActiveTaskPriorityIdsRaw,
+  } = useBoardFiltersStore(
+    useShallow((state) => ({
+      setActiveTaskGroupIdsForBoard: state.setActiveTaskGroupIdsForBoard,
+      setTaskCardViewModeForBoard: state.setTaskCardViewModeForBoard,
+      setActiveTaskPriorityIdsForBoard: state.setActiveTaskPriorityIdsForBoard,
+    })),
   );
-  const setTaskCardViewModeForBoard = useBoardFiltersStore(
-    (state) => state.setTaskCardViewModeForBoard,
+  const setActiveTaskGroupIdsForBoard = useCallback(
+    (targetBoardId: number | string, groupIds: string[] | undefined) => {
+      startTransition(() => setActiveTaskGroupIdsRaw(targetBoardId, groupIds));
+    },
+    [setActiveTaskGroupIdsRaw],
   );
-  const setActiveTaskPriorityIdsForBoard = useBoardFiltersStore(
-    (state) => state.setActiveTaskPriorityIdsForBoard,
+  const setActiveTaskPriorityIdsForBoard = useCallback(
+    (targetBoardId: number | string, priorityIds: string[] | undefined) => {
+      startTransition(() =>
+        setActiveTaskPriorityIdsRaw(targetBoardId, priorityIds),
+      );
+    },
+    [setActiveTaskPriorityIdsRaw],
+  );
+  const setTaskCardViewModeForBoard = useCallback(
+    (targetBoardId: number | string, mode: TaskCardViewMode) => {
+      startTransition(() => setTaskCardViewModeRaw(targetBoardId, mode));
+    },
+    [setTaskCardViewModeRaw],
   );
   const nav = useBoardKeyboardNavOptional();
   const bridge = useBoardTaskKeyboardBridgeOptional();

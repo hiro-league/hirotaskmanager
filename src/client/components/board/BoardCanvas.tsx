@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
+import { useBoardLayout } from "@/context/BoardLayoutContext";
 import { BoardScrollRootContext } from "./lanes/useColumnInViewport";
 import { cn } from "@/lib/utils";
 
@@ -9,21 +10,19 @@ type BoardCanvasPanHandlers = Pick<
 
 interface BoardCanvasProps {
   boardSurfaceId: string | null;
-  stackedLayout: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
-  panning: boolean;
   boardCanvasPanHandlers: BoardCanvasPanHandlers;
   children: ReactNode;
 }
 
 export function BoardCanvas({
   boardSurfaceId,
-  stackedLayout,
   scrollRef,
-  panning,
   boardCanvasPanHandlers,
   children,
 }: BoardCanvasProps) {
+  const { layout } = useBoardLayout();
+  const stackedLayout = layout === "stacked";
   return (
     <div
       id={boardSurfaceId ?? undefined}
@@ -32,7 +31,6 @@ export function BoardCanvas({
         "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto px-4 pb-4 pt-4 select-none",
         stackedLayout ? "overflow-y-auto" : "overflow-y-hidden",
         "cursor-grab",
-        panning && "cursor-grabbing select-none",
       )}
       {...boardCanvasPanHandlers}
     >

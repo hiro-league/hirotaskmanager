@@ -1,5 +1,6 @@
 import { ChevronsLeft, ChevronsRight, Command, Moon, Search, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import { useShallow } from "zustand/react/shallow";
 import { useBoardSearchOptional } from "@/context/BoardSearchContext";
 import { cn } from "@/lib/utils";
 import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
@@ -12,10 +13,19 @@ export function AppHeader() {
   const shortcutHelpAvailable = pathname.startsWith("/board/");
   const boardSearch = useBoardSearchOptional();
   const showBoardSearchButton = shortcutHelpAvailable && boardSearch;
-  const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = usePreferencesStore((s) => s.toggleSidebarCollapsed);
-  const themePreference = usePreferencesStore((s) => s.themePreference);
-  const setThemePreference = usePreferencesStore((s) => s.setThemePreference);
+  const {
+    sidebarCollapsed,
+    toggleSidebar,
+    themePreference,
+    setThemePreference,
+  } = usePreferencesStore(
+    useShallow((s) => ({
+      sidebarCollapsed: s.sidebarCollapsed,
+      toggleSidebar: s.toggleSidebarCollapsed,
+      themePreference: s.themePreference,
+      setThemePreference: s.setThemePreference,
+    })),
+  );
   const systemDark = useSystemDark();
   const resolvedDark = resolveDark(themePreference, systemDark);
 
@@ -52,7 +62,10 @@ export function AppHeader() {
           height={32}
           decoding="async"
         />
-        <span className="app-title-gradient inline-block truncate text-lg font-semibold tracking-tight">
+        <span
+          translate="no"
+          className="app-title-gradient inline-block truncate text-lg font-semibold tracking-tight"
+        >
           Hiro Task Manager
         </span>
       </div>
@@ -113,7 +126,16 @@ export function AppHeader() {
           type="button"
           role="switch"
           aria-checked={resolvedDark}
-          aria-label={resolvedDark ? "Switch to light theme" : "Switch to dark theme"}
+          title={
+            resolvedDark
+              ? "Toggle between light and dark theme, current: dark"
+              : "Toggle between light and dark theme, current: light"
+          }
+          aria-label={
+            resolvedDark
+              ? "Toggle between light and dark theme, current: dark"
+              : "Toggle between light and dark theme, current: light"
+          }
           onClick={flipTheme}
           className={cn(
             "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border border-input bg-muted transition-colors",

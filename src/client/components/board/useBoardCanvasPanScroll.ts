@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 const ACTIVATION_PX = 6;
 
@@ -23,7 +23,13 @@ export function useBoardCanvasPanScroll() {
     mode: PanMode;
   } | null>(null);
 
-  const [panning, setPanning] = useState(false);
+  /** Cursor-only pan state: toggle class on the scroller to avoid board subtree re-renders (§2.5). */
+  const setPanningClass = useCallback((on: boolean) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.classList.toggle("cursor-grabbing", on);
+    el.classList.toggle("select-none", on);
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -64,7 +70,7 @@ export function useBoardCanvasPanScroll() {
           /* already captured or unsupported */
         }
         e.preventDefault();
-        setPanning(true);
+        setPanningClass(true);
       } else {
         pan.mode = "none";
         panRef.current = null;
@@ -77,7 +83,7 @@ export function useBoardCanvasPanScroll() {
       scroller.scrollLeft = pan.startScrollLeft - dx;
       e.preventDefault();
     }
-  }, []);
+  }, [setPanningClass]);
 
   const endPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const pan = panRef.current;
@@ -90,14 +96,13 @@ export function useBoardCanvasPanScroll() {
       } catch {
         /* not captured */
       }
-      setPanning(false);
+      setPanningClass(false);
     }
     panRef.current = null;
-  }, []);
+  }, [setPanningClass]);
 
   return {
     scrollRef,
-    panning,
     boardCanvasPanHandlers: {
       onPointerDown,
       onPointerMove,

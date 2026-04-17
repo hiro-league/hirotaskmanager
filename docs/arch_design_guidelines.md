@@ -188,10 +188,12 @@ Implemented today: list/create/read/update/delete boards. **Export is not implem
 | PATCH | `/api/boards/:id/view-prefs` | Update board view prefs only |
 | PATCH | `/api/boards/:id/groups` | Update task group definitions |
 | POST | `/api/boards/:id/lists` | Create list |
+| GET | `/api/lists/:listId` | Single list (board id inferred for CLI policy) |
 | PATCH | `/api/boards/:id/lists/:listId` | Update list |
 | DELETE | `/api/boards/:id/lists/:listId` | Delete list |
 | PUT | `/api/boards/:id/lists/order` | Reorder lists |
 | POST | `/api/boards/:id/tasks` | Create task |
+| GET | `/api/tasks/:taskId` | Single task (board id inferred for CLI policy) |
 | PATCH | `/api/boards/:id/tasks/:taskId` | Update task |
 | DELETE | `/api/boards/:id/tasks/:taskId` | Delete task |
 | PUT | `/api/boards/:id/tasks/reorder` | Reorder tasks within a list+status band |

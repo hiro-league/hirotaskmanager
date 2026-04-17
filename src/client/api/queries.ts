@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useSuspenseQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { withBrowserClientHeaders } from "./clientHeaders";
 import {
   boardStatsFilterSignature,
@@ -42,18 +46,14 @@ export async function fetchBoard(id: string | number): Promise<Board> {
   return fetchJson<Board>(`/api/boards/${id}?slim=1`);
 }
 
-export async function fetchBoardTask(
-  boardId: number,
-  taskId: number,
-): Promise<Task> {
-  return fetchJson<Task>(`/api/boards/${boardId}/tasks/${taskId}`);
+/** Full task row by global id (`GET /api/tasks/:taskId`). */
+export async function fetchTaskById(taskId: number): Promise<Task> {
+  return fetchJson<Task>(`/api/tasks/${taskId}`);
 }
 
-export async function fetchBoardList(
-  boardId: number,
-  listId: number,
-): Promise<List> {
-  return fetchJson<List>(`/api/boards/${boardId}/lists/${listId}`);
+/** List row by global id (`GET /api/lists/:listId`). */
+export async function fetchListById(listId: number): Promise<List> {
+  return fetchJson<List>(`/api/lists/${listId}`);
 }
 
 /**
@@ -65,7 +65,7 @@ export const boardKeys = {
   detail: (id: number) => ["boards", id] as const,
 };
 
-/** React Query key for `GET /api/boards/:boardId/tasks/:taskId` (full task, used by TaskEditor). */
+/** React Query key for `GET /api/tasks/:taskId` (full task, used by TaskEditor). */
 export function boardTaskDetailKey(boardId: number, taskId: number) {
   return [...boardKeys.all, boardId, "task", taskId] as const;
 }
@@ -165,6 +165,18 @@ export function useBoard(id: string | number | null) {
     queryKey: [...boardKeys.all, key],
     queryFn: () => fetchBoard(id!),
     enabled: key != null,
+  });
+}
+
+/**
+ * Suspense variant for the board route: `data` is defined after the query resolves.
+ * Use only under `<Suspense>` + an error boundary (see `BoardQueryErrorBoundary`).
+ */
+export function useSuspenseBoard(boardId: string | number) {
+  const key = boardDetailQueryKey(boardId);
+  return useSuspenseQuery({
+    queryKey: [...boardKeys.all, key],
+    queryFn: () => fetchBoard(boardId),
   });
 }
 

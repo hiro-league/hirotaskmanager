@@ -3,7 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: env(safe-area-inset-*) applies on notched devices / PWAs. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <!-- Native controls + scrollbars follow light/dark before JS; avoids wrong scheme on form controls. -->
+    <meta name="color-scheme" content="light dark" />
+    <!-- PWA / iOS status bar: match canvas/header tones (see index.css --background light / .dark). -->
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#14151a"
+      media="(prefers-color-scheme: dark)"
+    />
     <title>Hiro Task Manager</title>
     <script>
       (function () {

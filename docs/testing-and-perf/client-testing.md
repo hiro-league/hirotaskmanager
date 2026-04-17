@@ -13,14 +13,14 @@ Relationship to other docs:
 
 ## 1. Current state
 
-The client stack is **implemented** (Phases 0–8): **Vitest + RTL + jsdom** for `src/client`, **Playwright** for `e2e/`, **Bun** for everything outside `src/client` and `e2e/`.
+The client stack is **implemented** (Phases 0–11 for plan items below): **Vitest + RTL + jsdom** (+ **`@testing-library/jest-dom`**) for `src/client`, **Playwright** for `e2e/` (includes board FTS E2E, Phase 11), **Bun** for everything outside `src/client` and `e2e/`.
 
 - **Commands:** `npm run test` (Bun; ignores `**/src/client/**` and `**/e2e/**`), `npm run test:client` (Vitest), `npm run test:e2e` (Playwright), `npm run release:check` (typecheck + Bun + Vitest + build + pack — no E2E).
 - **CI:** `.github/workflows/ci.yml` runs a **fast** job then **e2e** (`needs: fast`).
 - **Coverage:** There is solid coverage for many pure helpers, query/mutation hooks, keyboard/dialog smokes, route/page smokes, and a **small** E2E suite (board load, create/edit task, DnD smoke, app shell). The **CLI and server** test suites remain larger in file count; closing that gap is optional and should stay layered (pyramid), not “match CLI line count in the browser.”
 - **Main risk surface** (unchanged): board UI — filters, query/cache, shortcuts, dialogs, DnD, and board-level interactions.
 
-Phases 0–8 are **done**. Phases **9+** below describe how to grow toward **more complete** client coverage without abandoning the pyramid.
+Phases 0–8 are **done**; **9–11** are **done** (see Phase 9–11 sections). **Phase 12** below is sustainability / flake policy.
 
 ---
 
@@ -83,7 +83,7 @@ Use this pyramid for the client:
 
 Phases are intentionally ordered. Earlier phases reduce the risk and cost of later ones.
 
-**Status:** **0–8** are implemented. **9–12** extend coverage toward a more complete client suite (deeper units/hooks, heavy DOM, selective E2E, sustainability).
+**Status:** **0–11** are implemented for the items below (see each phase). **12** is sustainability / flake policy.
 
 ### Phase 0 — Decide tooling and create test commands
 
@@ -406,6 +406,8 @@ Exit criteria:
 - Critical editor and shell regressions are catchable without Playwright for simple cases.
 - No “full app render” tests; keep files small and scenario-focused.
 
+**Implemented:** `@testing-library/jest-dom` + `import "@testing-library/jest-dom/vitest"` in `src/client/test/vitest-setup.ts`. **`TaskEditor.test.tsx`**: closed vs open, create-mode dialog/actions, edit-mode heading / body after detail load / Move to Trash, Cancel → `onClose` — with mocks for emoji, markdown field, gamification, and `useBlocker` (MemoryRouter). **`AppHeader.test.tsx`** / **`AppShell.test.tsx`**: title, sidebar toggle, skip link + main landmark (with `QueryClientProvider`; `AppShell` mocks `useBoardChangeStream`). **`Sidebar.test.tsx`**: board row label + loading copy via `useBoards` spy. **`NotificationToasts`** remains covered by existing `NotificationToasts.test.tsx` (Phase 4).
+
 ### Phase 11 — Selective E2E expansion and optional release gates
 
 Goal: add **one journey at a time** when lower layers cannot de-risk it, and optionally tighten release confidence.
@@ -425,6 +427,8 @@ Exit criteria:
 
 - E2E count stays **small**; each new spec has a written reason (link to bug or risk).
 - Runtime and flake budget stay acceptable; quarantine or fix flakiness quickly (see Phase 12).
+
+**Implemented:** `e2e/board-search.spec.ts` — one journey: disposable board + task with a unique token in the title → open header “Search tasks on this board” → type query → assert hit row appears (FTS + debounced client path). Comment in file documents rationale (Phase 11). **Optional** path-filtered CI / E2E-on-tag **not** enabled (per plan: avoid hiding `main` breaks); revisit if PR noise dominates.
 
 ### Phase 12 — Coverage maturity and sustainability
 
@@ -446,7 +450,7 @@ Exit criteria:
 
 ## 6. Concrete coverage backlog by area
 
-Rolling list of **module-level** opportunities. For **ordered** execution, use **Phases 9–12** above; this section groups ideas by feature area.
+Rolling list of **module-level** opportunities. For **ordered** execution, use **Phases 9–12** above (Phase **11** FTS E2E is implemented; remaining optional ideas are notifications E2E, trash restore, etc.); this section groups ideas by feature area.
 
 ### Board logic
 
@@ -584,13 +588,14 @@ When adding new client behavior:
 
 ---
 
-## 10. Next execution slice (Phases 9–12)
+## 10. Next execution slice (Phase 12)
 
 Suggested order for **more complete** coverage without abandoning the pyramid:
 
-1. **Phase 9** — Pure/hook tests for `boardSurfaceWheel`, `boardColumnData`, `useBoardColumnMap`, `useTaskRevealRegistry`, and any DnD/cache gaps.
-2. **Phase 10** — `TaskEditor.tsx` and shell/notification smokes; optional `@testing-library/jest-dom`.
-3. **Phase 11** — One E2E at a time (search or notifications or cross-route), optional path-filtered E2E or E2E-on-tag.
-4. **Phase 12** — Flake policy, optional coverage thresholds, backlog review cadence.
+1. **Phase 12** — Flake policy, optional coverage thresholds, backlog review cadence.
+
+Optional later E2E (not required for Phase 11 exit): notifications panel smoke, trash restore → board (only if incidents justify).
+
+(Phases **9–11** are implemented; see §5.)
 
 Tighten or skip phases based on incident data and refactor churn—not on blanket percentage targets.

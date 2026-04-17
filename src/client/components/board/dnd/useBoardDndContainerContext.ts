@@ -1,12 +1,7 @@
 import { useMemo } from "react";
 import type { Board, Task } from "../../../../shared/models";
 import { useStatusWorkflowOrder } from "@/api/queries";
-import {
-  useResolvedActiveReleaseIds,
-  useResolvedActiveTaskGroupIds,
-  useResolvedActiveTaskPriorityIds,
-  useResolvedTaskDateFilter,
-} from "@/store/preferences";
+import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
 import { hashTasksForDndLayoutDeps } from "./boardTaskDndDeps";
 import {
   buildTasksByListStatusIndex,
@@ -37,13 +32,12 @@ export function useBoardDndContainerContext(
     () => visibleStatusesForBoard(board, workflowOrder),
     [board, workflowOrder],
   );
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
-  const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.boardId,
-    board.taskPriorities,
-  );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.boardId);
+  const {
+    activeGroupIds,
+    activePriorityIds,
+    activeReleaseIds,
+    dateFilterResolved,
+  } = useBoardFilterResolution();
 
   const tasksLayoutHash = useMemo(
     () => hashTasksForDndLayoutDeps(board.tasks),

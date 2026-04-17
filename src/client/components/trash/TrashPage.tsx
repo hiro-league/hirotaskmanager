@@ -13,6 +13,8 @@ import {
   useTrashedTasks,
 } from "@/api/queries";
 import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
+import { formatDateTimeMediumShort } from "@/lib/intlDateFormat";
+import { formatInteger } from "@/lib/intlNumberFormat";
 import { cn } from "@/lib/utils";
 import { boardDisplayName, listDisplayName, taskDisplayTitle } from "../../../shared/models";
 import type {
@@ -25,10 +27,7 @@ type TrashTab = "boards" | "lists" | "tasks";
 
 function formatDeletedAt(iso: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    return formatDateTimeMediumShort(new Date(iso));
   } catch {
     return iso;
   }
@@ -244,7 +243,7 @@ export function TrashPage() {
             {label}
             {q.data != null ? (
               <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
-                {q.data.length}
+                {formatInteger(q.data.length)}
               </span>
             ) : null}
           </button>

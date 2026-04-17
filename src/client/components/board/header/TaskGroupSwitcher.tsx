@@ -1,8 +1,10 @@
+import { startTransition, useMemo } from "react";
 import {
   formatGroupDisplayLabel,
   sortTaskGroupsForDisplay,
   type Board,
 } from "../../../../shared/models";
+import { EMPTY_SORTABLE_IDS } from "@/components/board/dnd/dndIds";
 import {
   useBoardFiltersStore,
   useResolvedActiveTaskGroupIds,
@@ -22,12 +24,19 @@ export function TaskGroupSwitcher({
   onOpenGroupsEditor,
 }: TaskGroupSwitcherProps) {
   const setActive = useBoardFiltersStore((s) => s.setActiveTaskGroupIdsForBoard);
-  const groupsOrdered = sortTaskGroupsForDisplay(board.taskGroups);
+  const groupsOrdered = useMemo(
+    () => sortTaskGroupsForDisplay(board.taskGroups),
+    [board.taskGroups],
+  );
   const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
-  const options = groupsOrdered.map((group) => ({
-    id: String(group.groupId),
-    label: formatGroupDisplayLabel(group),
-  }));
+  const options = useMemo(
+    () =>
+      groupsOrdered.map((group) => ({
+        id: String(group.groupId),
+        label: formatGroupDisplayLabel(group),
+      })),
+    [groupsOrdered],
+  );
 
   return (
     <BoardHeaderMultiSelect
@@ -37,10 +46,15 @@ export function TaskGroupSwitcher({
       clearAllLabel="Clear all groups"
       removeItemAriaLabel={(label) => `Remove ${label}`}
       options={options}
-      selectedIds={activeGroupIds ?? []}
+      selectedIds={activeGroupIds ?? EMPTY_SORTABLE_IDS}
       headerHovered={headerHovered}
       onChange={(nextSelectedIds) =>
-        setActive(board.boardId, nextSelectedIds.length > 0 ? nextSelectedIds : undefined)
+        startTransition(() =>
+          setActive(
+            board.boardId,
+            nextSelectedIds.length > 0 ? nextSelectedIds : undefined,
+          ),
+        )
       }
       onOpenEditor={onOpenGroupsEditor}
       editButtonAriaLabel="Edit task groups"

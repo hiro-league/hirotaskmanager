@@ -1,6 +1,7 @@
 import { Save, Star, Trash2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Board, ReleaseDefinition } from "../../../../shared/models";
+import { formatInteger } from "@/lib/intlNumberFormat";
 import { cn } from "@/lib/utils";
 import {
   ClearColorIconButton,
@@ -40,6 +41,7 @@ export function ReleasesTable({
   onSaveRow,
   onRequestDelete,
 }: ReleasesTableProps) {
+  // P4.1: rows use content-visibility on each <li> (see style) for long lists without virtualization.
   return (
     <ul className="mt-4 space-y-3">
       {releasesInEditorOrder.map((r) => {
@@ -62,6 +64,10 @@ export function ReleasesTable({
                 ? "border-primary/50 ring-1 ring-inset ring-primary/20 dark:border-primary/45"
                 : "border-border",
             )}
+            style={{
+              contentVisibility: "auto",
+              containIntrinsicSize: "auto 120px",
+            }}
           >
             <div className="flex min-w-0 flex-nowrap items-end gap-2">
               <button
@@ -90,6 +96,8 @@ export function ReleasesTable({
                 <span className="text-muted-foreground">Name</span>
                 <input
                   type="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
                   value={row.name}
                   disabled={busy}
@@ -119,6 +127,8 @@ export function ReleasesTable({
                   />
                   <input
                     type="text"
+                    autoComplete="off"
+                    spellCheck={false}
                     className="w-[7rem] shrink-0 rounded-md border border-input bg-background px-1.5 py-1.5 font-mono text-xs"
                     value={row.color}
                     disabled={busy}
@@ -168,7 +178,7 @@ export function ReleasesTable({
                   disabled={busy}
                   title={
                     tc > 0
-                      ? `Delete release (${tc} task${tc === 1 ? "" : "s"})`
+                      ? `Delete release (${formatInteger(tc)} task${tc === 1 ? "" : "s"})`
                       : "Delete release"
                   }
                   aria-label={`Delete release ${row.name || r.releaseId}`}

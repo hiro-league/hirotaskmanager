@@ -1,4 +1,5 @@
 import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import { runTasksShow } from "../lib/queries/tasks";
 import { runTasksPurge, runTasksRestore } from "../lib/trash/trashCommands";
 import {
   runTasksAdd,
@@ -7,6 +8,14 @@ import {
   runTasksUpdate,
 } from "../lib/mutations/writeCommands";
 import type { CliContext } from "./context";
+
+export async function handleTasksShow(
+  ctx: CliContext,
+  taskId: string,
+  options: { fields?: string },
+): Promise<void> {
+  await runTasksShow(ctx, taskId, options);
+}
 
 export async function handleTasksAdd(
   ctx: CliContext,

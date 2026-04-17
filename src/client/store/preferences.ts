@@ -150,6 +150,9 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: PREFERENCES_STORAGE_KEY,
+      // Priority 3 (client-localstorage-schema): baseline version for future `migrate` steps.
+      version: 1,
+      migrate: (persistedState, _version) => persistedState as PreferencesState,
       partialize: (state) => ({
         themePreference: state.themePreference,
         sidebarCollapsed: state.sidebarCollapsed,

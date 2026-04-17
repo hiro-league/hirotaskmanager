@@ -1,13 +1,13 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
 import type { Board } from "../../../../shared/models";
-import type { BoardLayoutNav } from "./boardTaskNavigation";
+import { useBoardLayout } from "@/context/BoardLayoutContext";
 import { useBoardColumnMap } from "./useBoardColumnMap";
 import { useBoardHighlightState } from "./useBoardHighlightState";
 import { useTaskRevealRegistry } from "./useTaskRevealRegistry";
@@ -71,7 +71,7 @@ const BoardKeyboardNavContext =
   createContext<BoardKeyboardNavContextValue | null>(null);
 
 export function useBoardKeyboardNav(): BoardKeyboardNavContextValue {
-  const ctx = useContext(BoardKeyboardNavContext);
+  const ctx = use(BoardKeyboardNavContext);
   if (!ctx) {
     throw new Error("useBoardKeyboardNav must be used within BoardKeyboardNavProvider");
   }
@@ -79,20 +79,19 @@ export function useBoardKeyboardNav(): BoardKeyboardNavContextValue {
 }
 
 export function useBoardKeyboardNavOptional(): BoardKeyboardNavContextValue | null {
-  return useContext(BoardKeyboardNavContext);
+  return use(BoardKeyboardNavContext);
 }
 
 interface ProviderProps {
   board: Board;
-  layout: BoardLayoutNav;
   children: ReactNode;
 }
 
 export function BoardKeyboardNavProvider({
   board,
-  layout,
   children,
 }: ProviderProps) {
+  const { layout } = useBoardLayout();
   const listElementsRef = useRef<Map<number, HTMLElement>>(new Map());
   const addTaskComposersRef = useRef<Map<number, () => void>>(new Map());
   const listRenameOpenersRef = useRef<Map<number, () => void>>(new Map());

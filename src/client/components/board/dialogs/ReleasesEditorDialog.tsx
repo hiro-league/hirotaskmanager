@@ -376,6 +376,8 @@ export function ReleasesEditorDialog({
                 <span className="text-muted-foreground">Name</span>
                 <input
                   type="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   placeholder="Name"
                   className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
                   value={newName}
@@ -394,6 +396,8 @@ export function ReleasesEditorDialog({
                   />
                   <input
                     type="text"
+                    autoComplete="off"
+                    spellCheck={false}
                     className="w-[7rem] shrink-0 rounded-md border border-input bg-background px-1.5 py-1.5 font-mono text-xs"
                     placeholder="#rrggbb"
                     value={newColor}

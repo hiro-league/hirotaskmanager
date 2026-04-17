@@ -8,6 +8,8 @@ import {
 } from "./boardTaskNavigation";
 
 const KEYBOARD_SCROLL_MARGIN_PX = 10;
+/** Hoisted: ancestor walk calls this often (react-best-practices P4.3). */
+const SCROLLABLE_OVERFLOW_RE = /(auto|scroll|overlay)/;
 const KEYBOARD_RING_CLASSES = [
   "ring-2",
   "ring-offset-2",
@@ -22,7 +24,7 @@ function canScrollAxis(
   const style = window.getComputedStyle(el);
   const overflow =
     axis === "y" ? style.overflowY || style.overflow : style.overflowX || style.overflow;
-  if (!/(auto|scroll|overlay)/.test(overflow)) return false;
+  if (!SCROLLABLE_OVERFLOW_RE.test(overflow)) return false;
   return axis === "y"
     ? el.scrollHeight > el.clientHeight + 1
     : el.scrollWidth > el.clientWidth + 1;

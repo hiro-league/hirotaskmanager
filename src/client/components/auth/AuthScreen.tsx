@@ -1,12 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import { useLogin, useRecoverPassphrase, useSetupAuth } from "@/api/auth";
-
-interface AuthScreenProps {
-  initialized: boolean;
-  notice: string | null;
-  onNoticeChange: (value: string | null) => void;
-}
+// Shared Input/Button: focus-visible rings, autocomplete, password-manager hints (web interface guidelines).
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function AuthShell({
   title,
@@ -18,7 +15,7 @@ function AuthShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-board-canvas p-6">
+    <div className="flex h-full min-h-0 items-center justify-center bg-board-canvas p-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="mb-6">
           <div className="mb-3 flex items-center gap-3">
@@ -31,7 +28,7 @@ function AuthShell({
               decoding="async"
             />
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              <h1 className="text-balance text-xl font-semibold tracking-tight text-foreground">
                 {title}
               </h1>
               <p className="text-sm text-muted-foreground">{subtitle}</p>
@@ -56,19 +53,21 @@ function AuthNotice({
     <div className="mb-4 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-foreground">
       <div className="flex items-start justify-between gap-3">
         <span>{notice}</span>
-        <button
+        <Button
           type="button"
-          className="text-muted-foreground hover:text-foreground"
+          variant="ghost"
+          size="sm"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
           onClick={onDismiss}
         >
           Dismiss
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
-function SetupForm({
+export function SetupAuthScreen({
   notice,
   onNoticeChange,
 }: {
@@ -106,23 +105,27 @@ function SetupForm({
       >
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-foreground">Passphrase</span>
-          <input
+          <Input
             type="password"
+            name="passphrase"
+            autoComplete="new-password"
             autoFocus
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
+            aria-invalid={mismatch}
           />
         </label>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-foreground">
             Confirm passphrase
           </span>
-          <input
+          <Input
             type="password"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+            name="confirm-passphrase"
+            autoComplete="new-password"
             value={confirmPassphrase}
             onChange={(event) => setConfirmPassphrase(event.target.value)}
+            aria-invalid={mismatch}
           />
         </label>
         {mismatch ? (
@@ -135,20 +138,20 @@ function SetupForm({
           The recovery key will be shown once in the terminal running TaskManager.
           Save it outside the app before continuing.
         </p>
-        <button
+        <Button
           type="submit"
+          className="w-full gap-2"
           disabled={setupAuth.isPending || !passphrase || mismatch}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           <LockKeyhole className="size-4" aria-hidden />
           Create passphrase
-        </button>
+        </Button>
       </form>
     </AuthShell>
   );
 }
 
-function LoginForm({
+export function LoginScreen({
   notice,
   onNoticeChange,
 }: {
@@ -191,10 +194,11 @@ function LoginForm({
         >
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-foreground">Passphrase</span>
-            <input
+            <Input
               type="password"
+              name="passphrase"
+              autoComplete="current-password"
               autoFocus
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
               value={passphrase}
               onChange={(event) => setPassphrase(event.target.value)}
             />
@@ -202,17 +206,14 @@ function LoginForm({
           {loginError ? (
             <p className="text-sm text-destructive">{loginError}</p>
           ) : null}
-          <button
-            type="submit"
-            disabled={busy || !passphrase}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
+          <Button type="submit" className="w-full gap-2" disabled={busy || !passphrase}>
             <LogIn className="size-4" aria-hidden />
             Log in
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="w-full rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
+            variant="outline"
+            className="w-full"
             disabled={busy}
             onClick={() => {
               setShowRecovery(true);
@@ -220,7 +221,7 @@ function LoginForm({
             }}
           >
             Use recovery key instead
-          </button>
+          </Button>
         </form>
       ) : (
         <form
@@ -247,10 +248,13 @@ function LoginForm({
           <p className="text-sm text-muted-foreground">{recoveryHint}</p>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-foreground">Recovery key</span>
-            <input
+            <Input
               type="text"
+              name="recovery-key"
+              autoComplete="off"
+              spellCheck={false}
               autoFocus
-              className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground"
+              className="font-mono"
               value={recoveryKey}
               onChange={(event) => setRecoveryKey(event.target.value)}
             />
@@ -259,22 +263,26 @@ function LoginForm({
             <span className="text-sm font-medium text-foreground">
               New passphrase
             </span>
-            <input
+            <Input
               type="password"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              name="new-passphrase"
+              autoComplete="new-password"
               value={newPassphrase}
               onChange={(event) => setNewPassphrase(event.target.value)}
+              aria-invalid={recoveryMismatch}
             />
           </label>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-foreground">
               Confirm new passphrase
             </span>
-            <input
+            <Input
               type="password"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              name="confirm-new-passphrase"
+              autoComplete="new-password"
               value={confirmNewPassphrase}
               onChange={(event) => setConfirmNewPassphrase(event.target.value)}
+              aria-invalid={recoveryMismatch}
             />
           </label>
           {recoveryMismatch ? (
@@ -283,17 +291,18 @@ function LoginForm({
           {recoveryError ? (
             <p className="text-sm text-destructive">{recoveryError}</p>
           ) : null}
-          <button
+          <Button
             type="submit"
+            className="w-full gap-2"
             disabled={busy || !recoveryKey || !newPassphrase || recoveryMismatch}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             <KeyRound className="size-4" aria-hidden />
             Reset passphrase
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="w-full rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
+            variant="outline"
+            className="w-full"
             disabled={busy}
             onClick={() => {
               setShowRecovery(false);
@@ -303,20 +312,9 @@ function LoginForm({
             }}
           >
             Back to login
-          </button>
+          </Button>
         </form>
       )}
     </AuthShell>
   );
-}
-
-export function AuthScreen({
-  initialized,
-  notice,
-  onNoticeChange,
-}: AuthScreenProps) {
-  if (!initialized) {
-    return <SetupForm notice={notice} onNoticeChange={onNoticeChange} />;
-  }
-  return <LoginForm notice={notice} onNoticeChange={onNoticeChange} />;
 }

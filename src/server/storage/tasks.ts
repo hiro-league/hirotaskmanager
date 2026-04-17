@@ -145,6 +145,29 @@ export function readTaskById(boardId: number, taskId: number): Task | null {
   return row ? mapTaskRow(row) : null;
 }
 
+/**
+ * Live task by global row id (`GET /api/tasks/:taskId`). Resolves `board_id` for routing / CLI policy.
+ */
+export function readLiveTaskWithBoard(
+  taskId: number,
+): { boardId: number; task: Task } | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT t.board_id,
+              t.id, t.list_id, t.group_id, t.priority_id, t.status_id, t.title, t.body, t.sort_order, t.color, t.emoji, t.release_id,
+              t.created_at, t.updated_at, t.closed_at, t.created_by_principal, t.created_by_label
+       FROM task t
+       INNER JOIN list l ON l.id = t.list_id AND l.board_id = t.board_id
+       INNER JOIN board b ON b.id = t.board_id
+       WHERE t.id = ? AND t.deleted_at IS NULL AND l.deleted_at IS NULL AND b.deleted_at IS NULL`,
+    )
+    .get(taskId) as (TaskRow & { board_id: number }) | null;
+  if (!row) return null;
+  const { board_id: boardId, ...taskCols } = row;
+  return { boardId, task: mapTaskRow(taskCols as TaskRow) };
+}
+
 export function createTaskOnBoard(
   boardId: number,
   input: {

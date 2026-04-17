@@ -18,7 +18,14 @@ export function AppShell({ sidebar, children }: AppShellProps) {
   useBoardChangeStream(null, null);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {/* Skip link: first tab stop; slides into view on focus-visible (Web Interface Guidelines #18). */}
+      <a
+        href="#main-content"
+        className="fixed left-4 top-4 z-[10000] -translate-y-[200%] rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-md outline-none transition-transform focus-visible:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Skip to main content
+      </a>
       <AppHeader />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <aside
@@ -29,7 +36,11 @@ export function AppShell({ sidebar, children }: AppShellProps) {
         >
           {sidebar}
         </aside>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-board-canvas p-2">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-board-canvas p-2 scroll-mt-12 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-board-canvas"
+        >
           {children}
         </main>
       </div>

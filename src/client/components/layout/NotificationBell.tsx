@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Bell,
   Bot,
@@ -20,6 +21,7 @@ import {
   notificationTargetHref,
 } from "@/lib/notificationPresentation";
 import { formatNotificationTime } from "@/lib/notificationTime";
+import { formatInteger } from "@/lib/intlNumberFormat";
 import { cn } from "@/lib/utils";
 import { useNotificationUiStore } from "@/store/notificationUi";
 import { usePreferencesStore } from "@/store/preferences";
@@ -95,15 +97,28 @@ export function NotificationBell() {
   const currentBoardParam = parseBoardIdFromPath(pathname);
   const currentBoardId =
     currentBoardParam && /^\d+$/.test(currentBoardParam) ? Number(currentBoardParam) : null;
-  const open = useNotificationUiStore((s) => s.panelOpen);
-  const setOpen = useNotificationUiStore((s) => s.setPanelOpen);
-  const clearToasts = useNotificationUiStore((s) => s.clearToasts);
+  const { open, setOpen, clearToasts } = useNotificationUiStore(
+    useShallow((s) => ({
+      open: s.panelOpen,
+      setOpen: s.setPanelOpen,
+      clearToasts: s.clearToasts,
+    })),
+  );
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const scopePreference = usePreferencesStore((s) => s.notificationPanelScopePreference);
-  const setScopePreference = usePreferencesStore((s) => s.setNotificationPanelScopePreference);
-  const sourceFilter = usePreferencesStore((s) => s.notificationSourceFilter);
-  const setSourceFilter = usePreferencesStore((s) => s.setNotificationSourceFilter);
+  const {
+    scopePreference,
+    setScopePreference,
+    sourceFilter,
+    setSourceFilter,
+  } = usePreferencesStore(
+    useShallow((s) => ({
+      scopePreference: s.notificationPanelScopePreference,
+      setScopePreference: s.setNotificationPanelScopePreference,
+      sourceFilter: s.notificationSourceFilter,
+      setSourceFilter: s.setNotificationSourceFilter,
+    })),
+  );
 
   const resolvedScope = scopePreference === "current" && currentBoardId != null ? "board" : "all";
   const feed = useNotificationsFeed({
@@ -178,7 +193,9 @@ export function NotificationBell() {
               <div>
                 <p className="text-sm font-semibold text-foreground">{panelTitle}</p>
                 <p className="text-xs text-muted-foreground">
-                  {feed.isFetching ? "Refreshing..." : `${items.length} visible item${items.length === 1 ? "" : "s"}`}
+                  {feed.isFetching
+                    ? "Refreshing…"
+                    : `${formatInteger(items.length)} visible item${items.length === 1 ? "" : "s"}`}
                 </p>
               </div>
               {feed.isFetching ? (
@@ -284,7 +301,7 @@ export function NotificationBell() {
             {feed.isLoading && items.length === 0 ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
                 <Loader2 className="size-5 animate-spin" aria-hidden />
-                Loading notifications...
+                Loading notifications…
               </div>
             ) : items.length === 0 ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">

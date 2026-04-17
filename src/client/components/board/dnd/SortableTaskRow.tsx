@@ -1,7 +1,10 @@
 import { memo, useCallback } from "react";
 import type { Task, TaskPriorityDefinition } from "../../../../shared/models";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
-import { TaskCard } from "@/components/task/TaskCard";
+import {
+  TaskCard,
+  type TaskCardInlineEdit,
+} from "@/components/task/TaskCard";
 import type { TaskCardViewMode } from "@/store/preferences";
 import { useBoardTaskSortableReact } from "./useBoardTaskSortableReact";
 
@@ -15,12 +18,7 @@ export interface SortableTaskRowProps {
   groupLabel: string;
   releasePill?: { label: string; color?: string | null } | null;
   onOpen: () => void;
-  editingTitle?: boolean;
-  titleDraft?: string;
-  onTitleDraftChange?: (value: string) => void;
-  onTitleCommit?: () => void;
-  onTitleCancel?: () => void;
-  titleEditBusy?: boolean;
+  inlineEdit?: TaskCardInlineEdit;
   onCompleteFromCircle?: (anchorEl: HTMLElement) => void;
 }
 
@@ -35,12 +33,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   groupLabel,
   releasePill = null,
   onOpen,
-  editingTitle = false,
-  titleDraft,
-  onTitleDraftChange,
-  onTitleCommit,
-  onTitleCancel,
-  titleEditBusy = false,
+  inlineEdit,
   onCompleteFromCircle,
 }: SortableTaskRowProps) {
   const {
@@ -59,7 +52,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
     <div
       ref={setNodeRef}
       className={
-        editingTitle
+        inlineEdit != null
           ? "touch-none"
           : "cursor-grab touch-none select-none active:cursor-grabbing"
       }
@@ -79,12 +72,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
         groupLabel={groupLabel}
         releasePill={releasePill}
         onOpen={onOpen}
-        editingTitle={editingTitle}
-        titleDraft={titleDraft}
-        onTitleDraftChange={onTitleDraftChange}
-        onTitleCommit={onTitleCommit}
-        onTitleCancel={onTitleCancel}
-        titleEditBusy={titleEditBusy}
+        inlineEdit={inlineEdit}
         onCompleteFromCircle={onCompleteFromCircle}
         isDragging={isDragging}
         skipNavRegistration

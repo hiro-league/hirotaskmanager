@@ -301,7 +301,7 @@ The write endpoints keep their URLs but change their success payloads from `Boar
 ### New endpoints recommended
 
 - `GET /api/events`
-- `GET /api/boards/:id/tasks/:taskId`
+- `GET /api/tasks/:taskId`
 - `GET /api/boards/:id/lists/:listId`
 
 These new targeted reads let the browser repair or update one entity after an event without reloading the whole board.

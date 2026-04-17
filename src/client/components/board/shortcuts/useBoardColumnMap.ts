@@ -8,12 +8,7 @@ import {
 } from "react";
 import type { Board } from "../../../../shared/models";
 import { useStatusWorkflowOrder } from "@/api/queries";
-import {
-  useResolvedActiveReleaseIds,
-  useResolvedActiveTaskGroupIds,
-  useResolvedActiveTaskPriorityIds,
-  useResolvedTaskDateFilter,
-} from "@/store/preferences";
+import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
 import {
   buildTasksByListStatusIndex,
   visibleStatusesForBoard,
@@ -40,13 +35,12 @@ export function useBoardColumnMap({
   listElementsRef,
 }: UseBoardColumnMapParams): UseBoardColumnMapResult {
   const workflowOrder = useStatusWorkflowOrder();
-  const activeGroupIds = useResolvedActiveTaskGroupIds(board.boardId, board.taskGroups);
-  const activePriorityIds = useResolvedActiveTaskPriorityIds(
-    board.boardId,
-    board.taskPriorities,
-  );
-  const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
-  const dateFilterResolved = useResolvedTaskDateFilter(board.boardId);
+  const {
+    activeGroupIds,
+    activePriorityIds,
+    activeReleaseIds,
+    dateFilterResolved,
+  } = useBoardFilterResolution();
 
   const visibleStatuses = useMemo(
     () => visibleStatusesForBoard(board, workflowOrder),

@@ -188,7 +188,7 @@ This document records performance-related code changes for supervisor review. Ea
   - **`?bodyPreview=<n>`** — explicit cap, clamped to **`0…BOARD_FETCH_MAX_TASK_BODY_PREVIEW_CHARS`** (**8192**). Invalid values are ignored (full bodies).
 - **`loadBoard(boardId, options?)`** accepts optional **`{ taskBodyMaxChars }`**; all other **`loadBoard`** call sites keep the previous behavior.
 - **Web app `fetchBoard`** appends **`?slim=1`** so **`useBoard`** / initial board loads use the slim path.
-- **`TaskEditor`** (edit mode) loads **`GET /api/boards/:boardId/tasks/:taskId`** via **`useQuery`** (**`boardTaskDetailKey`**) so the description field always reflects the **full** body after load; while that query is pending, the dialog is **busy** and the form is not seeded with a possibly truncated **`body`**. **`useUpdateTask`** / **`useDeleteTask`** and **`useBoardChangeStream`** keep the task-detail cache aligned with the entity from the server.
+- **`TaskEditor`** (edit mode) loads **`GET /api/tasks/:taskId`** via **`useQuery`** (**`boardTaskDetailKey`**) so the description field always reflects the **full** body after load; while that query is pending, the dialog is **busy** and the form is not seeded with a possibly truncated **`body`**. **`useUpdateTask`** / **`useDeleteTask`** and **`useBoardChangeStream`** keep the task-detail cache aligned with the entity from the server.
 
 ### Files changed
 

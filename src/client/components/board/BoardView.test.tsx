@@ -24,12 +24,13 @@ vi.mock("@/api/mutations", async (importOriginal) => {
   };
 });
 
-const useBoardMock = vi.fn();
+const useSuspenseBoardMock = vi.fn();
 vi.mock("@/api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/queries")>();
   return {
     ...actual,
-    useBoard: (...args: unknown[]) => useBoardMock(...args),
+    /** BoardView body uses suspense board fetch; mocking avoids real `fetch` in jsdom (Phase 9 tests). */
+    useSuspenseBoard: (...args: unknown[]) => useSuspenseBoardMock(...args),
   };
 });
 
@@ -53,7 +54,7 @@ function renderBoardView(
 
 describe("BoardView", () => {
   beforeEach(() => {
-    useBoardMock.mockReset();
+    useSuspenseBoardMock.mockReset();
     usePreferencesStore.getState().setBoardShortcutHelpDismissed(false);
   });
 
@@ -62,52 +63,30 @@ describe("BoardView", () => {
   });
 
   test("shows no-board-selected empty state when boardId is null", () => {
-    useBoardMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-      error: null,
-      status: "pending",
-    });
     renderBoardView(<BoardView boardId={null} />);
     expect(screen.getByText("No board selected")).toBeTruthy();
   });
 
   test("shows loading skeleton while board detail is loading", () => {
-    useBoardMock.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isFetching: true,
-      isError: false,
-      error: null,
-      status: "pending",
+    useSuspenseBoardMock.mockImplementation(() => {
+      // Never resolves → `Suspense` shows `BoardViewLoadingFallback` (pulse placeholders).
+      throw new Promise(() => {});
     });
     renderBoardView(<BoardView boardId="1" />);
     expect(document.querySelector(".animate-pulse")).toBeTruthy();
   });
 
   test("shows error message when board detail fails for a non-404 error", () => {
-    useBoardMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      error: new Error("upstream unavailable"),
-      status: "error",
+    useSuspenseBoardMock.mockImplementation(() => {
+      throw new Error("upstream unavailable");
     });
     renderBoardView(<BoardView boardId="1" />);
     expect(screen.getByText("upstream unavailable")).toBeTruthy();
   });
 
   test("redirects to Trash when board GET reports not found", async () => {
-    useBoardMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      error: new Error("Board not found"),
-      status: "error",
+    useSuspenseBoardMock.mockImplementation(() => {
+      throw new Error("Board not found");
     });
     renderBoardView(
       <Routes>
@@ -125,13 +104,8 @@ describe("BoardView", () => {
   });
 
   test("renders stacked layout branch when board layout is stacked", () => {
-    useBoardMock.mockReturnValue({
+    useSuspenseBoardMock.mockReturnValue({
       data: buildTestBoard({ boardId: 1, boardLayout: "stacked" }),
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-      error: null,
-      status: "success",
     });
     // Success path mounts BoardNotificationDeepLink, which uses react-router.
     renderBoardView(<BoardView boardId="1" />, { initialEntries: ["/"] });
@@ -140,13 +114,8 @@ describe("BoardView", () => {
   });
 
   test("renders lanes layout branch when board layout is lanes", () => {
-    useBoardMock.mockReturnValue({
+    useSuspenseBoardMock.mockReturnValue({
       data: buildTestBoard({ boardId: 1, boardLayout: "lanes" }),
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-      error: null,
-      status: "success",
     });
     renderBoardView(<BoardView boardId="1" />, { initialEntries: ["/"] });
     expect(screen.getByTestId("board-columns-lanes")).toBeTruthy();
@@ -154,13 +123,8 @@ describe("BoardView", () => {
   });
 
   test("auto-opens shortcut help on first load when not dismissed in preferences", async () => {
-    useBoardMock.mockReturnValue({
+    useSuspenseBoardMock.mockReturnValue({
       data: buildTestBoard({ boardId: 1 }),
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-      error: null,
-      status: "success",
     });
     renderBoardView(<BoardView boardId="1" />, { initialEntries: ["/"] });
     await waitFor(() => {

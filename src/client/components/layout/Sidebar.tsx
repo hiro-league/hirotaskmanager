@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { LayoutGrid, Plus, Trash2, X } from "lucide-react";
-import { useBoards } from "@/api/queries";
 import { cn } from "@/lib/utils";
 import { boardPath } from "@/lib/boardPath";
 import { useBoardFiltersStore, usePreferencesStore } from "@/store/preferences";
@@ -9,41 +8,37 @@ import { boardDisplayName } from "../../../shared/models";
 import { boardCollapsedLabel } from "@/components/layout/boardCollapsedLabel";
 import { SidebarBoardItem } from "@/components/layout/SidebarBoardItem";
 import { SidebarConfirmDialog } from "@/components/layout/SidebarConfirmDialog";
+import { SidebarProvider, useSidebar } from "@/components/layout/SidebarContext";
 import { SettingsSidebarMenu } from "@/components/layout/SettingsSidebarMenu";
-import { useSidebarBoardMutations } from "@/components/layout/useSidebarBoardMutations";
 
 export function Sidebar() {
+  return (
+    <SidebarProvider>
+      <SidebarContents />
+    </SidebarProvider>
+  );
+}
+
+function SidebarContents() {
   const sidebarCollapsed = usePreferencesStore((s) => s.sidebarCollapsed);
   const pruneBoardScopedPreferences = useBoardFiltersStore(
     (s) => s.pruneBoardScopedPreferences,
   );
-  const { data: boards = [], isLoading, isError, error } = useBoards();
-  const navigate = useNavigate();
-  const boardMatch = useMatch({ path: "/board/:boardId", end: true });
-  const settingsMatch = useMatch({ path: "/settings", end: true });
-  const trashMatch = useMatch({ path: "/trash", end: true });
-  const selectedBoardId = boardMatch?.params.boardId ?? null;
-
   const {
+    boards,
+    isLoading,
+    isError,
+    error,
     createBoard,
     deleteBoard,
-    editingId,
-    editValue,
-    setEditValue,
     addingBoard,
     setAddingBoard,
     newBoardName,
     setNewBoardName,
-    openMenuId,
-    setOpenMenuId,
     boardDeleteCandidate,
     setBoardDeleteCandidate,
     deleteTaskCountInput,
     setDeleteTaskCountInput,
-    startRename,
-    cancelRename,
-    commitRename,
-    requestDelete,
     confirmDelete,
     cancelAddBoard,
     submitNewBoard,
@@ -52,17 +47,20 @@ export function Sidebar() {
     requiresTypedDeleteConfirmation,
     deleteTaskCountMatches,
     deleteConfirmDisabled,
-  } = useSidebarBoardMutations(boards);
+  } = useSidebar();
+  const navigate = useNavigate();
+  const boardMatch = useMatch({ path: "/board/:boardId", end: true });
+  const settingsMatch = useMatch({ path: "/settings", end: true });
+  const trashMatch = useMatch({ path: "/trash", end: true });
+  const selectedBoardId = boardMatch?.params.boardId ?? null;
 
   useEffect(() => {
     setAddingBoard(false);
     setNewBoardName("");
-  }, [sidebarCollapsed]);
+  }, [sidebarCollapsed, setAddingBoard, setNewBoardName]);
 
   useEffect(() => {
     if (isLoading || isError) return;
-    // Keep persisted board-local UI prefs aligned with the real board list so deleted boards
-    // cannot leak their filter state onto a later board that reuses the same SQLite id.
     pruneBoardScopedPreferences(boards.map((board) => board.boardId));
   }, [boards, isError, isLoading, pruneBoardScopedPreferences]);
 
@@ -166,26 +164,11 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {boards.map((b) => {
             const active = String(b.boardId) === selectedBoardId;
-            const idStr = String(b.boardId);
             return (
               <SidebarBoardItem
                 key={b.boardId}
                 board={b}
                 active={active}
-                editing={idStr === editingId}
-                editValue={editValue}
-                menuOpen={idStr === openMenuId}
-                onNavigate={() => navigate(boardPath(idStr))}
-                onDoubleClickRename={() => startRename(b.boardId, b.name)}
-                onRenameFromMenu={() => {
-                  setOpenMenuId(null);
-                  startRename(b.boardId, b.name);
-                }}
-                onEditValueChange={setEditValue}
-                onRenameCommit={commitRename}
-                onRenameCancel={cancelRename}
-                onMenuOpenChange={(open) => setOpenMenuId(open ? idStr : null)}
-                onRequestDelete={() => requestDelete(b.boardId, b.name)}
               />
             );
           })}
@@ -203,6 +186,8 @@ export function Sidebar() {
         ) : (
           <div className="mt-2 rounded-md border border-sidebar-border bg-sidebar-accent/20 p-2">
             <input
+              autoComplete="off"
+              spellCheck={false}
               autoFocus
               type="text"
               className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
@@ -262,7 +247,6 @@ export function Sidebar() {
       </div>
       </div>
 
-      {/* Sidebar sits outside the board shortcut scope, so board deletion uses a local app dialog instead of `window.confirm`. */}
       <SidebarConfirmDialog
         open={boardDeleteCandidate !== null}
         title="Move this board to Trash?"
@@ -291,7 +275,6 @@ export function Sidebar() {
               This board has {deleteTaskCount} tasks. Are you sure you want to
               move it to Trash?
             </p>
-            {/* Require the exact task count before moving a board with tasks to Trash so it is harder to do by mistake than for an empty board. */}
             <div className="space-y-1.5">
               <label
                 htmlFor="sidebar-delete-board-task-count"
@@ -303,6 +286,8 @@ export function Sidebar() {
                 id="sidebar-delete-board-task-count"
                 type="text"
                 inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
                 autoFocus
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                 value={deleteTaskCountInput}

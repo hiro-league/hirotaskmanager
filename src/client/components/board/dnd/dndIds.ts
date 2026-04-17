@@ -43,6 +43,9 @@ export function laneBandContainerId(listId: number, status: string): string {
   return `${LANE_BAND_PREFIX}${listId}:${status}`;
 }
 
+/** Stable empty id list — avoids fresh `[]` on `?? []` breaking memo (react-best-practices-review §2.2). */
+export const EMPTY_SORTABLE_IDS: string[] = [];
+
 export function parseLaneBandContainerId(
   id: string,
 ): { listId: number; status: string } | null {

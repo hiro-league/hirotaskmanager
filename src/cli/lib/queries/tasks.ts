@@ -5,7 +5,13 @@ import {
   COLUMNS_TASKS_LIST,
   QUIET_DEFAULT_TASK,
 } from "../core/listTableSpecs";
-import { FIELDS_TASK } from "../core/jsonFieldProjection";
+import {
+  FIELDS_TASK,
+  parseAndValidateFields,
+  projectRecord,
+} from "../core/jsonFieldProjection";
+import { requireNdjsonWhenUsingFields } from "../core/command-helpers";
+import { parseTaskId } from "../mutations/write/helpers";
 import { executePaginatedListRead } from "../client/paginatedListRead";
 import type { CliContext } from "../../types/context";
 
@@ -70,4 +76,18 @@ export async function runBoardsTasksList(
       fields: options.fields,
     },
   );
+}
+
+/** One task by global id (`GET /api/tasks/:taskId`). */
+export async function runTasksShow(
+  ctx: CliContext,
+  taskIdRaw: string,
+  options: { fields?: string },
+): Promise<void> {
+  const port = ctx.resolvePort();
+  const fieldKeys = parseAndValidateFields(options.fields, FIELDS_TASK);
+  requireNdjsonWhenUsingFields(fieldKeys);
+  const taskId = parseTaskId(taskIdRaw.trim() || undefined);
+  const task = await ctx.fetchApi<Task>(`/tasks/${taskId}`, { port });
+  ctx.printJson(fieldKeys?.length ? projectRecord(task, fieldKeys) : task);
 }

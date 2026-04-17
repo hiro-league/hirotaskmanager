@@ -7,6 +7,7 @@ import {
   handleListsMove,
   handleListsPurge,
   handleListsRestore,
+  handleListsShow,
   handleListsUpdate,
 } from "../handlers/lists";
 import {
@@ -23,7 +24,7 @@ export function registerListCommands(
 ): void {
   const listsCommand = program
     .command("lists")
-    .description("List and manage lists (columns) on boards");
+    .description("List, show, and manage lists (columns) on boards");
 
   addClientNameOption(
     listsCommand
@@ -45,6 +46,17 @@ export function registerListCommands(
       pageAll?: boolean;
       fields?: string;
     }) => handleListsList(ctx, options)),
+  );
+
+  addClientNameOption(
+    listsCommand
+      .command("show")
+      .description("Show one list by global id")
+      .argument("<list-id>", "Numeric list id")
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+  ).action(
+    cliAction((listId: string, options: { fields?: string }) =>
+      handleListsShow(ctx, listId, options)),
   );
 
   addClientNameOption(

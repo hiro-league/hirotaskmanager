@@ -1,15 +1,17 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import EmojiPicker, { Theme } from "emoji-picker-react";
 import { Smile } from "lucide-react";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+
+const EmojiPickerDropdownContent = lazy(() => import("./EmojiPickerDropdownContent"));
 import { flushSync } from "react-dom";
-import { parseEmojiField } from "../../../shared/emojiField";
 import { cn } from "@/lib/utils";
 
 function subscribeDarkMode(callback: () => void): () => void {
@@ -132,39 +134,22 @@ export function EmojiPickerMenuButton({
             align="start"
             onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            <EmojiPicker
-              open={open}
-              theme={dark ? Theme.DARK : Theme.LIGHT}
-              width={320}
-              height={400}
-              lazyLoadEmojis
-              searchPlaceholder="Search emoji"
-              searchClearButtonLabel="Clear search"
-              previewConfig={{ showPreview: false }}
-              onEmojiClick={(data) => {
-                const parsed = parseEmojiField(data.emoji);
-                if (!parsed.ok) {
-                  onValidationError(parsed.error);
-                  return;
-                }
-                onPick(parsed.value);
-                setOpen(false);
-              }}
-            />
-            {emoji ? (
-              <div className="border-t border-border px-2 py-2">
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                  onClick={() => {
-                    onPick(null);
-                    setOpen(false);
-                  }}
-                >
-                  Clear emoji
-                </button>
-              </div>
-            ) : null}
+            <Suspense
+              fallback={
+                <div className="flex h-[400px] w-[320px] items-center justify-center px-3 text-sm text-muted-foreground">
+                  Loading emoji picker…
+                </div>
+              }
+            >
+              <EmojiPickerDropdownContent
+                open={open}
+                dark={dark}
+                emoji={emoji}
+                onValidationError={onValidationError}
+                onPick={onPick}
+                onRequestClose={() => setOpen(false)}
+              />
+            </Suspense>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       ) : null}

@@ -1,5 +1,20 @@
+import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+
+/**
+ * jsdom lacks `PointerEvent` in some environments; board hooks listen for `pointermove`
+ * with `pointerType === "mouse"` (Phase 9 column map tests).
+ */
+if (typeof globalThis.PointerEvent === "undefined") {
+  globalThis.PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerType: string;
+    constructor(type: string, eventInitDict?: PointerEventInit) {
+      super(type, eventInitDict);
+      this.pointerType = eventInitDict?.pointerType ?? "";
+    }
+  } as typeof PointerEvent;
+}
 
 /**
  * jsdom does not implement ResizeObserver; @dnd-kit and some board components

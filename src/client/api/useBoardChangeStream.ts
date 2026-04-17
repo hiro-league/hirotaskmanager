@@ -8,8 +8,8 @@ import {
   boardDetailQueryKey,
   boardKeys,
   boardTaskDetailKey,
-  fetchBoardList,
-  fetchBoardTask,
+  fetchListById,
+  fetchTaskById,
   invalidateBoardStatsQueries,
 } from "./queries";
 import { invalidateNotificationQueries } from "./notifications";
@@ -378,7 +378,7 @@ export function useBoardChangeStream(
       }
       void (async () => {
         try {
-          const task = await fetchBoardTask(event.boardId, event.taskId);
+          const task = await fetchTaskById(event.taskId);
           qc.setQueryData(
             boardTaskDetailKey(event.boardId, event.taskId),
             task,
@@ -440,7 +440,7 @@ export function useBoardChangeStream(
       }
       void (async () => {
         try {
-          const list = await fetchBoardList(event.boardId, event.listId);
+          const list = await fetchListById(event.listId);
           setBoardCaches((current) => {
             const exists = current.lists.some(
               (item) => item.listId === list.listId,

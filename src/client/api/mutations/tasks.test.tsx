@@ -5,13 +5,13 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 import { DEFAULT_BOARD_COLOR } from "../../../shared/boardColor";
 import { EMPTY_BOARD_CLI_POLICY } from "../../../shared/cliPolicy";
-import type { Board } from "../../../shared/models";
+import type { Board, Task } from "../../../shared/models";
 import {
   createDefaultTaskGroups,
   createDefaultTaskPriorities,
 } from "../../../shared/models";
 import * as queries from "../queries";
-import { useCreateTask } from "./tasks";
+import { useCreateTask, useReorderTasksInBand } from "./tasks";
 
 vi.mock("./shared", () => ({
   tempNumericId: () => -999,
@@ -144,6 +144,112 @@ describe("useCreateTask cache behavior", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["boards", 1, "stats"],
+    });
+  });
+});
+
+describe("useReorderTasksInBand cache behavior", () => {
+  let fetchJsonSpy: Mock;
+
+  beforeEach(() => {
+    fetchJsonSpy = vi.spyOn(queries, "fetchJson") as Mock;
+  });
+
+  function boardWithTwoOpenTasks(boardId: number): Board {
+    const b = minimalBoard(boardId);
+    const now = "2020-01-01T00:00:00.000Z";
+    const tasks: Task[] = [
+      {
+        taskId: 10,
+        listId: 1,
+        title: "A",
+        body: "",
+        groupId: b.defaultTaskGroupId,
+        priorityId: 5,
+        status: "open",
+        order: 0,
+        emoji: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        taskId: 11,
+        listId: 1,
+        title: "B",
+        body: "",
+        groupId: b.defaultTaskGroupId,
+        priorityId: 5,
+        status: "open",
+        order: 1,
+        emoji: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    return { ...b, tasks };
+  }
+
+  test("applies optimistic reorder within the band before the server responds", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const board = boardWithTwoOpenTasks(1);
+    qc.setQueryData(queries.boardKeys.detail(1), board);
+
+    fetchJsonSpy.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves — observe optimistic cache only */
+        }),
+    );
+
+    const { result } = renderHook(() => useReorderTasksInBand(), {
+      wrapper: createWrapper(qc),
+    });
+
+    void result.current.mutate({
+      boardId: 1,
+      listId: 1,
+      status: "open",
+      orderedTaskIds: [11, 10],
+    });
+
+    await waitFor(() => {
+      const next = qc.getQueryData<Board>(queries.boardKeys.detail(1));
+      const t10 = next?.tasks.find((t) => t.taskId === 10);
+      const t11 = next?.tasks.find((t) => t.taskId === 11);
+      // Optimistic path updates `order` per id; `tasks` array order is unchanged.
+      expect(t11?.order).toBe(0);
+      expect(t10?.order).toBe(1);
+    });
+  });
+
+  test("rolls back band order when the reorder request fails", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const board = boardWithTwoOpenTasks(1);
+    qc.setQueryData(queries.boardKeys.detail(1), board);
+
+    fetchJsonSpy.mockRejectedValue(new Error("network"));
+
+    const { result } = renderHook(() => useReorderTasksInBand(), {
+      wrapper: createWrapper(qc),
+    });
+
+    await expect(
+      result.current.mutateAsync({
+        boardId: 1,
+        listId: 1,
+        status: "open",
+        orderedTaskIds: [11, 10],
+      }),
+    ).rejects.toThrow(/network/);
+
+    await waitFor(() => {
+      expect(qc.getQueryData<Board>(queries.boardKeys.detail(1))?.tasks).toEqual(
+        board.tasks,
+      );
     });
   });
 });

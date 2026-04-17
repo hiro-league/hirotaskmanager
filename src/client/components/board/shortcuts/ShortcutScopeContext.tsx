@@ -1,7 +1,7 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -35,7 +35,7 @@ const ShortcutScopeContext = createContext<ShortcutScopeContextValue | null>(
 );
 
 export function useShortcutScope(): ShortcutScopeContextValue {
-  const ctx = useContext(ShortcutScopeContext);
+  const ctx = use(ShortcutScopeContext);
   if (!ctx) {
     throw new Error("useShortcutScope must be used within ShortcutScopeProvider");
   }
@@ -43,7 +43,7 @@ export function useShortcutScope(): ShortcutScopeContextValue {
 }
 
 export function useShortcutScopeOptional(): ShortcutScopeContextValue | null {
-  return useContext(ShortcutScopeContext);
+  return use(ShortcutScopeContext);
 }
 
 interface ProviderProps {

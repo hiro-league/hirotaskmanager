@@ -2,14 +2,14 @@ import {
   DragOverlay as ReactDragOverlay,
   DragDropProvider,
 } from "@dnd-kit/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Board } from "../../../../shared/models";
 import { AddListSlot } from "./BoardColumns";
 import { useAddListComposer } from "./useAddListComposer";
 import { BoardDragOverlayContent } from "../dnd/BoardDragOverlayContent";
 import { BoardListStackedColumn } from "./BoardListStackedColumn";
 import { boardColumnSpreadProps } from "../boardColumnData";
-import { stackedListContainerId } from "../dnd/dndIds";
+import { EMPTY_SORTABLE_IDS, stackedListContainerId } from "../dnd/dndIds";
 import { useBoardKeyboardNavOptional } from "../shortcuts/BoardKeyboardNavContext";
 import { useStackedBoardDnd } from "../dnd/useStackedBoardDnd";
 
@@ -21,6 +21,8 @@ interface BoardColumnsStackedProps {
 const STACKED_COLUMNS_INITIAL_MOUNT = 8;
 const STACKED_COLUMNS_IDLE_BATCH = 8;
 const STACKED_COLUMN_IDLE_TIMEOUT_MS = 2000;
+
+const DRAG_OVERLAY_STYLE = { zIndex: 60 } as const;
 
 function scheduleChunkedColumnMount(cb: () => void): number {
   if (typeof requestIdleCallback === "function") {
@@ -97,6 +99,21 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
       ? board.tasks.find((task) => task.taskId === activeTaskId)
       : undefined;
 
+  const stackedSortableByListId = useMemo(() => {
+    const m = new Map<number, string[]>();
+    for (const id of localListIds) {
+      const cid = stackedListContainerId(id);
+      m.set(id, displayTaskMap[cid] ?? EMPTY_SORTABLE_IDS);
+    }
+    return m;
+  }, [localListIds, displayTaskMap]);
+
+  /** O(1) list lookup vs `.find` inside flatMap (react-best-practices P4.2). */
+  const listsById = useMemo(
+    () => new Map(board.lists.map((l) => [l.listId, l] as const)),
+    [board.lists],
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <DragDropProvider
@@ -112,7 +129,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
           <div className="flex w-max min-w-full flex-row items-start gap-5 bg-transparent pb-1">
             <div className="flex flex-row items-start gap-4">
               {localListIds.flatMap((id, index) => {
-                const list = board.lists.find((l) => l.listId === id);
+                const list = listsById.get(id);
                 if (!list) return [];
                 const items: ReactNode[] = [];
                 if (index < mountedColumnCount) {
@@ -124,9 +141,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
                       listId={id}
                       listIndex={index}
                       taskContainerId={stackedListContainerId(id)}
-                      sortableIds={
-                        displayTaskMap[stackedListContainerId(id)] ?? []
-                      }
+                      sortableIds={stackedSortableByListId.get(id)!}
                       tasksByListStatus={tasksByListStatus}
                     />,
                   );
@@ -167,7 +182,7 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
             />
           </div>
         </div>
-        <ReactDragOverlay dropAnimation={null} style={{ zIndex: 60 }}>
+        <ReactDragOverlay dropAnimation={null} style={DRAG_OVERLAY_STYLE}>
           {overlayTask != null || activeListId != null ? (
             <BoardDragOverlayContent
               board={board}

@@ -173,17 +173,6 @@ boardListsRoute.get("/:id/lists", async (c) => {
   return c.json(paginateInMemory(ordered, page.offset, page.limit));
 });
 
-boardListsRoute.get("/:id/lists/:listId", async (c) => {
-  const entry = requireBoardEntry(c);
-  const listId = Number(c.req.param("listId"));
-  if (!Number.isFinite(listId)) {
-    return c.json({ error: "Invalid list id" }, 400);
-  }
-  const list = readListById(entry.boardId, listId);
-  if (!list) return c.json({ error: "List not found" }, 404);
-  return c.json(list);
-});
-
 boardListsRoute.patch("/:id/lists/:listId", async (c) => {
   const entry = requireBoardEntry(c);
   const listId = Number(c.req.param("listId"));

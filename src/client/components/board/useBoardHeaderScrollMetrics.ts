@@ -13,6 +13,7 @@ import {
   verticalScrollChainCanConsumeWheelWithin,
   wheelComposedPathIncludesModalSurface,
 } from "./boardSurfaceWheel";
+import { subscribeWindowResize } from "@/lib/useWindowResize";
 
 export interface BoardScrollMetrics {
   hasOverflow: boolean;
@@ -132,10 +133,7 @@ export function useBoardHeaderScrollMetrics({
     );
   }, [headerRef, scrollRef]);
 
-  useEffect(() => {
-    syncBoardScrollMetrics();
-  });
-
+  // Sync is driven by scroll/resize/RO below; avoid a no-deps effect that ran every commit (§2.1).
   useEffect(() => {
     syncBoardScrollMetrics();
     const scroller = scrollRef.current;
@@ -151,11 +149,11 @@ export function useBoardHeaderScrollMetrics({
     resizeObserver?.observe(scroller);
     if (content instanceof Element) resizeObserver?.observe(content);
 
-    window.addEventListener("resize", syncBoardScrollMetrics);
+    const unsubResize = subscribeWindowResize(syncBoardScrollMetrics);
     return () => {
       scroller.removeEventListener("scroll", onScroll);
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", syncBoardScrollMetrics);
+      unsubResize();
     };
   }, [boardId, scrollRef, syncBoardScrollMetrics, stackedLayout]);
 

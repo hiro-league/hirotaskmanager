@@ -392,6 +392,9 @@ export const useBoardFiltersStore = create<BoardFiltersState>()(
     }),
     {
       name: BOARD_FILTERS_STORAGE_KEY,
+      // Priority 3 (client-localstorage-schema): baseline version for future `migrate` steps.
+      version: 1,
+      migrate: (persistedState, _version) => persistedState as BoardFiltersState,
       partialize: (state) => ({
         activeTaskGroupIdsByBoardId: state.activeTaskGroupIdsByBoardId,
         activeTaskPriorityIdsByBoardId: state.activeTaskPriorityIdsByBoardId,

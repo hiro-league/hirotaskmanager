@@ -66,10 +66,14 @@ export function useCreateBoard() {
       });
     },
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: boardKeys.all, exact: true });
+      const optimisticId = tempNumericId();
+      // Parallel cancel (async-parallel): index + optimistic detail are independent.
+      await Promise.all([
+        qc.cancelQueries({ queryKey: boardKeys.all, exact: true }),
+        qc.cancelQueries({ queryKey: boardKeys.detail(optimisticId), exact: true }),
+      ]);
       const previous = qc.getQueryData<BoardIndexEntry[]>(boardKeys.all);
       const previousPath = window.location.pathname;
-      const optimisticId = tempNumericId();
       const name =
         typeof input.name === "string" && input.name.trim()
           ? input.name.trim()
@@ -166,7 +170,11 @@ export function usePatchBoard() {
       });
     },
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: boardKeys.all, exact: true });
+      // Parallel cancel (async-parallel): board list + detail are independent observers.
+      await Promise.all([
+        qc.cancelQueries({ queryKey: boardKeys.all, exact: true }),
+        qc.cancelQueries({ queryKey: boardKeys.detail(input.boardId), exact: true }),
+      ]);
       const prevList = qc.getQueryData<BoardIndexEntry[]>(boardKeys.all);
       const prevDetail = qc.getQueryData<Board>(boardKeys.detail(input.boardId));
       const trimmed =
@@ -372,8 +380,11 @@ export function useDeleteBoard() {
       if (!res.ok) throw new Error(await res.text());
     },
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: boardKeys.all, exact: true });
-      await qc.cancelQueries({ queryKey: boardKeys.detail(id), exact: true });
+      // Parallel cancel (Priority 3 — async-parallel); independent query cancellations.
+      await Promise.all([
+        qc.cancelQueries({ queryKey: boardKeys.all, exact: true }),
+        qc.cancelQueries({ queryKey: boardKeys.detail(id), exact: true }),
+      ]);
       const prevList = qc.getQueryData<BoardIndexEntry[]>(boardKeys.all);
       qc.setQueryData<BoardIndexEntry[]>(boardKeys.all, (old) =>
         (old ?? []).filter((e: BoardIndexEntry) => e.boardId !== id),

@@ -4,6 +4,7 @@ import NumberFlow, {
 } from "@number-flow/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { TaskCountStat } from "../../../../shared/boardStats";
+import { formatInteger } from "@/lib/intlNumberFormat";
 import { cn } from "@/lib/utils";
 
 /** Low-saturation chip fills so T/O/C read as soft status tints, not full banners. */
@@ -121,7 +122,7 @@ function StatChip({
         // @number-flow/react: flowValue drives both entry (0→n after spinner) and later updates.
         <span
           className="inline-flex min-w-[1.25rem] justify-end [font-variant-numeric:tabular-nums]"
-          aria-label={`${valueTitle}: ${value}`}
+          aria-label={`${valueTitle}: ${formatInteger(value)}`}
         >
           <NumberFlow
             value={flowValue}

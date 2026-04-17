@@ -35,7 +35,7 @@ export const VOICE_CLIP_WEIGHT = 0.18;
 
 /**
  * Partycles animation keys used for completions — order must match
- * `rewardControllers` in `BoardTaskCompletionCelebrationContext.tsx`.
+ * `rewardControllers` in `BoardTaskCompletionCelebrationRewards.tsx`.
  * Indices 0–2: ~90% combined (30% each). Indices 3–10: ~10% combined (rare variety).
  */
 export const COMPLETION_PARTYCLES_ANIMATIONS = [

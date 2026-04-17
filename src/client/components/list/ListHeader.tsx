@@ -237,6 +237,8 @@ export function ListHeader({
             </span>
           ) : null}
           <input
+            autoComplete="off"
+            spellCheck={false}
             autoFocus
             className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-sm text-foreground select-text"
             value={editValue}

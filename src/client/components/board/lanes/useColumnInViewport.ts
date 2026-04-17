@@ -1,6 +1,6 @@
 import {
   createContext,
-  useContext,
+  use,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -70,7 +70,7 @@ export const BoardScrollRootContext = createContext<
 export function useColumnInViewport(
   enabled = true,
 ): { columnRef: React.RefObject<HTMLDivElement | null>; inViewport: boolean } {
-  const scrollRootRef = useContext(BoardScrollRootContext);
+  const scrollRootRef = use(BoardScrollRootContext);
   const columnRef = useRef<HTMLDivElement | null>(null);
   // Start false so the first commit does not mount ListStackedBody everywhere;
   // useLayoutEffect + IntersectionObserver promote when near the scrollport.

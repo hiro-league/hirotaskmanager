@@ -60,6 +60,16 @@ Use this to inspect tasks on a board and narrow the result set before mutation.
 - `--fields <keys>`: project only selected fields.
 - Supports global `--quiet` with `--format ndjson`.
 
+### `tasks show`
+
+Format:
+
+```bash
+hirotm tasks show <task-id> [--fields <keys>]
+```
+
+Print one task by global numeric id (`GET /api/tasks/:taskId`). The server resolves which board the task belongs to and enforces CLI policy for that board (`readBoard`).
+
 ### `tasks add`
 
 Format:

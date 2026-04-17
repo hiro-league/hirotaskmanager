@@ -1,5 +1,5 @@
 import { LayoutGrid } from "lucide-react";
-import { useMemo } from "react";
+import { startTransition } from "react";
 import type { Board } from "../../../../shared/models";
 import {
   getNextTaskCardViewMode,
@@ -23,9 +23,8 @@ export function BoardTaskCardSizeToggle({
     (s) => s.setTaskCardViewModeForBoard,
   );
 
-  const nextSize = useMemo(() => {
-    return getNextTaskCardViewMode(viewMode);
-  }, [viewMode]);
+  // Trivial pure call — useMemo cost > work (react-best-practices-review §2.8).
+  const nextSize = getNextTaskCardViewMode(viewMode);
 
   return (
     <button
@@ -37,7 +36,11 @@ export function BoardTaskCardSizeToggle({
       title="Card Size (s)"
       aria-label={`Task card size ${TASK_CARD_VIEW_MODE_LABELS[viewMode]}. Click or press S for ${TASK_CARD_VIEW_MODE_LABELS[nextSize]}.`}
       // Keep the board-local mode in one place so the button and shortcut stay in sync.
-      onClick={() => setTaskCardViewModeForBoard(board.boardId, nextSize)}
+      onClick={() =>
+        startTransition(() =>
+          setTaskCardViewModeForBoard(board.boardId, nextSize),
+        )
+      }
     >
       <LayoutGrid className="size-3.5 shrink-0" aria-hidden />
       <span className="inline-block min-w-[1.75rem] text-center text-xs font-semibold tabular-nums leading-none">

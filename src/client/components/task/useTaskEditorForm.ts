@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   effectiveDefaultTaskGroupId,
   noneTaskPriorityId,
@@ -9,7 +8,7 @@ import {
 import { normalizeStoredTaskTitle } from "../../../shared/taskTitle";
 import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
 import { useCreateTask, useUpdateTask } from "@/api/mutations";
-import { boardTaskDetailKey, fetchBoardTask } from "@/api/queries";
+import { useBoardTaskDetail } from "@/api/useBoardTaskDetail";
 
 // Release select values mirror API omit vs null vs id (see task create contract in server routes).
 /** Create: omit `releaseId` in API body so server can auto-assign from board rules. */
@@ -46,9 +45,7 @@ export function useTaskEditorForm({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
-  const taskDetailQuery = useQuery({
-    queryKey: boardTaskDetailKey(board.boardId, task?.taskId ?? 0),
-    queryFn: () => fetchBoardTask(board.boardId, task!.taskId),
+  const taskDetailQuery = useBoardTaskDetail(board.boardId, task?.taskId, {
     enabled: open && mode === "edit" && task != null,
   });
 

@@ -2,6 +2,7 @@
  * Shared "validate fields → parse limit/offset → single page or page-all → project → print"
  * for list-style reads (see docs/cli-architecture-review.md §2).
  */
+import type { PaginatedListBody } from "../../../shared/pagination";
 import {
   parseLimitOption,
   parseOptionalListLimit,
@@ -11,12 +12,13 @@ import {
   resolveQuietExplicitField,
 } from "../core/command-helpers";
 import { CLI_DEFAULTS } from "../core/constants";
+import { CLI_ERR } from "../../types/errors";
 import { fetchAllPages } from "./paginatedFetch";
 import {
   parseAndValidateFields,
   projectPaginatedItems,
 } from "../core/jsonFieldProjection";
-import { printPaginatedListRead } from "../output/output";
+import { CliError, printCountOnly, printPaginatedListRead } from "../output/output";
 import type {
   PaginatedListReadCliOptions,
   PaginatedListReadSpec,
@@ -30,10 +32,58 @@ export type {
   SearchPaginatedSpec,
 } from "../../types/options";
 
+function assertCountOnlyExclusive(
+  options: PaginatedListReadCliOptions,
+): void {
+  if (options.countOnly !== true) {
+    return;
+  }
+  if (options.pageAll === true) {
+    throw new CliError("--count-only cannot be combined with --page-all", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+  if (options.limit != null && options.limit !== "") {
+    throw new CliError("--count-only cannot be combined with --limit", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+  if (options.offset != null && options.offset !== "") {
+    throw new CliError("--count-only cannot be combined with --offset", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+  if (options.fields != null && options.fields.trim() !== "") {
+    throw new CliError("--count-only cannot be combined with --fields", 2, {
+      code: CLI_ERR.invalidValue,
+    });
+  }
+}
+
 export async function executePaginatedListRead<T extends object>(
   spec: PaginatedListReadSpec<T>,
   options: PaginatedListReadCliOptions,
 ): Promise<void> {
+  assertCountOnlyExclusive(options);
+  if (options.countOnly === true) {
+    requireNdjsonWhenQuiet();
+    const { fetchPage } = spec;
+    let body: PaginatedListBody<T>;
+    if (spec.kind === "optionalLimit") {
+      const { basePath, extraParams } = spec;
+      const q =
+        extraParams != null
+          ? new URLSearchParams(extraParams)
+          : new URLSearchParams();
+      q.set("limit", "0");
+      body = await fetchPage(`${basePath}?${q.toString()}`);
+    } else {
+      body = await fetchPage(spec.buildPath(0, 0));
+    }
+    printCountOnly(body.total);
+    return;
+  }
+
   const fieldKeys = parseAndValidateFields(
     options.fields,
     spec.fieldAllowlist,

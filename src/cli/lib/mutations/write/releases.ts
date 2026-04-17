@@ -58,6 +58,7 @@ export async function runReleasesList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -82,6 +83,7 @@ export async function runReleasesList(
       limit: opts.limit,
       offset: opts.offset,
       pageAll: opts.pageAll,
+      countOnly: opts.countOnly,
       fields: opts.fields,
     },
   );

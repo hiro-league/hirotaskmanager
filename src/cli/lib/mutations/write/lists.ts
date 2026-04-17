@@ -13,13 +13,39 @@ import { COLUMNS_LISTS_LIST, QUIET_DEFAULT_LIST } from "../../core/listTableSpec
 import { executePaginatedListRead } from "../../client/paginatedListRead";
 import { CliError } from "../../output/output";
 import { assertMutuallyExclusive } from "../../core/validation";
-import { parsePositiveInt } from "./helpers";
+import {
+  formatResolvedBoardRef,
+  parsePositiveInt,
+  resolveListBoardRef,
+} from "./helpers";
 import {
   compactListEntity,
   trashedEntity,
   writeSuccess,
   writeTrashMove,
 } from "../write-result";
+
+type ResolvedMutationBoard = {
+  boardKey: string;
+  boardLabel: string;
+};
+
+async function resolveListMutationBoard(
+  ctx: Pick<CliContext, "fetchApi">,
+  board: string | undefined,
+  listId: number,
+  port: number | undefined,
+): Promise<ResolvedMutationBoard> {
+  const boardId = board?.trim();
+  if (boardId) {
+    return { boardKey: boardId, boardLabel: boardId };
+  }
+  const resolved = await resolveListBoardRef(ctx, listId, port);
+  return {
+    boardKey: String(resolved.boardId),
+    boardLabel: formatResolvedBoardRef(resolved),
+  };
+}
 
 export async function runListsList(
   ctx: CliContext,
@@ -29,6 +55,7 @@ export async function runListsList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -53,6 +80,7 @@ export async function runListsList(
       limit: opts.limit,
       offset: opts.offset,
       pageAll: opts.pageAll,
+      countOnly: opts.countOnly,
       fields: opts.fields,
     },
   );
@@ -114,12 +142,6 @@ export async function runListsUpdate(
     clearEmoji?: boolean;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const listId = parsePositiveInt("listId", opts.listId);
   if (listId === undefined) {
     throw new CliError("Invalid list id", 2, {
@@ -148,9 +170,17 @@ export async function runListsUpdate(
     });
   }
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveListMutationBoard(
+      ctx,
+      opts.board,
+      listId,
+      opts.port,
+    );
+    boardContext = resolvedBoard.boardLabel;
     const result = await ctx.fetchApiMutate<ListMutationResult>(
-      `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/lists/${listId}`,
       { method: "PATCH", body: patch },
       { port: opts.port },
     );
@@ -165,7 +195,7 @@ export async function runListsUpdate(
       ),
     );
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, listId });
+    enrichNotFoundError(e, { board: boardContext, listId });
   }
 }
 
@@ -177,12 +207,6 @@ export async function runListsDelete(
     listId: string | undefined;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const listId = parsePositiveInt("listId", opts.listId);
   if (listId === undefined) {
     throw new CliError("Invalid list id", 2, {
@@ -191,9 +215,17 @@ export async function runListsDelete(
     });
   }
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveListMutationBoard(
+      ctx,
+      opts.board,
+      listId,
+      opts.port,
+    );
+    boardContext = resolvedBoard.boardLabel;
     const result = await ctx.fetchApiMutate<ListDeleteMutationResult>(
-      `/boards/${encodeURIComponent(boardId)}/lists/${listId}`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/lists/${listId}`,
       { method: "DELETE" },
       { port: opts.port },
     );
@@ -208,7 +240,7 @@ export async function runListsDelete(
       ),
     );
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, listId });
+    enrichNotFoundError(e, { board: boardContext, listId });
   }
 }
 
@@ -224,12 +256,6 @@ export async function runListsMove(
     last?: boolean;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const listId = parsePositiveInt("listId", opts.listId);
   if (listId === undefined) {
     throw new CliError("Invalid list id", 2, {
@@ -253,9 +279,17 @@ export async function runListsMove(
     );
   }
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveListMutationBoard(
+      ctx,
+      opts.board,
+      listId,
+      opts.port,
+    );
+    boardContext = resolvedBoard.boardLabel;
     const board = await ctx.fetchApiMutate<Board>(
-      `/boards/${encodeURIComponent(boardId)}/lists/move`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/lists/move`,
       {
         method: "PUT",
         body: {
@@ -271,12 +305,12 @@ export async function runListsMove(
     if (!moved) {
       throw new CliError("Moved list missing from board", 1, {
         code: CLI_ERR.responseInconsistent,
-        board: boardId,
+        board: boardContext,
         listId,
       });
     }
     ctx.printJson(writeSuccess(board, compactListEntity(moved)));
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, listId });
+    enrichNotFoundError(e, { board: boardContext, listId });
   }
 }

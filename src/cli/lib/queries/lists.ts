@@ -1,4 +1,4 @@
-import type { List } from "../../../shared/models";
+import type { ListWithBoard } from "../../../shared/models";
 import { CLI_ERR } from "../../types/errors";
 import {
   FIELDS_LIST,
@@ -26,6 +26,6 @@ export async function runListsShow(
       listId: listIdRaw,
     });
   }
-  const list = await ctx.fetchApi<List>(`/lists/${listId}`, { port });
+  const list = await ctx.fetchApi<ListWithBoard>(`/lists/${listId}`, { port });
   ctx.printJson(fieldKeys?.length ? projectRecord(list, fieldKeys) : list);
 }

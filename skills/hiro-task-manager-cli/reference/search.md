@@ -9,7 +9,7 @@ Use `hirotm query search` for full-text task search across indexed task fields s
 Format:
 
 ```bash
-hirotm query search <query...> [--board <id-or-slug>] [--limit <n>] [--offset <n>] [--page-all] [--no-prefix] [--fields <keys>]
+hirotm query search <query...> [--board <id-or-slug>] [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--no-prefix] [--fields <keys>]
 ```
 
 Search tasks by text.
@@ -19,6 +19,7 @@ Search tasks by text.
 - `--limit <n>`: page size. Defaults to `20` when omitted.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
+- `--count-only`: return only the total matching row count.
 - `--no-prefix`: disable automatic prefix matching on the last token.
 - `--fields <keys>`: project only selected fields.
 - Supports global `--quiet` with `--format ndjson`.

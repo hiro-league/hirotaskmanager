@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PaginatedListBody } from "../../shared/pagination";
-import type { BoardIndexEntry, Task } from "../../shared/models";
+import type { BoardIndexEntry, TaskWithBoard } from "../../shared/models";
 import { RELEASE_FILTER_UNTAGGED } from "../../shared/boardFilters";
 import type { BoardDescribeResponse } from "../../shared/boardDescribe";
 import { CLI_DEFAULTS } from "../lib/core/constants";
@@ -436,7 +436,7 @@ describe("handleBoardsTasks", () => {
   });
 
   test("builds query string for filters", async () => {
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [],
       total: 0,
       limit: 0,
@@ -477,7 +477,7 @@ describe("handleBoardsTasks", () => {
   });
 
   test("repeated releaseId and group append params", async () => {
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [],
       total: 0,
       limit: 0,
@@ -503,8 +503,10 @@ describe("handleBoardsTasks", () => {
 
   test("NDJSON prints one task JSON per line", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
-    const task: Task = {
+    const task: TaskWithBoard = {
       taskId: 1,
+      boardId: 1,
+      boardSlug: "alpha",
       listId: 1,
       groupId: 1,
       title: "T",
@@ -515,7 +517,7 @@ describe("handleBoardsTasks", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [task],
       total: 1,
       limit: 1,
@@ -535,8 +537,10 @@ describe("handleBoardsTasks", () => {
 
   test("--format human — task table columns", async () => {
     syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
-    const task: Task = {
+    const task: TaskWithBoard = {
       taskId: 1,
+      boardId: 1,
+      boardSlug: "alpha",
       listId: 1,
       groupId: 1,
       title: "T",
@@ -547,7 +551,7 @@ describe("handleBoardsTasks", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [task],
       total: 1,
       limit: 1,
@@ -566,8 +570,10 @@ describe("handleBoardsTasks", () => {
 
   test("--quiet — taskId per line", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
-    const task: Task = {
+    const task: TaskWithBoard = {
       taskId: 42,
+      boardId: 1,
+      boardSlug: "alpha",
       listId: 1,
       groupId: 1,
       title: "T",
@@ -578,7 +584,7 @@ describe("handleBoardsTasks", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [task],
       total: 1,
       limit: 1,
@@ -595,8 +601,10 @@ describe("handleBoardsTasks", () => {
 
   test("--fields taskId,title — projected", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
-    const task: Task = {
+    const task: TaskWithBoard = {
       taskId: 1,
+      boardId: 1,
+      boardSlug: "alpha",
       listId: 9,
       groupId: 1,
       title: "T",
@@ -607,7 +615,7 @@ describe("handleBoardsTasks", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const envelope: PaginatedListBody<Task> = {
+    const envelope: PaginatedListBody<TaskWithBoard> = {
       items: [task],
       total: 1,
       limit: 1,
@@ -625,11 +633,52 @@ describe("handleBoardsTasks", () => {
     expect(Object.keys(row).sort()).toEqual(["taskId", "title"]);
   });
 
+  test("--fields taskId,boardId,boardSlug,title — projected", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    const task: TaskWithBoard = {
+      taskId: 1,
+      boardId: 1,
+      boardSlug: "alpha",
+      listId: 9,
+      groupId: 1,
+      title: "T",
+      body: "x",
+      priorityId: 1,
+      status: "open",
+      order: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const envelope: PaginatedListBody<TaskWithBoard> = {
+      items: [task],
+      total: 1,
+      limit: 1,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async () => envelope) as CliContext["fetchApi"],
+    });
+
+    const out = await captureStdout(() =>
+      handleBoardsTasks(ctx, "b", { fields: "taskId,boardId,boardSlug,title" }),
+    );
+
+    const row = JSON.parse(out.trim()) as Record<string, unknown>;
+    expect(row).toEqual({
+      taskId: 1,
+      boardId: 1,
+      boardSlug: "alpha",
+      title: "T",
+    });
+  });
+
   test("--page-all merges pages", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
     let call = 0;
-    const mkTask = (id: number): Task => ({
+    const mkTask = (id: number): TaskWithBoard => ({
       taskId: id,
+      boardId: 1,
+      boardSlug: "alpha",
       listId: 1,
       groupId: 1,
       title: "T",
@@ -648,14 +697,14 @@ describe("handleBoardsTasks", () => {
             total: 2,
             limit: 2,
             offset: 0,
-          } satisfies PaginatedListBody<Task>;
+          } satisfies PaginatedListBody<TaskWithBoard>;
         }
         return {
           items: [mkTask(2)],
           total: 2,
           limit: 2,
           offset: 0,
-        } satisfies PaginatedListBody<Task>;
+        } satisfies PaginatedListBody<TaskWithBoard>;
       }) as CliContext["fetchApi"],
     });
 

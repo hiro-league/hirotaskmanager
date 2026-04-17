@@ -339,9 +339,24 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     expect(p.entity.type).toBe("list");
   });
 
-  test("runListsUpdate PATCHes list name", async () => {
+  test("runListsUpdate resolves board then PATCHes list name", async () => {
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/b1/lists/2");
+      const url = reqUrl(input);
+      if (url.includes("/api/lists/2")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            listId: 2,
+            boardId: 1,
+            boardSlug: "b1",
+            name: "Inbox",
+            order: 1,
+            emoji: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/lists/2");
       expect(init?.method).toBe("PATCH");
       const body = JSON.parse(String(init?.body));
       expect(body.name).toBe("Renamed");
@@ -358,7 +373,6 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     const out = await captureStdout(() =>
       runListsUpdate(ctx, {
         port: 22011,
-        board: "b1",
         listId: "2",
         name: "Renamed",
       }),
@@ -366,9 +380,24 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
   });
 
-  test("runListsDelete DELETEs and prints trash envelope", async () => {
+  test("runListsDelete resolves board then DELETEs and prints trash envelope", async () => {
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/b1/lists/3");
+      const url = reqUrl(input);
+      if (url.includes("/api/lists/3")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            listId: 3,
+            boardId: 1,
+            boardSlug: "b1",
+            name: "Backlog",
+            order: 0,
+            emoji: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/lists/3");
       expect(init?.method).toBe("DELETE");
       return new Response(
         JSON.stringify({
@@ -381,13 +410,13 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runListsDelete(ctx, { port: 22012, board: "b1", listId: "3" }),
+      runListsDelete(ctx, { port: 22012, listId: "3" }),
     );
     const p = JSON.parse(out.trim()) as { trashed: { type: string } };
     expect(p.trashed.type).toBe("list");
   });
 
-  test("runListsMove PUTs reorder body", async () => {
+  test("runListsMove resolves board then PUTs reorder body", async () => {
     const board = jsonBoard({
       boardId: 1,
       slug: "b",
@@ -395,7 +424,22 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       lists: [{ listId: 5, name: "L", order: 0, emoji: null }],
     });
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/b/lists/move");
+      const url = reqUrl(input);
+      if (url.includes("/api/lists/5")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            listId: 5,
+            boardId: 1,
+            boardSlug: "b",
+            name: "L",
+            order: 0,
+            emoji: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/lists/move");
       expect(init?.method).toBe("PUT");
       const body = JSON.parse(String(init?.body));
       expect(body.listId).toBe(5);
@@ -408,7 +452,6 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     const out = await captureStdout(() =>
       runListsMove(ctx, {
         port: 22013,
-        board: "b",
         listId: "5",
         first: true,
       }),
@@ -457,9 +500,30 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true, entity: { type: "task" } });
   });
 
-  test("runTasksUpdate PATCHes title", async () => {
+  test("runTasksUpdate resolves board then PATCHes title", async () => {
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/brd/tasks/9");
+      const url = reqUrl(input);
+      if (url.includes("/api/tasks/9") && !url.includes("/boards/")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            taskId: 9,
+            boardId: 1,
+            boardSlug: "brd",
+            listId: 1,
+            groupId: 1,
+            title: "Old",
+            body: "",
+            priorityId: 1,
+            status: "open",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/tasks/9");
       expect(init?.method).toBe("PATCH");
       expect(JSON.parse(String(init?.body))).toMatchObject({ title: "New" });
       return new Response(
@@ -486,7 +550,6 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     const out = await captureStdout(() =>
       runTasksUpdate(ctx, {
         port: 22015,
-        board: "brd",
         taskId: "9",
         title: "New",
       }),
@@ -494,9 +557,30 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     expect(JSON.parse(out.trim())).toMatchObject({ ok: true });
   });
 
-  test("runTasksDelete DELETEs and prints trash envelope", async () => {
+  test("runTasksDelete resolves board then DELETEs and prints trash envelope", async () => {
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/brd/tasks/8");
+      const url = reqUrl(input);
+      if (url.includes("/api/tasks/8") && !url.includes("/boards/")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            taskId: 8,
+            boardId: 1,
+            boardSlug: "brd",
+            listId: 1,
+            groupId: 1,
+            title: "Trash me",
+            body: "",
+            priorityId: 1,
+            status: "open",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/tasks/8");
       expect(init?.method).toBe("DELETE");
       return new Response(
         JSON.stringify({
@@ -509,14 +593,14 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       );
     });
     const out = await captureStdout(() =>
-      runTasksDelete(ctx, { port: 22016, board: "brd", taskId: "8" }),
+      runTasksDelete(ctx, { port: 22016, taskId: "8" }),
     );
     expect(JSON.parse(out.trim())).toMatchObject({
       trashed: { type: "task" },
     });
   });
 
-  test("runTasksMove PUTs move body", async () => {
+  test("runTasksMove resolves board then PUTs move body", async () => {
     const board = jsonBoard({
       boardId: 1,
       slug: "brd",
@@ -537,7 +621,28 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
       ],
     });
     setMockFetch(async (input, init) => {
-      expect(reqUrl(input)).toContain("/api/boards/brd/tasks/move");
+      const url = reqUrl(input);
+      if (url.includes("/api/tasks/7") && !url.includes("/boards/")) {
+        expect(!init?.method || init.method === "GET").toBe(true);
+        return new Response(
+          JSON.stringify({
+            taskId: 7,
+            boardId: 1,
+            boardSlug: "brd",
+            listId: 2,
+            groupId: 1,
+            title: "T",
+            body: "",
+            priorityId: 1,
+            status: "open",
+            order: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      expect(url).toContain("/api/boards/1/tasks/move");
       expect(init?.method).toBe("PUT");
       const body = JSON.parse(String(init?.body));
       expect(body.taskId).toBe(7);
@@ -550,7 +655,6 @@ describe("writeCommands breadth — mock fetch happy paths", () => {
     const out = await captureStdout(() =>
       runTasksMove(ctx, {
         port: 22017,
-        board: "brd",
         taskId: "7",
         toList: "2",
       }),

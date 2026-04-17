@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { CLI_ERR } from "../../types/errors";
-import { enrichNotFoundError, mapHttpStatusToCliFailure } from "./cli-http-errors";
+import {
+  apiPathFromRequestUrl,
+  buildHttpFailureHint,
+  enrichNotFoundError,
+  mapHttpStatusToCliFailure,
+} from "./cli-http-errors";
 import { CliError } from "../output/output";
 
 describe("mapHttpStatusToCliFailure", () => {
@@ -56,6 +61,46 @@ describe("mapHttpStatusToCliFailure", () => {
       status: 404,
     } as Record<string, unknown>);
     expect(details.serverCode).toBeUndefined();
+  });
+
+  test("preserves server-provided hint when present", () => {
+    const { details } = mapHttpStatusToCliFailure(404, {
+      status: 404,
+      url: "http://127.0.0.1:1/api/boards/x",
+      hint: "Custom from API",
+    });
+    expect(details.hint).toBe("Custom from API");
+  });
+});
+
+describe("apiPathFromRequestUrl", () => {
+  test("strips /api prefix from full URL", () => {
+    expect(
+      apiPathFromRequestUrl("http://127.0.0.1:3000/api/boards/a"),
+    ).toBe("/boards/a");
+  });
+
+  test("empty on invalid url", () => {
+    expect(apiPathFromRequestUrl("not-a-url")).toBe("");
+  });
+});
+
+describe("buildHttpFailureHint", () => {
+  test("404 boards path mentions boards list/describe", () => {
+    const h = buildHttpFailureHint(404, "/boards/foo");
+    expect(h).toContain("boards list");
+    expect(h).toContain("describe");
+  });
+
+  test("404 unknown path uses generic not_found hint", () => {
+    const h = buildHttpFailureHint(404, "/unknown");
+    expect(h.toLowerCase()).toContain("verify");
+  });
+
+  test("400 tasks path mentions tasks help", () => {
+    const h = buildHttpFailureHint(400, "/tasks/9");
+    expect(h).toContain("tasks");
+    expect(h).toContain("help");
   });
 });
 

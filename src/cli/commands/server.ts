@@ -6,6 +6,12 @@ import {
   handleServerStop,
 } from "../handlers/server";
 import { addClientNameOption, addDevOption, addProfileOption, cliAction } from "../lib/core/command-helpers";
+import {
+  HELP_AFTER_SERVER_GROUP,
+  HELP_AFTER_SERVER_START,
+  HELP_AFTER_SERVER_STATUS,
+  HELP_AFTER_SERVER_STOP,
+} from "../lib/core/cliCommandHelp";
 
 export function registerServerCommands(
   program: Command,
@@ -13,7 +19,8 @@ export function registerServerCommands(
 ): void {
   const server = program
     .command("server")
-    .description("Start, stop, or inspect the local TaskManager server");
+    .description("Start, stop, or inspect the local TaskManager server")
+    .addHelpText("after", HELP_AFTER_SERVER_GROUP);
 
   addDevOption(
     addProfileOption(
@@ -22,7 +29,8 @@ export function registerServerCommands(
         .description("Start the local TaskManager server")
         .option("-b, --background", "Optional alias for the default background start")
         .option("--foreground", "Run the server in the foreground")
-        .option("--data-dir <path>", "Override the task data directory"),
+        .option("--data-dir <path>", "Override the task data directory")
+        .addHelpText("after", HELP_AFTER_SERVER_START),
     ),
   ).action(
     cliAction((options: {
@@ -37,7 +45,8 @@ export function registerServerCommands(
       addClientNameOption(
         server
           .command("status")
-          .description("Show whether the local TaskManager server is running"),
+          .description("Show whether the local TaskManager server is running")
+          .addHelpText("after", HELP_AFTER_SERVER_STATUS),
       ),
     ),
   ).action(cliAction(() => handleServerStatus(ctx)));
@@ -49,7 +58,8 @@ export function registerServerCommands(
           .command("stop")
           .description(
             "Stop a background server started by hirotm (uses CLI pid file)",
-          ),
+          )
+          .addHelpText("after", HELP_AFTER_SERVER_STOP),
       ),
     ),
   ).action(cliAction(() => handleServerStop(ctx)));

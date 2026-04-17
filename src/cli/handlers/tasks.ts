@@ -1,4 +1,8 @@
 import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import {
+  dryRunTasksDelete,
+  dryRunTasksPurge,
+} from "../lib/mutations/dryRun/trashEntityDryRun";
 import { runTasksShow } from "../lib/queries/tasks";
 import { runTasksPurge, runTasksRestore } from "../lib/trash/trashCommands";
 import {
@@ -7,6 +11,11 @@ import {
   runTasksMove,
   runTasksUpdate,
 } from "../lib/mutations/writeCommands";
+import {
+  formatResolvedBoardRef,
+  parseTaskId,
+  resolveTaskBoardRef,
+} from "../lib/mutations/write/helpers";
 import type { CliContext } from "./context";
 
 export async function handleTasksShow(
@@ -58,7 +67,6 @@ export async function handleTasksUpdate(
   ctx: CliContext,
   taskId: string,
   options: {
-    board: string;
     title?: string;
     body?: string;
     bodyFile?: string;
@@ -78,7 +86,6 @@ export async function handleTasksUpdate(
   const port = ctx.resolvePort();
   await runTasksUpdate(ctx, {
     port,
-    board: options.board,
     taskId,
     title: options.title,
     body: options.body,
@@ -100,19 +107,29 @@ export async function handleTasksUpdate(
 export async function handleTasksDelete(
   ctx: CliContext,
   taskId: string,
-  options: { board: string; yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  const resolvedBoard = await resolveTaskBoardRef(ctx, parseTaskId(taskId), port);
+  const boardLabel = formatResolvedBoardRef(resolvedBoard);
+  if (options.dryRun === true) {
+    await dryRunTasksDelete(ctx, {
+      port,
+      board: String(resolvedBoard.boardId),
+      taskId,
+    });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
-      `tasks delete: move task ${taskId} on board "${options.board}" to Trash.`,
+      `tasks delete: move task ${taskId} on board "${boardLabel}" to Trash.`,
       "Restore later with: hirotm tasks restore <task-id>",
     ],
   });
   await runTasksDelete(ctx, {
     port,
-    board: options.board,
+    board: String(resolvedBoard.boardId),
     taskId,
   });
 }
@@ -135,9 +152,13 @@ export async function handleTasksRestore(
 export async function handleTasksPurge(
   ctx: CliContext,
   taskId: string,
-  options: { yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunTasksPurge(ctx, { port, taskId });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -152,7 +173,6 @@ export async function handleTasksMove(
   ctx: CliContext,
   taskId: string,
   options: {
-    board: string;
     toList: string;
     toStatus?: string;
     beforeTask?: string;
@@ -164,7 +184,6 @@ export async function handleTasksMove(
   const port = ctx.resolvePort();
   await runTasksMove(ctx, {
     port,
-    board: options.board,
     taskId,
     toList: options.toList,
     toStatus: options.toStatus,

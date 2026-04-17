@@ -6,6 +6,7 @@ import {
   CLI_FIELDS_OPTION_DESC,
   cliAction,
 } from "../lib/core/command-helpers";
+import { HELP_AFTER_STATUSES_LIST } from "../lib/core/cliCommandHelp";
 
 export function registerStatusCommands(
   program: Command,
@@ -13,13 +14,15 @@ export function registerStatusCommands(
 ): void {
   const statusesCommand = program
     .command("statuses")
-    .description("Inspect workflow statuses");
+    .description("Inspect workflow statuses")
+    .addHelpText("after", HELP_AFTER_STATUSES_LIST);
 
   addClientNameOption(
     statusesCommand
       .command("list")
       .description("List all statuses")
-      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC)
+      .addHelpText("after", HELP_AFTER_STATUSES_LIST),
   ).action(
     cliAction((options: { fields?: string }) =>
       handleStatusesList(ctx, options),

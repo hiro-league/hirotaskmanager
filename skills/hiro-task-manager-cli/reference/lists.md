@@ -1,11 +1,11 @@
 # Lists Commands
 
-Use `hirotm lists` to inspect and manage board columns. Lists belong to a board, so most commands require `--board <id-or-slug>`.
+Use `hirotm lists` to inspect and manage board columns. **`lists list`** and **`lists add`** require `--board`. **`lists show`**, **`lists update`**, **`lists move`**, and **`lists delete`** take a global list id only; the CLI resolves the board from that id.
 
 ## Shared arguments
 
-- `--board <id-or-slug>`: target board id or slug.
-- `<list-id>`: numeric list id.
+- `--board <id-or-slug>`: target board id or slug (required for `lists list` and `lists add` only).
+- `<list-id>`: numeric global list id.
 - `--yes`: use for non-interactive delete, restore, and purge commands.
 
 ### Position flags
@@ -24,7 +24,7 @@ Used by `lists move`. Pass exactly one.
 Format:
 
 ```bash
-hirotm lists list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm lists list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 Use this to discover lists on a board before mutation.
@@ -32,7 +32,8 @@ Use this to discover lists on a board before mutation.
 - `--limit <n>`: page size.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
-- `--fields <keys>`: project only selected fields.
+- `--count-only`: return only the total matching row count.
+- `--fields <keys>`: project only selected fields (allowlist includes e.g. `boardId`, `boardSlug` alongside list fields).
 - Supports global `--quiet` with `--format ndjson`.
 
 ### `lists show`
@@ -43,7 +44,7 @@ Format:
 hirotm lists show <list-id> [--fields <keys>]
 ```
 
-Print one list by global numeric id (`GET /api/lists/:listId`). The server resolves which board the list belongs to and enforces CLI policy for that board (`readBoard`).
+Print one list by global numeric id
 
 ### `lists add`
 
@@ -63,7 +64,7 @@ Create a new list on a board.
 Format:
 
 ```bash
-hirotm lists update --board <id-or-slug> <list-id> [--name <text>] [--color <css> | --clear-color] [--emoji <text> | --clear-emoji]
+hirotm lists update <list-id> [--name <text>] [--color <css> | --clear-color] [--emoji <text> | --clear-emoji]
 ```
 
 Update list fields. Pass at least one change.
@@ -78,7 +79,7 @@ Update list fields. Pass at least one change.
 Format:
 
 ```bash
-hirotm lists move --board <id-or-slug> <list-id> [--before <list-id> | --after <list-id> | --first | --last]
+hirotm lists move <list-id> [--before <list-id> | --after <list-id> | --first | --last]
 ```
 
 Reorder a list within a board.
@@ -90,10 +91,12 @@ Reorder a list within a board.
 Format:
 
 ```bash
-hirotm lists delete --board <id-or-slug> <list-id> --yes
+hirotm lists delete <list-id> [--dry-run] --yes
 ```
 
 Move a list to Trash.
+
+- `--dry-run`: preview the planned request without mutating data.
 
 ### `lists restore`
 
@@ -110,7 +113,9 @@ Restore a trashed list.
 Format:
 
 ```bash
-hirotm lists purge <list-id> --yes
+hirotm lists purge <list-id> [--dry-run] --yes
 ```
 
 Permanently delete a trashed list. This is irreversible.
+
+- `--dry-run`: preview the planned request without mutating data.

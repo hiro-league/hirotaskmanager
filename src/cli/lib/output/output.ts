@@ -67,6 +67,19 @@ export function printQuietListLines(
   }
 }
 
+/** Single total for `--count-only` list/search reads. */
+export function printCountOnly(total: number): void {
+  if (getCliQuiet()) {
+    process.stdout.write(`${total}\n`);
+    return;
+  }
+  if (getCliOutputFormat() === "ndjson") {
+    process.stdout.write(`${JSON.stringify({ count: total })}\n`);
+    return;
+  }
+  process.stdout.write(`count ${total}\n`);
+}
+
 /** Paginated list read: NDJSON lines, `--quiet` lines, or fixed-width table + paging footer. */
 export function printPaginatedListRead<T>(
   body: PaginatedListBody<T>,

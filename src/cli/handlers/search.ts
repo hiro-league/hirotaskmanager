@@ -10,6 +10,7 @@ export async function handleSearch(
     offset?: string;
     noPrefix?: boolean;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {

@@ -27,6 +27,8 @@ export type PaginatedListReadCliOptions = {
   limit?: string;
   offset?: string;
   pageAll?: boolean;
+  /** When true, fetch total only (HTTP `limit=0`); incompatible with paging/fields flags. */
+  countOnly?: boolean;
   fields?: string;
 };
 

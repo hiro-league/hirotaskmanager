@@ -194,4 +194,74 @@ describe("executePaginatedListRead (optionalLimit)", () => {
     );
     expect(paths.length).toBe(1);
   });
+
+  test("--count-only — GET with limit=0; stdout is {\"count\":N}", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    let sawPath = "";
+    const spec = {
+      kind: "optionalLimit" as const,
+      basePath: "/boards/x/tasks",
+      fieldAllowlist: FIELDS_TASK,
+      columns: COLUMNS_TASKS_LIST,
+      quietDefaults: ["taskId"] as const,
+      async fetchPage(path: string) {
+        sawPath = path;
+        return { items: [], total: 42, limit: 0, offset: 0 };
+      },
+    };
+    const out = await captureStdout(() =>
+      executePaginatedListRead(spec, { countOnly: true }),
+    );
+    expect(sawPath).toContain("limit=0");
+    expect(JSON.parse(out.trim())).toEqual({ count: 42 });
+  });
+
+  test("--count-only with --limit — CliError", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    const spec = {
+      kind: "optionalLimit" as const,
+      basePath: "/boards",
+      fieldAllowlist: FIELDS_TASK,
+      columns: COLUMNS_TASKS_LIST,
+      quietDefaults: ["taskId"] as const,
+      async fetchPage() {
+        return { items: [], total: 0, limit: 0, offset: 0 };
+      },
+    };
+    await expect(
+      executePaginatedListRead(spec, { countOnly: true, limit: "10" }),
+    ).rejects.toMatchObject({
+      exitCode: 2,
+      details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
+    });
+  });
+});
+
+describe("executePaginatedListRead (search)", () => {
+  afterEach(() => {
+    resetCliOutputFormat();
+  });
+
+  test("--count-only — buildPath(0,0) (limit=0 in URL)", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    let sawPath = "";
+    const spec = {
+      kind: "search" as const,
+      fieldAllowlist: FIELDS_TASK,
+      columns: COLUMNS_TASKS_LIST,
+      quietDefaults: ["taskId"] as const,
+      buildPath: (off: number, lim: number) =>
+        `/search?q=hi&limit=${lim}${off > 0 ? `&offset=${off}` : ""}`,
+      async fetchPage(path: string) {
+        sawPath = path;
+        return { items: [], total: 5, limit: 0, offset: 0 };
+      },
+    };
+    const out = await captureStdout(() =>
+      executePaginatedListRead(spec, { countOnly: true }),
+    );
+    expect(sawPath).toContain("limit=0");
+    expect(sawPath).not.toContain("offset=");
+    expect(JSON.parse(out.trim())).toEqual({ count: 5 });
+  });
 });

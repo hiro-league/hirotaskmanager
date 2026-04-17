@@ -31,6 +31,9 @@ export function paginateInMemory<T>(
       offset: off,
     };
   }
+  if (limit === 0) {
+    return { items: [], total, limit: 0, offset: off };
+  }
   const lim = Math.min(Math.max(1, limit), MAX_PAGE_LIMIT);
   const items = rows.slice(off, off + lim);
   return { items: [...items], total, limit: lim, offset: off };

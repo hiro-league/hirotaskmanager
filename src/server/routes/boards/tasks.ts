@@ -249,7 +249,12 @@ boardTasksRoute.get("/:id/tasks", async (c) => {
   if (!page.ok) {
     return c.json({ error: page.error }, 400);
   }
-  return c.json(paginateInMemory(tasks, page.offset, page.limit));
+  const taskRows = tasks.map((task) => ({
+    ...task,
+    boardId: entry.boardId,
+    boardSlug: entry.slug,
+  }));
+  return c.json(paginateInMemory(taskRows, page.offset, page.limit));
 });
 
 boardTasksRoute.put("/:id/tasks/move", async (c) => {

@@ -31,7 +31,7 @@ Used by `boards configure groups` and `boards configure priorities`. Pass exactl
 Format:
 
 ```bash
-hirotm boards list [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm boards list [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 Use this to discover accessible boards before mutation.
@@ -39,6 +39,7 @@ Use this to discover accessible boards before mutation.
 - `--limit <n>`: page size.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
+- `--count-only`: return only the total matching row count.
 - `--fields <keys>`: project only selected fields.
 - Supports global `--quiet` with `--format ndjson`.
 
@@ -93,10 +94,12 @@ Update board identity or appearance. Pass at least one change.
 Format:
 
 ```bash
-hirotm boards delete <id-or-slug> --yes
+hirotm boards delete <id-or-slug> [--dry-run] --yes
 ```
 
 Move a board to Trash.
+
+- `--dry-run`: preview the planned request without mutating data.
 
 ### `boards restore <id-or-slug>`
 
@@ -113,31 +116,35 @@ Restore a trashed board.
 Format:
 
 ```bash
-hirotm boards purge <id-or-slug> --yes
+hirotm boards purge <id-or-slug> [--dry-run] --yes
 ```
 
 Permanently delete a trashed board. This is irreversible.
+
+- `--dry-run`: preview the planned request without mutating data.
 
 ### `boards configure groups <id-or-slug>`
 
 Format:
 
 ```bash
-hirotm boards configure groups <id-or-slug> [--json <text> | --file <path> | --stdin] --yes
+hirotm boards configure groups <id-or-slug> [--json <text> | --file <path> | --stdin] [--dry-run] --yes
 ```
 
 Replace board task groups from JSON input.
 
 - JSON input variants are listed once in `JSON input variants`.
+- `--dry-run`: preview the planned request without mutating data.
 
 ### `boards configure priorities <id-or-slug>`
 
 Format:
 
 ```bash
-hirotm boards configure priorities <id-or-slug> [--json <text> | --file <path> | --stdin] --yes
+hirotm boards configure priorities <id-or-slug> [--json <text> | --file <path> | --stdin] [--dry-run] --yes
 ```
 
 Replace board priorities from JSON input.
 
 - JSON input variants are listed once in `JSON input variants`.
+- `--dry-run`: preview the planned request without mutating data.

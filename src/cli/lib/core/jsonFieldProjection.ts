@@ -21,6 +21,8 @@ export const FIELDS_BOARD_INDEX = new Set([
 /** `tasks list` → each {@link Task}. */
 export const FIELDS_TASK = new Set([
   "taskId",
+  "boardId",
+  "boardSlug",
   "listId",
   "title",
   "body",
@@ -50,6 +52,8 @@ export const FIELDS_RELEASE = new Set([
 /** `lists list` → each board list row (`List` in `src/shared/models.ts`). */
 export const FIELDS_LIST = new Set([
   "listId",
+  "boardId",
+  "boardSlug",
   "name",
   "order",
   "color",

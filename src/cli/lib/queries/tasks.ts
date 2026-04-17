@@ -1,6 +1,6 @@
 import { RELEASE_FILTER_UNTAGGED } from "../../../shared/boardFilters";
 import type { PaginatedListBody } from "../../../shared/pagination";
-import type { Task } from "../../../shared/models";
+import type { TaskWithBoard } from "../../../shared/models";
 import {
   COLUMNS_TASKS_LIST,
   QUIET_DEFAULT_TASK,
@@ -32,6 +32,7 @@ export async function runBoardsTasksList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -67,12 +68,13 @@ export async function runBoardsTasksList(
       fieldAllowlist: FIELDS_TASK,
       columns: COLUMNS_TASKS_LIST,
       quietDefaults: QUIET_DEFAULT_TASK,
-      fetchPage: (path) => ctx.fetchApi<PaginatedListBody<Task>>(path, { port }),
+      fetchPage: (path) => ctx.fetchApi<PaginatedListBody<TaskWithBoard>>(path, { port }),
     },
     {
       limit: options.limit,
       offset: options.offset,
       pageAll: options.pageAll,
+      countOnly: options.countOnly,
       fields: options.fields,
     },
   );
@@ -88,6 +90,6 @@ export async function runTasksShow(
   const fieldKeys = parseAndValidateFields(options.fields, FIELDS_TASK);
   requireNdjsonWhenUsingFields(fieldKeys);
   const taskId = parseTaskId(taskIdRaw.trim() || undefined);
-  const task = await ctx.fetchApi<Task>(`/tasks/${taskId}`, { port });
+  const task = await ctx.fetchApi<TaskWithBoard>(`/tasks/${taskId}`, { port });
   ctx.printJson(fieldKeys?.length ? projectRecord(task, fieldKeys) : task);
 }

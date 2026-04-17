@@ -20,6 +20,7 @@ export async function runSearch(
     offset?: string;
     noPrefix?: boolean;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -59,6 +60,7 @@ export async function runSearch(
       limit: options.limit,
       offset: options.offset,
       pageAll: options.pageAll,
+      countOnly: options.countOnly,
       fields: options.fields,
     },
   );

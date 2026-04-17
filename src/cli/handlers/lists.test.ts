@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PaginatedListBody } from "../../shared/pagination";
-import type { List } from "../../shared/models";
+import type { ListWithBoard } from "../../shared/models";
 import { CLI_ERR } from "../types/errors";
 import { syncCliOutputFormatFromGlobals } from "../lib/output/cliFormat";
 import { createTestCliRuntime } from "../lib/core/runtime";
@@ -33,8 +33,10 @@ describe("handleListsList", () => {
     resetCliOutputFormat();
   });
 
-  const listRow: List = {
+  const listRow: ListWithBoard = {
     listId: 1,
+    boardId: 9,
+    boardSlug: "workbench",
     name: "Todo",
     order: 0,
     color: "#fff",
@@ -45,7 +47,7 @@ describe("handleListsList", () => {
 
   test("NDJSON — one line per list with listId, name, order", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
-    const envelope: PaginatedListBody<List> = {
+    const envelope: PaginatedListBody<ListWithBoard> = {
       items: [listRow],
       total: 1,
       limit: 1,
@@ -59,15 +61,17 @@ describe("handleListsList", () => {
       handleListsList(ctx, { board: "wb" }),
     );
 
-    const row = JSON.parse(out.trim().split("\n")[0]!) as List;
+    const row = JSON.parse(out.trim().split("\n")[0]!) as ListWithBoard;
     expect(row.listId).toBe(1);
+    expect(row.boardId).toBe(9);
+    expect(row.boardSlug).toBe("workbench");
     expect(row.name).toBe("Todo");
     expect(row.order).toBe(0);
   });
 
   test("--format human — table with Ord, Color, Em", async () => {
     syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
-    const envelope: PaginatedListBody<List> = {
+    const envelope: PaginatedListBody<ListWithBoard> = {
       items: [listRow],
       total: 1,
       limit: 1,
@@ -89,7 +93,7 @@ describe("handleListsList", () => {
 
   test("--quiet — listId per line", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
-    const envelope: PaginatedListBody<List> = {
+    const envelope: PaginatedListBody<ListWithBoard> = {
       items: [listRow],
       total: 1,
       limit: 1,
@@ -108,7 +112,7 @@ describe("handleListsList", () => {
 
   test("--fields listId,name — projected", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
-    const envelope: PaginatedListBody<List> = {
+    const envelope: PaginatedListBody<ListWithBoard> = {
       items: [listRow],
       total: 1,
       limit: 1,
@@ -126,6 +130,34 @@ describe("handleListsList", () => {
     expect(Object.keys(row).sort()).toEqual(["listId", "name"]);
   });
 
+  test("--fields listId,boardId,boardSlug,name — projected", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    const envelope: PaginatedListBody<ListWithBoard> = {
+      items: [listRow],
+      total: 1,
+      limit: 1,
+      offset: 0,
+    };
+    const ctx = mockContext({
+      fetchApi: (async () => envelope) as CliContext["fetchApi"],
+    });
+
+    const out = await captureStdout(() =>
+      handleListsList(ctx, {
+        board: "wb",
+        fields: "listId,boardId,boardSlug,name",
+      }),
+    );
+
+    const row = JSON.parse(out.trim()) as Record<string, unknown>;
+    expect(row).toEqual({
+      listId: 1,
+      boardId: 9,
+      boardSlug: "workbench",
+      name: "Todo",
+    });
+  });
+
   test("--page-all merges two pages", async () => {
     syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
     let call = 0;
@@ -137,14 +169,14 @@ describe("handleListsList", () => {
             total: 2,
             limit: 2,
             offset: 0,
-          } satisfies PaginatedListBody<List>;
+          } satisfies PaginatedListBody<ListWithBoard>;
         }
         return {
           items: [{ ...listRow, listId: 2, name: "B" }],
           total: 2,
           limit: 2,
           offset: 0,
-        } satisfies PaginatedListBody<List>;
+        } satisfies PaginatedListBody<ListWithBoard>;
       }) as CliContext["fetchApi"],
     });
 

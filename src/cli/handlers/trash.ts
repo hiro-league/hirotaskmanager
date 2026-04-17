@@ -11,6 +11,7 @@ export async function handleTrashBoards(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -20,6 +21,7 @@ export async function handleTrashBoards(
     limit: options.limit,
     offset: options.offset,
     pageAll: options.pageAll,
+    countOnly: options.countOnly,
     fields: options.fields,
   });
 }
@@ -30,6 +32,7 @@ export async function handleTrashLists(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -39,6 +42,7 @@ export async function handleTrashLists(
     limit: options.limit,
     offset: options.offset,
     pageAll: options.pageAll,
+    countOnly: options.countOnly,
     fields: options.fields,
   });
 }
@@ -49,6 +53,7 @@ export async function handleTrashTasks(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -58,6 +63,7 @@ export async function handleTrashTasks(
     limit: options.limit,
     offset: options.offset,
     pageAll: options.pageAll,
+    countOnly: options.countOnly,
     fields: options.fields,
   });
 }

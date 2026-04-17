@@ -1,8 +1,9 @@
 /**
- * Global `--format ndjson|human` is the only stdout/stderr shaping switch (see `program.ts` preAction).
+ * Global `--format ndjson|human` is the main stdout/stderr shaping switch (see `program.ts` preAction).
  */
 
 import type { CliOutputFormat } from "../../types/output";
+import { resetCliAnsi } from "./ansi";
 
 export type { CliOutputFormat } from "../../types/output";
 
@@ -13,6 +14,7 @@ let cliQuiet = false;
 export function resetCliOutputFormat(): void {
   cliOutputFormat = "ndjson";
   cliQuiet = false;
+  resetCliAnsi();
 }
 
 /** Commander `preAction` wires global `--format` and `--quiet` here. */

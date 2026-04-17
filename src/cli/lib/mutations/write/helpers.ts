@@ -2,6 +2,7 @@
  * Shared parsing / IO helpers for CLI write paths (split from monolithic writeCommands).
  */
 import type { Board } from "../../../../shared/models";
+import type { ListWithBoard, TaskWithBoard } from "../../../../shared/models";
 import type { CliContext } from "../../../types/context";
 import { CLI_ERR } from "../../../types/errors";
 import { CliError } from "../../output/output";
@@ -31,6 +32,53 @@ export function parseTaskId(raw: string | undefined): number {
     });
   }
   return n;
+}
+
+export type ResolvedBoardRef = {
+  boardId: number;
+  boardSlug: string;
+};
+
+export function formatResolvedBoardRef(board: ResolvedBoardRef): string {
+  return board.boardSlug.trim() || String(board.boardId);
+}
+
+function assertResolvedBoardRef(
+  entity: "task" | "list",
+  raw: Partial<ResolvedBoardRef>,
+): ResolvedBoardRef {
+  if (
+    typeof raw.boardId !== "number" ||
+    !Number.isInteger(raw.boardId) ||
+    raw.boardId < 1 ||
+    typeof raw.boardSlug !== "string"
+  ) {
+    throw new CliError(`${entity} response missing board metadata`, 1, {
+      code: CLI_ERR.responseInconsistent,
+      entity,
+    });
+  }
+  return { boardId: raw.boardId, boardSlug: raw.boardSlug };
+}
+
+export async function resolveTaskBoardRef(
+  ctx: Pick<CliContext, "fetchApi">,
+  taskId: number,
+  port: number | undefined,
+): Promise<ResolvedBoardRef> {
+  // `tasks update|move|delete` no longer require `--board`, so resolve the owning board once from the global read.
+  const task = await ctx.fetchApi<TaskWithBoard>(`/tasks/${taskId}`, { port });
+  return assertResolvedBoardRef("task", task);
+}
+
+export async function resolveListBoardRef(
+  ctx: Pick<CliContext, "fetchApi">,
+  listId: number,
+  port: number | undefined,
+): Promise<ResolvedBoardRef> {
+  // `lists update|move|delete` no longer require `--board`, so resolve the owning board once from the global read.
+  const list = await ctx.fetchApi<ListWithBoard>(`/lists/${listId}`, { port });
+  return assertResolvedBoardRef("list", list);
 }
 
 type CliReleaseFlagInput =

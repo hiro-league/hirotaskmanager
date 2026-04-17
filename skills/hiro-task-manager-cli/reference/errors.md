@@ -13,10 +13,21 @@ Use this page for how `hirotm` reports failures through exit codes and stderr pa
 - `error`: human-readable summary.
 - `code`: stable machine-readable identifier.
 - `retryable`: whether retry may succeed later.
-- `hint`: recovery hint, such as how to start the server.
+- `hint`: recovery hint with the next likely command or fix.
 - `status`: HTTP status when the error came from the API.
 - `url`: request URL when relevant.
 - `serverCode`: original API code when the CLI normalized `code`.
+
+## Hint usage
+
+- Prefer `hint` over guessing the next recovery step.
+- Hints are strongest on mapped HTTP/API failures and may be absent on some local validation-only failures.
+- Common patterns:
+  - `status: 404`: list or describe the resource again to confirm valid ids or slugs.
+  - `status: 400` or `422`: re-check flags, ids, and JSON/file inputs against `--help`.
+  - `status: 403`: check CLI access policy for the current client.
+  - `status: 426`: update `hirotm` or the Task Manager app.
+  - `status: 5xx`: retry later or inspect the local server.
 
 ## Exit codes
 

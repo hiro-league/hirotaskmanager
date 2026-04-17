@@ -10,11 +10,21 @@ import {
 } from "../handlers/releases";
 import {
   addClientNameOption,
+  addCountOnlyOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
 } from "../lib/core/command-helpers";
 import { CLI_DEFAULTS } from "../lib/core/constants";
+import {
+  HELP_AFTER_RELEASES_ADD,
+  HELP_AFTER_RELEASES_DELETE,
+  HELP_AFTER_RELEASES_GROUP,
+  HELP_AFTER_RELEASES_LIST,
+  HELP_AFTER_RELEASES_SET_DEFAULT,
+  HELP_AFTER_RELEASES_SHOW,
+  HELP_AFTER_RELEASES_UPDATE,
+} from "../lib/core/cliCommandHelp";
 
 export function registerReleaseCommands(
   program: Command,
@@ -24,26 +34,31 @@ export function registerReleaseCommands(
     .command("releases")
     .description(
       "List and manage board releases (writes require manageStructure on the board)",
-    );
+    )
+    .addHelpText("after", HELP_AFTER_RELEASES_GROUP);
 
   addClientNameOption(
-    releasesCommand
-      .command("list")
-      .description("List releases for a board")
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
-      .option("--limit <n>", "Page size (omit for one full response)")
-      .option("--offset <n>", "Skip this many releases (default 0)")
-      .option(
-        "--page-all",
-        `Merge all pages (uses --limit or ${CLI_DEFAULTS.MAX_PAGE_LIMIT} per request)`,
-      )
-      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+    addCountOnlyOption(
+      releasesCommand
+        .command("list")
+        .description("List releases for a board")
+        .requiredOption("--board <id-or-slug>", "Board id or slug")
+        .option("--limit <n>", "Page size (omit for one full response)")
+        .option("--offset <n>", "Skip this many releases (default 0)")
+        .option(
+          "--page-all",
+          `Merge all pages (uses --limit or ${CLI_DEFAULTS.MAX_PAGE_LIMIT} per request)`,
+        )
+        .option("--fields <keys>", CLI_FIELDS_OPTION_DESC)
+        .addHelpText("after", HELP_AFTER_RELEASES_LIST),
+    ),
   ).action(
     cliAction((options: {
       board: string;
       limit?: string;
       offset?: string;
       pageAll?: boolean;
+      countOnly?: boolean;
       fields?: string;
     }) => handleReleasesList(ctx, options)),
   );
@@ -54,7 +69,8 @@ export function registerReleaseCommands(
       .description("Show one release by id")
       .requiredOption("--board <id-or-slug>", "Board id or slug")
       .argument("<release-id>", "Numeric release id")
-      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC)
+      .addHelpText("after", HELP_AFTER_RELEASES_SHOW),
   ).action(
     cliAction(
       (
@@ -73,7 +89,8 @@ export function registerReleaseCommands(
       .option("--color <css>", "Optional release color (CSS)")
       .option("--clear-color", "Store release with no color")
       .option("--release-date <text>", "Optional date label (e.g. YYYY-MM-DD)")
-      .option("--clear-release-date", "Clear release date"),
+      .option("--clear-release-date", "Clear release date")
+      .addHelpText("after", HELP_AFTER_RELEASES_ADD),
   ).action(
     cliAction((options: {
       board: string;
@@ -96,7 +113,8 @@ export function registerReleaseCommands(
       .argument(
         "[release-id]",
         "Numeric release id to use as default (omit when using --clear)",
-      ),
+      )
+      .addHelpText("after", HELP_AFTER_RELEASES_SET_DEFAULT),
   ).action(
     cliAction(
       (
@@ -116,7 +134,8 @@ export function registerReleaseCommands(
       .option("--color <css>", "Release color (CSS)")
       .option("--clear-color", "Clear color")
       .option("--release-date <text>", "Release date")
-      .option("--clear-release-date", "Clear release date"),
+      .option("--clear-release-date", "Clear release date")
+      .addHelpText("after", HELP_AFTER_RELEASES_UPDATE),
   ).action(
     cliAction(
       (
@@ -145,7 +164,8 @@ export function registerReleaseCommands(
         .option(
           "--move-tasks-to <id>",
           "Move tasks on this release to another release before delete",
-        ),
+        )
+        .addHelpText("after", HELP_AFTER_RELEASES_DELETE),
     ),
   ).action(
     cliAction(

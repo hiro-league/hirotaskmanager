@@ -15,6 +15,7 @@ Used by `releases list` and partially by `releases show`.
 - `--limit <n>`: page size.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
+- `--count-only`: return only the total matching row count.
 - `--fields <keys>`: project only selected fields.
 - `releases list` supports global `--quiet` with `--format ndjson`.
 
@@ -33,7 +34,7 @@ Used by `releases add` and `releases update`.
 Format:
 
 ```bash
-hirotm releases list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm releases list --board <id-or-slug> [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 Use this to discover releases on a board before setting `--release` or `--release-id` on tasks.

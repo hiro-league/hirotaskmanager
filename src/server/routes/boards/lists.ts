@@ -170,7 +170,12 @@ boardListsRoute.get("/:id/lists", async (c) => {
   const ordered = [...board.lists].sort(
     (a, b) => a.order - b.order || a.listId - b.listId,
   );
-  return c.json(paginateInMemory(ordered, page.offset, page.limit));
+  const listRows = ordered.map((list) => ({
+    ...list,
+    boardId: entry.boardId,
+    boardSlug: entry.slug,
+  }));
+  return c.json(paginateInMemory(listRows, page.offset, page.limit));
 });
 
 boardListsRoute.patch("/:id/lists/:listId", async (c) => {

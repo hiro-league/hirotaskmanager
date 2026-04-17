@@ -15,6 +15,7 @@ export async function runBoardsList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {

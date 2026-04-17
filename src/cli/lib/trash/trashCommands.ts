@@ -75,7 +75,8 @@ async function fetchAllTrashedBoards(
   return merged.items;
 }
 
-async function resolveTrashedBoardId(
+/** Resolve a trashed board ref (numeric id or slug in Trash) for restore/purge/dry-run. */
+export async function resolveTrashedBoardId(
   ctx: CliContext,
   port: number | undefined,
   idOrSlug: string,
@@ -95,6 +96,7 @@ export async function runTrashBoards(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -120,6 +122,7 @@ export async function runTrashLists(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -145,6 +148,7 @@ export async function runTrashTasks(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {

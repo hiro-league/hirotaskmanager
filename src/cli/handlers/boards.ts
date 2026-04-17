@@ -8,6 +8,14 @@ import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
 import { runBoardsList } from "../lib/queries/boards";
 import { runBoardsTasksList } from "../lib/queries/tasks";
 import {
+  dryRunBoardsConfigureGroups,
+  dryRunBoardsConfigurePriorities,
+} from "../lib/mutations/dryRun/boardConfigureDryRun";
+import {
+  dryRunBoardsDelete,
+  dryRunBoardsPurge,
+} from "../lib/mutations/dryRun/trashEntityDryRun";
+import {
   runBoardsAdd,
   runBoardsDelete,
   runBoardsGroups,
@@ -29,6 +37,7 @@ export async function handleBoardsList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -85,6 +94,7 @@ export async function handleBoardsTasks(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -146,9 +156,13 @@ export async function handleBoardsUpdate(
 export async function handleBoardsDelete(
   ctx: CliContext,
   idOrSlug: string,
-  options: { yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunBoardsDelete(ctx, { port, board: idOrSlug });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -177,9 +191,13 @@ export async function handleBoardsRestore(
 export async function handleBoardsPurge(
   ctx: CliContext,
   idOrSlug: string,
-  options: { yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunBoardsPurge(ctx, { port, board: idOrSlug });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -198,9 +216,20 @@ export async function handleBoardsGroups(
     file?: string;
     stdin?: boolean;
     yes?: boolean;
+    dryRun?: boolean;
   },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunBoardsConfigureGroups(ctx, {
+      port,
+      board: idOrSlug,
+      json: options.json,
+      file: options.file,
+      stdin: options.stdin,
+    });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     stdinReservedForPayload: options.stdin === true,
@@ -226,9 +255,20 @@ export async function handleBoardsPriorities(
     file?: string;
     stdin?: boolean;
     yes?: boolean;
+    dryRun?: boolean;
   },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunBoardsConfigurePriorities(ctx, {
+      port,
+      board: idOrSlug,
+      json: options.json,
+      file: options.file,
+      stdin: options.stdin,
+    });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     stdinReservedForPayload: options.stdin === true,

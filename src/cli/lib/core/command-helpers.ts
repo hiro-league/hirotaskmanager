@@ -8,18 +8,36 @@ import { CliError, exitWithError } from "../output/output";
 
 /** Help text for read/list `--fields` (subset projection; see `jsonFieldProjection.ts` allowlists). */
 export const CLI_FIELDS_OPTION_DESC =
-  "Comma-separated API keys per row (unknown keys exit 2); use with global --format ndjson, not human tables.";
+  "Comma-separated, for default ndjson output format only ";
 
 /** `boards describe --entities`: list,group,priority,release,status,meta — order controls CLI stdout (and HTTP when subset). */
 export const CLI_BOARD_DESCRIBE_ENTITIES_DESC =
-  "Comma-separated: list,group,priority,release,status,meta (omit for default five sections, no meta). Board + cliPolicy always in JSON; duplicate or unknown tokens exit 2; board is not a token.";
+  "Comma-separated: list,group,priority,release,status,meta.";
 
 /** Guarded deletes / structure replaces: paired with `confirmMutableAction` in handlers. */
 export const CLI_YES_OPTION_DESC = "Skip the confirmation prompt";
 
+/** Preview mutations without writes; skips confirmation (no `--yes` needed). */
+export const CLI_DRY_RUN_OPTION_DESC =
+  "Print the planned request without mutating data";
+
+/** Paginated list reads: total only, one small HTTP response (no row payload). */
+export const CLI_COUNT_ONLY_OPTION_DESC =
+  "Return matching row count only";
+
+/** Attach `--count-only` for paginated GET list/search commands. */
+export function addCountOnlyOption(command: Command): Command {
+  return command.option("--count-only", CLI_COUNT_ONLY_OPTION_DESC);
+}
+
 /** Attach `-y` / `--yes` for commands that call `confirmMutableAction`. */
 export function addYesOption(command: Command): Command {
   return command.option("-y, --yes", CLI_YES_OPTION_DESC);
+}
+
+/** Attach `--dry-run` for guarded/configure commands (handlers branch before confirm). */
+export function addDryRunOption(command: Command): Command {
+  return command.option("--dry-run", CLI_DRY_RUN_OPTION_DESC);
 }
 
 /** Human tables cannot apply arbitrary `--fields`; enforce before fetch. */
@@ -68,7 +86,7 @@ export function resolveQuietExplicitField(
 export function addClientNameOption(command: Command): Command {
   return command.option(
     "--client-name <name>",
-    "Human-friendly client label sent with API requests (for notifications)",
+    "Identify yourself to Users (e.g. Cursor Agent)",
   );
 }
 

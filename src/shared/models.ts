@@ -234,6 +234,15 @@ export interface List {
   createdByLabel?: string | null;
 }
 
+/** Owning board reference for entity reads that start from a global task/list id. */
+export interface EntityBoardRef {
+  boardId: number;
+  boardSlug: string;
+}
+
+/** List read payload with owning board metadata for CLI field projection and board inference. */
+export type ListWithBoard = List & EntityBoardRef;
+
 /** Visible list name: emoji + space + name when emoji is set. */
 export function listDisplayName(list: List): string {
   const base = list.name.trim() || String(list.listId);
@@ -271,6 +280,9 @@ export interface Task {
    */
   releaseId?: number | null;
 }
+
+/** Task read payload with owning board metadata for CLI field projection and board inference. */
+export type TaskWithBoard = Task & EntityBoardRef;
 
 /** Visible task title line: emoji + space + title when emoji is set. */
 export function taskDisplayTitle(task: Task): string {

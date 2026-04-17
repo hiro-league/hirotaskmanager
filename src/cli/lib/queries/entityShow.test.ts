@@ -31,6 +31,8 @@ describe("runTasksShow / runListsShow (mock fetch)", () => {
       return new Response(
         JSON.stringify({
           taskId: 42,
+          boardId: 7,
+          boardSlug: "alpha",
           listId: 1,
           title: "T",
           body: "",
@@ -47,7 +49,12 @@ describe("runTasksShow / runListsShow (mock fetch)", () => {
     const out = await captureStdout(() =>
       runTasksShow(ctx, "42", {}),
     );
-    expect(JSON.parse(out.trim())).toMatchObject({ taskId: 42, title: "T" });
+    expect(JSON.parse(out.trim())).toMatchObject({
+      taskId: 42,
+      boardId: 7,
+      boardSlug: "alpha",
+      title: "T",
+    });
   });
 
   test("runListsShow GETs /api/lists/:id and prints JSON", async () => {
@@ -57,6 +64,8 @@ describe("runTasksShow / runListsShow (mock fetch)", () => {
       return new Response(
         JSON.stringify({
           listId: 7,
+          boardId: 3,
+          boardSlug: "sprint",
           name: "Backlog",
           order: 0,
         }),
@@ -66,6 +75,11 @@ describe("runTasksShow / runListsShow (mock fetch)", () => {
     const out = await captureStdout(() =>
       runListsShow(ctx, "7", {}),
     );
-    expect(JSON.parse(out.trim())).toMatchObject({ listId: 7, name: "Backlog" });
+    expect(JSON.parse(out.trim())).toMatchObject({
+      listId: 7,
+      boardId: 3,
+      boardSlug: "sprint",
+      name: "Backlog",
+    });
   });
 });

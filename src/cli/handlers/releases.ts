@@ -16,6 +16,7 @@ export async function handleReleasesList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -26,6 +27,7 @@ export async function handleReleasesList(
     limit: options.limit,
     offset: options.offset,
     pageAll: options.pageAll,
+    countOnly: options.countOnly,
     fields: options.fields,
   });
 }

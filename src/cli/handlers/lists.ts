@@ -1,4 +1,8 @@
 import { confirmMutableAction } from "../lib/core/mutableActionConfirm";
+import {
+  dryRunListsDelete,
+  dryRunListsPurge,
+} from "../lib/mutations/dryRun/trashEntityDryRun";
 import { runListsShow } from "../lib/queries/lists";
 import { runListsPurge, runListsRestore } from "../lib/trash/trashCommands";
 import {
@@ -8,6 +12,11 @@ import {
   runListsMove,
   runListsUpdate,
 } from "../lib/mutations/writeCommands";
+import {
+  formatResolvedBoardRef,
+  parsePositiveInt,
+  resolveListBoardRef,
+} from "../lib/mutations/write/helpers";
 import type { CliContext } from "./context";
 
 export async function handleListsShow(
@@ -25,6 +34,7 @@ export async function handleListsList(
     limit?: string;
     offset?: string;
     pageAll?: boolean;
+    countOnly?: boolean;
     fields?: string;
   },
 ): Promise<void> {
@@ -35,6 +45,7 @@ export async function handleListsList(
     limit: options.limit,
     offset: options.offset,
     pageAll: options.pageAll,
+    countOnly: options.countOnly,
     fields: options.fields,
   });
 }
@@ -57,7 +68,6 @@ export async function handleListsUpdate(
   ctx: CliContext,
   listId: string,
   options: {
-    board: string;
     name?: string;
     color?: string;
     clearColor?: boolean;
@@ -68,7 +78,6 @@ export async function handleListsUpdate(
   const port = ctx.resolvePort();
   await runListsUpdate(ctx, {
     port,
-    board: options.board,
     listId,
     name: options.name,
     color: options.color,
@@ -81,19 +90,31 @@ export async function handleListsUpdate(
 export async function handleListsDelete(
   ctx: CliContext,
   listId: string,
-  options: { board: string; yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  const parsedListId = parsePositiveInt("listId", listId);
+  if (parsedListId === undefined) return;
+  const resolvedBoard = await resolveListBoardRef(ctx, parsedListId, port);
+  const boardLabel = formatResolvedBoardRef(resolvedBoard);
+  if (options.dryRun === true) {
+    await dryRunListsDelete(ctx, {
+      port,
+      board: String(resolvedBoard.boardId),
+      listId,
+    });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
-      `lists delete: move list ${listId} on board "${options.board}" to Trash.`,
+      `lists delete: move list ${listId} on board "${boardLabel}" to Trash.`,
       "Restore later with: hirotm lists restore <list-id>",
     ],
   });
   await runListsDelete(ctx, {
     port,
-    board: options.board,
+    board: String(resolvedBoard.boardId),
     listId,
   });
 }
@@ -116,9 +137,13 @@ export async function handleListsRestore(
 export async function handleListsPurge(
   ctx: CliContext,
   listId: string,
-  options: { yes?: boolean },
+  options: { yes?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const port = ctx.resolvePort();
+  if (options.dryRun === true) {
+    await dryRunListsPurge(ctx, { port, listId });
+    return;
+  }
   await confirmMutableAction({
     yes: options.yes === true,
     impactLines: [
@@ -133,7 +158,6 @@ export async function handleListsMove(
   ctx: CliContext,
   listId: string,
   options: {
-    board: string;
     before?: string;
     after?: string;
     first?: boolean;
@@ -143,7 +167,6 @@ export async function handleListsMove(
   const port = ctx.resolvePort();
   await runListsMove(ctx, {
     port,
-    board: options.board,
     listId,
     before: options.before,
     after: options.after,

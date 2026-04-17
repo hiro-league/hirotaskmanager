@@ -27,7 +27,8 @@ export function parseListPagination(
     return { ok: true, offset, limit: options.defaultLimit };
   }
   const lim = Number(limitRaw);
-  if (!Number.isInteger(lim) || lim < 1) {
+  // Allow limit=0 for "count only" responses (empty items, total preserved).
+  if (!Number.isInteger(lim) || lim < 0) {
     return { ok: false, error: "Invalid limit" };
   }
   if (lim > MAX_PAGE_LIMIT) {

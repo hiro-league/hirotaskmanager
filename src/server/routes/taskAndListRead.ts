@@ -21,7 +21,12 @@ taskReadRoute.get("/:taskId", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  return c.json(hit.task);
+  // CLI task mutations now infer `--board` from a global task id, so return the owning board ref here.
+  return c.json({
+    ...hit.task,
+    boardId: hit.boardId,
+    boardSlug: entry.slug,
+  });
 });
 
 /** `GET /api/lists/:listId` — board is resolved from the list row; CLI policy uses that board. */
@@ -38,5 +43,10 @@ listReadRoute.get("/:listId", async (c) => {
   if (!entry) return c.json({ error: "Board not found" }, 404);
   const blockedRead = cliBoardReadError(c, entry);
   if (blockedRead) return blockedRead;
-  return c.json(hit.list);
+  // CLI list mutations now infer `--board` from a global list id, so return the owning board ref here.
+  return c.json({
+    ...hit.list,
+    boardId: hit.boardId,
+    boardSlug: entry.slug,
+  });
 });

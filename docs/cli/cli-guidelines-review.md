@@ -9,6 +9,8 @@ Cross-references the `hirotm` CLI implementation (`src/cli/`) against two guidel
 
 **Initial development mode**: no backward compatibility or migration required unless noted.
 
+**Mintlify docs:** When a gap below is closed and users can see new behavior (flags, subcommands, output), update the matching pages under `hiro-docs/mintdocs/` in the same change set. Treat those updates as **concise command reference** copy—what to type and what to expect—not implementation notes, library names, or internal field layouts unless users must know a name to filter output.
+
 ---
 
 ## What already aligns well
@@ -49,6 +51,8 @@ Cross-references the `hirotm` CLI implementation (`src/cli/`) against two guidel
 
 **Recommendation:** Add `.version(pkg.version, "-V, --version")` to the program. Use `-V` to avoid collision with `-v` (commonly overloaded as verbose).
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx`, document `-V` / `--version` under Global options with example commands.
+
 ---
 
 #### 2. No `--verbose` / `--debug` flag
@@ -60,6 +64,8 @@ Cross-references the `hirotm` CLI implementation (`src/cli/`) against two guidel
 **Impact:** When debugging agent workflows, there is no way to see what URL was fetched, what profile resolved, or why a request timed out — users must read source code.
 
 **Recommendation:** Add `--verbose` (or `--debug`) global flag. When set, print diagnostic info to stderr (request URL, resolved port/profile, response status, timing). Keep it out of stdout to preserve the data contract. Consider `DEBUG` env var as an alternative activator per clig.dev.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx`, add a Global options entry for the flag: what extra detail appears and that normal result output is unchanged.
 
 ---
 
@@ -82,6 +88,8 @@ Examples:
 
 Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards describe`, `server start`.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** Mirror the same examples on the matching command pages (`task-manager/cli/tasks.mdx`, `boards.mdx`, `search.mdx`, `server.mdx`, etc.) so the site matches `hirotm help …` copy-paste flows.
+
 ---
 
 #### 4. No shell completion
@@ -93,6 +101,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Impact:** Discoverability suffers for human users. Agents are unaffected (they use `--help`), but completion is a clig.dev recommendation for any CLI with subcommands.
 
 **Recommendation:** Consider generating completion scripts via a `hirotm completion` subcommand (Commander supports this via plugins, or use `tabtab`/`omelette`). Low priority relative to agent-facing gaps but high value for humans.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** Add a short user section (new page or under `task-manager/cli/cli-commands.mdx`) for `hirotm completion`: how to install for bash/zsh/fish and verify tab completion—commands only, no implementation detail.
 
 ---
 
@@ -108,6 +118,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Add `--dry-run` to high-risk mutations (`boards configure groups/priorities`, `boards delete`, `tasks delete`, `purge` variants). Return structured JSON diff to stdout (what would be created/updated/deleted) with exit 0.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** On each affected command page (`task-manager/cli/boards.mdx`, `tasks.mdx`, `trash.mdx`, …), document `--dry-run` with example `hirotm …` lines and what “preview” output means for users.
+
 ---
 
 #### 6. No `--no-color` flag
@@ -120,6 +132,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Add `--no-color` global flag. Also check `TERM=dumb`. Both are low-effort since `ansi.ts` already has the enabled/disabled pattern — just add two more conditions.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx`, under Global options, document `--no-color` and when styling is off without that flag (`NO_COLOR`, `TERM=dumb`). Keep to one short subsection.
+
 ---
 
 #### 7. No `TERM=dumb` handling
@@ -129,6 +143,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Current state:** `ansi.ts` checks TTY and `NO_COLOR` but not `TERM=dumb`.
 
 **Recommendation:** Add `process.env.TERM === "dumb"` to the disabled condition in `ansi.ts`.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** Same subsection as item 6 in `task-manager/cli/cli-commands.mdx`—one line that `TERM=dumb` turns off colors (users do not run a separate subcommand).
 
 ---
 
@@ -141,6 +157,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Impact:** Agent retries after transient failures may fail on duplicate creation. Exit 5 is correctly mapped, so agents can detect conflicts, but they must implement their own retry-with-check logic.
 
 **Recommendation:** Either add `--if-not-exists` flags (returns existing resource on conflict instead of error) or document the exit 5 + `code: "conflict"` contract explicitly so agents build appropriate retry logic. The `--if-not-exists` approach is more agent-friendly.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** On `boards` / `lists` / `tasks` / `releases` add-docs (`task-manager/cli/boards.mdx`, `lists.mdx`, `tasks.mdx`, `releases.mdx`), document `--if-not-exists` or the conflict behavior in plain terms and example commands.
 
 ---
 
@@ -157,6 +175,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 - forbidden → `"Check CLI access policy in the web app settings"`
 - bad_request → echo the offending parameter name and value
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` (near Response format or errors), one short paragraph: failed runs may include a short hint suggesting what to run next—user outcome only, not a catalog of error codes.
+
 ---
 
 #### 10. Concise help when run with no arguments
@@ -168,6 +188,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Impact:** Minor — Commander's default help is reasonable. However, clig.dev recommends that bare invocation show a concise summary with 1–2 examples and a pointer to `--help`, similar to how `jq` handles it.
 
 **Recommendation:** Low effort: override Commander's default help for the root command to show a short intro + common examples + "Run hirotm --help for full usage." Keep full help on `--help`.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` or `cli-overview.mdx`, describe what `hirotm` alone prints versus `hirotm --help`—brief and example-led.
 
 ---
 
@@ -181,6 +203,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Commander has a `.showSuggestionAfterError(true)` option — enable it on the root program. One-line change.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** Optional one sentence in `task-manager/cli/cli-commands.mdx`: typo’d subcommands may show a “did you mean …” line in the terminal.
+
 ---
 
 #### 12. Web documentation link in help text
@@ -191,17 +215,19 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Add a link in the root help text footer: `"Docs: https://docs.hiroleague.com/task-manager/cli/cli-overview"` (or equivalent). Low effort via `.addHelpText("afterAll", ...)`.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` (“Learn more” / footer), use the same URL and label users see after `hirotm --help`.
+
 ---
 
 #### 13. Count / cardinality command
 
 **Source:** A (Context Window Discipline — expose cardinality up front)
 
-**Current state:** List commands return `total` in the paginated envelope, but there is no dedicated count command. To get a count, agents must fetch at least one page.
+**Current state (done):** Paginated list and search commands accept **`--count-only`**. The CLI requests **`limit=0`** once; ndjson stdout is **`{"count":N}`**, human mode prints **`count N`**, and **`--quiet`** prints the number alone. Server accepts **`limit=0`** (`parseListPagination`, `paginateInMemory`, and FTS search paging).
 
-**Impact:** Agents cannot estimate result size before committing to a fetch. For boards with thousands of tasks, this matters.
+**Impact:** (Originally) agents could not estimate result size without pulling row payloads—addressed for the commands that support paging.
 
-**Recommendation:** Consider `hirotm tasks count --board <slug> [filters]` returning `{ "count": N }`. Alternatively, a `--count-only` flag on list commands that returns only the total without items. Medium effort (requires API support or a `LIMIT 0` + total query).
+**Mintdocs (`hiro-docs/mintdocs/`):** Paging section in `cli-commands.mdx`; **`--count-only`** row + examples on boards, lists, tasks, releases, search, and trash pages.
 
 ---
 
@@ -215,6 +241,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** When stdout is a TTY and `--format human`, consider piping through `$PAGER` or `less -FIRX` for list outputs exceeding a threshold (e.g., 50 rows). Check `PAGER` env var per clig.dev.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` under human output / paging, note when long tables may open in a pager and that `PAGER` can select the program—keep to user behavior, not defaults from this review.
+
 ---
 
 #### 15. Secrets handling (`API_KEY` env var)
@@ -226,6 +254,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Impact:** Low risk for a local-only tool, but worth noting for future auth implementations.
 
 **Recommendation:** When authentication is fully implemented, prefer `--token-file <path>` or reading from a credentials file in the profile directory. Keep env var as a convenience fallback but document the risks. Do not add a `--token` flag that would leak into `ps` output.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/get-started/profiles.mdx` (or a small auth subsection), describe how users should pass API credentials: file path vs environment, in everyday language—no process-list or container internals.
 
 ---
 
@@ -241,6 +271,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Optional: accept `-` as a value for `--body-file` and `--description-file` as an alias for the `--stdin` variants. Low priority — current approach is fine for agents.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** On the command pages that expose those flags (`task-manager/cli/tasks.mdx`, `lists.mdx`, etc.), add one example line using `-` for standard input where supported.
+
 ---
 
 #### 17. Progress indicators for long operations
@@ -252,6 +284,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Impact:** Minimal for agents. Humans running `--page-all` on large boards see no feedback until completion.
 
 **Recommendation:** When `--format human` and stdout is TTY, show a spinner during `--page-all` multi-page fetches and `server start` health checks. Use stderr for progress so stdout stays clean. Libraries: `ora` or `cli-spinners` for Node.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` (Paging / `server` page), one short note that interactive human mode may show progress for long `hirotm` runs—no library names.
 
 ---
 
@@ -265,6 +299,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** Consider supporting `$XDG_CONFIG_HOME/taskmanager/` with fallback to `~/.config/taskmanager/` on Linux/macOS. Windows already uses `%APPDATA%` conventions. Low priority for initial development.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/get-started/profiles.mdx`, state where profiles live on disk after the change—paths and env vars users set, per OS, without spec citations.
+
 ---
 
 #### 19. Crash-only / recoverable design for `--page-all`
@@ -277,6 +313,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 **Recommendation:** When cursor-based pagination is added (see existing review item 5), enable resume by documenting that agents can extract the last row's ID and resume with `--offset` or `--cursor`.
 
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` (Paging list results), add user-facing steps for resuming a large fetch after interruption—`hirotm` flags and example commands only.
+
 ---
 
 #### 20. Config precedence documentation
@@ -286,6 +324,8 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 **Current state:** Precedence is: CLI flags → env vars → profile config file → defaults. This is correct but not documented in `--help` or AGENTS.md.
 
 **Recommendation:** Add a brief precedence note to `AGENTS.md` or `hirotm --help` footer.
+
+**Mintdocs (`hiro-docs/mintdocs/`):** In `task-manager/cli/cli-commands.mdx` or `get-started/profiles.mdx`, a short ordered list: command-line flags, then environment variables, then profile `config.json`, then defaults—same order users see in help if mirrored there.
 
 ---
 
@@ -305,7 +345,7 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 | 10 | Concise bare-invocation help | B | Medium | Low | Open |
 | 11 | Typo suggestions | B | Medium | Trivial | Open |
 | 12 | Web docs link in help | B | Medium | Trivial | Open |
-| 13 | Count / cardinality command | A | Medium | Medium (API) | Open |
+| 13 | Count / cardinality command | A | Medium | Medium (API) | Done (`--count-only`, `limit=0` API) |
 | 14 | Pager for human output | B | Low | Medium | Open |
 | 15 | Secrets via file, not env var | B | Low | Medium | Open |
 | 16 | `-` for stdin file args | B | Low | Low | Open |
@@ -318,11 +358,11 @@ Prioritize: `tasks list`, `tasks add`, `tasks update`, `query search`, `boards d
 
 Items **1**, **6**, **7**, **11**, **12**, **20** can each be done in minutes with no API changes:
 
-- `.version()` on Commander program
-- `--no-color` global flag + `TERM=dumb` check in `ansi.ts`
-- `.showSuggestionAfterError(true)` on Commander
-- `.addHelpText("afterAll", "Docs: ...")` on root program
-- Config precedence note in AGENTS.md
+- `.version()` on Commander program → `cli-commands.mdx`: `-V` / `--version` (see item 1 Mintdocs).
+- `--no-color` global flag + `TERM=dumb` check in `ansi.ts` → `cli-commands.mdx`: Global options (see items 6–7 Mintdocs).
+- `.showSuggestionAfterError(true)` on Commander → optional line in `cli-commands.mdx` (item 11).
+- `.addHelpText("afterAll", "Docs: ...")` on root program → same docs URL in `cli-commands.mdx` footer (item 12).
+- Config precedence note in AGENTS.md → `cli-commands.mdx` or `profiles.mdx` ordered list (item 20).
 
 ---
 

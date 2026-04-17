@@ -10,10 +10,12 @@ import { parseOptionalEmojiFlag } from "../../output/emoji-cli";
 import { CliError } from "../../output/output";
 import { assertMutuallyExclusive } from "../../core/validation";
 import {
+  formatResolvedBoardRef,
   loadTextInput,
   parseCliReleaseFlags,
   parsePositiveInt,
   parseTaskId,
+  resolveTaskBoardRef,
   resolveCliReleaseToApiValue,
   resolveExclusiveTextInput,
 } from "./helpers";
@@ -23,6 +25,28 @@ import {
   writeSuccess,
   writeTrashMove,
 } from "../write-result";
+
+type ResolvedMutationBoard = {
+  boardKey: string;
+  boardLabel: string;
+};
+
+async function resolveTaskMutationBoard(
+  ctx: Pick<CliContext, "fetchApi">,
+  board: string | undefined,
+  taskId: number,
+  port: number | undefined,
+): Promise<ResolvedMutationBoard> {
+  const boardId = board?.trim();
+  if (boardId) {
+    return { boardKey: boardId, boardLabel: boardId };
+  }
+  const resolved = await resolveTaskBoardRef(ctx, taskId, port);
+  return {
+    boardKey: String(resolved.boardId),
+    boardLabel: formatResolvedBoardRef(resolved),
+  };
+}
 
 export async function runTasksAdd(
   ctx: CliContext,
@@ -161,12 +185,6 @@ export async function runTasksUpdate(
   bodyStdin?: boolean;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const taskId = parseTaskId(opts.taskId);
   const port = opts.port;
 
@@ -222,14 +240,6 @@ export async function runTasksUpdate(
     release: opts.release,
     releaseId: opts.releaseId,
   });
-  if (relInput.mode !== "omit") {
-    patch.releaseId = await resolveCliReleaseToApiValue(
-      ctx,
-      boardId,
-      relInput,
-      port,
-    );
-  }
   if (opts.clearColor) patch.color = null;
   else if (opts.color !== undefined) patch.color = opts.color;
   if (opts.clearEmoji) patch.emoji = null;
@@ -245,9 +255,25 @@ export async function runTasksUpdate(
     });
   }
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveTaskMutationBoard(
+      ctx,
+      opts.board,
+      taskId,
+      port,
+    );
+    boardContext = resolvedBoard.boardLabel;
+    if (relInput.mode !== "omit") {
+      patch.releaseId = await resolveCliReleaseToApiValue(
+        ctx,
+        resolvedBoard.boardKey,
+        relInput,
+        port,
+      );
+    }
     const result = await ctx.fetchApiMutate<TaskMutationResult>(
-      `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/tasks/${taskId}`,
       { method: "PATCH", body: patch },
       { port },
     );
@@ -262,7 +288,7 @@ export async function runTasksUpdate(
       ),
     );
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, taskId });
+    enrichNotFoundError(e, { board: boardContext, taskId });
   }
 }
 
@@ -274,17 +300,19 @@ export async function runTasksDelete(
     taskId: string | undefined;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const taskId = parseTaskId(opts.taskId);
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveTaskMutationBoard(
+      ctx,
+      opts.board,
+      taskId,
+      opts.port,
+    );
+    boardContext = resolvedBoard.boardLabel;
     const result = await ctx.fetchApiMutate<TaskDeleteMutationResult>(
-      `/boards/${encodeURIComponent(boardId)}/tasks/${taskId}`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/tasks/${taskId}`,
       { method: "DELETE" },
       { port: opts.port },
     );
@@ -299,7 +327,7 @@ export async function runTasksDelete(
       ),
     );
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, taskId });
+    enrichNotFoundError(e, { board: boardContext, taskId });
   }
 }
 
@@ -317,12 +345,6 @@ export async function runTasksMove(
     last?: boolean;
   },
 ): Promise<void> {
-  const boardId = opts.board?.trim();
-  if (!boardId) {
-    throw new CliError("Missing required option: --board", 2, {
-      code: CLI_ERR.missingRequired,
-    });
-  }
   const taskId = parseTaskId(opts.taskId);
   const toList = parsePositiveInt("listId", opts.toList);
   if (toList === undefined) {
@@ -347,9 +369,17 @@ export async function runTasksMove(
 
   const port = opts.port;
 
+  let boardContext = opts.board?.trim();
   try {
+    const resolvedBoard = await resolveTaskMutationBoard(
+      ctx,
+      opts.board,
+      taskId,
+      port,
+    );
+    boardContext = resolvedBoard.boardLabel;
     const board = await ctx.fetchApiMutate<Board>(
-      `/boards/${encodeURIComponent(boardId)}/tasks/move`,
+      `/boards/${encodeURIComponent(resolvedBoard.boardKey)}/tasks/move`,
       {
         method: "PUT",
         body: {
@@ -367,7 +397,7 @@ export async function runTasksMove(
     if (!moved) {
       throw new CliError("Moved task missing from board", 1, {
         code: CLI_ERR.responseInconsistent,
-        board: boardId,
+        board: boardContext,
         taskId,
       });
     }
@@ -375,6 +405,6 @@ export async function runTasksMove(
       writeSuccess(board, compactTaskEntity(moved)),
     );
   } catch (e) {
-    enrichNotFoundError(e, { board: boardId, taskId });
+    enrichNotFoundError(e, { board: boardContext, taskId });
   }
 }

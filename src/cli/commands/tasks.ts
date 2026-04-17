@@ -13,12 +13,25 @@ import {
 } from "../handlers/tasks";
 import {
   addClientNameOption,
+  addCountOnlyOption,
+  addDryRunOption,
   addYesOption,
   CLI_FIELDS_OPTION_DESC,
   cliAction,
   collectMultiValue,
 } from "../lib/core/command-helpers";
 import { CLI_DEFAULTS } from "../lib/core/constants";
+import {
+  HELP_AFTER_TASKS_ADD,
+  HELP_AFTER_TASKS_DELETE,
+  HELP_AFTER_TASKS_GROUP,
+  HELP_AFTER_TASKS_LIST,
+  HELP_AFTER_TASKS_MOVE,
+  HELP_AFTER_TASKS_PURGE,
+  HELP_AFTER_TASKS_RESTORE,
+  HELP_AFTER_TASKS_SHOW,
+  HELP_AFTER_TASKS_UPDATE,
+} from "../lib/core/cliCommandHelp";
 
 export function registerTaskCommands(
   program: Command,
@@ -26,55 +39,59 @@ export function registerTaskCommands(
 ): void {
   const tasksCommand = program
     .command("tasks")
-    .description("List, show, create, and update tasks on boards");
+    .description("List, show, create, and update tasks on boards")
+    .addHelpText("after", HELP_AFTER_TASKS_GROUP);
 
   addClientNameOption(
-    tasksCommand
-      .command("list")
-      .description("List filtered tasks for one board")
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
+    addCountOnlyOption(
+      tasksCommand
+        .command("list")
+        .description("List filtered tasks for one board")
+        .requiredOption("--board <id-or-slug>", "Board id or slug")
       .option("--list <id>", "List id")
       .option(
         "--group <id>",
-        "Task group id (repeat or use comma-separated values)",
+        "Task group ids, comma separated",
         collectMultiValue,
         [] as string[],
       )
       .option(
         "--priority <id>",
-        "Task priority id (repeat or use comma-separated values)",
+        "Task priority ids, comma separated",
         collectMultiValue,
         [] as string[],
       )
       .option(
         "--status <id>",
-        "Workflow status id (repeat or use comma-separated values)",
+        "Workflow status ids, comma separated",
         collectMultiValue,
         [] as string[],
       )
       .option(
         "--release-id <id>",
-        "Release id filter (repeat or comma-separated; OR with other release filters)",
+        "Release ids, comma separated",
         collectMultiValue,
         [] as string[],
       )
       .option(
         "--untagged",
-        "Include tasks with no release (OR with --release-id when both are used)",
+        "Include tasks with no release",
       )
       .option("--date-mode <mode>", "Date filter mode: opened, closed, or any")
       .option("--from <yyyy-mm-dd>", "Inclusive start date")
       .option("--to <yyyy-mm-dd>", "Inclusive end date")
       .option(
         "--limit <n>",
-        "Page size (omit to return all matching tasks in one response)",
+        "Page size",
       )
-      .option("--offset <n>", "Skip this many tasks after server sort (default 0)")
+      .option("--offset <n>", "Skip n tasks (default 0)")
       .option(
         "--page-all",
-        `Fetch every page with --limit (or ${CLI_DEFAULTS.MAX_PAGE_LIMIT}) and merge into one result set`,
+        `Fetch all pages (up to ${CLI_DEFAULTS.MAX_PAGE_LIMIT})`,
       )
-      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC)
+      .addHelpText("after", HELP_AFTER_TASKS_LIST),
+    ),
   ).action(
     cliAction((options: {
       board: string;
@@ -90,6 +107,7 @@ export function registerTaskCommands(
       limit?: string;
       offset?: string;
       pageAll?: boolean;
+      countOnly?: boolean;
       fields?: string;
     }) =>
       handleBoardsTasks(ctx, options.board, {
@@ -105,6 +123,7 @@ export function registerTaskCommands(
         limit: options.limit,
         offset: options.offset,
         pageAll: options.pageAll,
+        countOnly: options.countOnly,
         fields: options.fields,
       })),
   );
@@ -114,7 +133,8 @@ export function registerTaskCommands(
       .command("show")
       .description("Show one task by global id")
       .argument("<task-id>", "Numeric task id")
-      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC),
+      .option("--fields <keys>", CLI_FIELDS_OPTION_DESC)
+      .addHelpText("after", HELP_AFTER_TASKS_SHOW),
   ).action(
     cliAction((taskId: string, options: { fields?: string }) =>
       handleTasksShow(ctx, taskId, options)),
@@ -145,7 +165,8 @@ export function registerTaskCommands(
       .option("--clear-emoji", "Clear task emoji")
       .option("--body <text>", "Task body (Markdown)")
       .option("--body-file <path>", "Read body from a UTF-8 file")
-      .option("--body-stdin", "Read body from stdin until EOF"),
+      .option("--body-stdin", "Read body from stdin until EOF")
+      .addHelpText("after", HELP_AFTER_TASKS_ADD),
   ).action(
     cliAction((options: {
       board: string;
@@ -168,7 +189,6 @@ export function registerTaskCommands(
     tasksCommand
       .command("update")
       .description("Patch fields on a task")
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
       .argument("<task-id>", "Numeric task id")
       .option("--title <text>", "Task title")
       .option("--body <text>", "Task body (Markdown)")
@@ -192,13 +212,13 @@ export function registerTaskCommands(
       .option("--color <css>", "Card color (CSS)")
       .option("--clear-color", "Clear card color")
       .option("--emoji <text>", "Emoji before the title")
-      .option("--clear-emoji", "Clear emoji"),
+      .option("--clear-emoji", "Clear emoji")
+      .addHelpText("after", HELP_AFTER_TASKS_UPDATE),
   ).action(
     cliAction(
       (
         taskId: string,
         options: {
-          board: string;
           title?: string;
           body?: string;
           bodyFile?: string;
@@ -219,20 +239,22 @@ export function registerTaskCommands(
   );
 
   addClientNameOption(
-    addYesOption(
-      tasksCommand
-        .command("delete")
-        .description(
-          "Move a task to Trash (tasks restore / purge use the task id only)",
-        )
-        .requiredOption("--board <id-or-slug>", "Board id or slug")
-        .argument("<task-id>", "Numeric task id"),
+    addDryRunOption(
+      addYesOption(
+        tasksCommand
+          .command("delete")
+          .description(
+            "Move a task to Trash (tasks restore / purge use the task id only)",
+          )
+          .argument("<task-id>", "Numeric task id")
+          .addHelpText("after", HELP_AFTER_TASKS_DELETE),
+      ),
     ),
   ).action(
     cliAction(
       (
         taskId: string,
-        options: { board: string; yes?: boolean },
+        options: { yes?: boolean; dryRun?: boolean },
       ) => handleTasksDelete(ctx, taskId, options),
     ),
   );
@@ -242,7 +264,8 @@ export function registerTaskCommands(
       tasksCommand
         .command("restore")
         .description("Restore a task from Trash (board and list must allow it)")
-        .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)"),
+        .argument("<task-id>", "Numeric task id (see: hirotm trash list tasks)")
+        .addHelpText("after", HELP_AFTER_TASKS_RESTORE),
     ),
   ).action(
     cliAction((taskId: string, options: { yes?: boolean }) =>
@@ -251,15 +274,21 @@ export function registerTaskCommands(
   );
 
   addClientNameOption(
-    addYesOption(
-      tasksCommand
-        .command("purge")
-        .description("Permanently delete a task from Trash (cannot be undone)")
-        .argument("<task-id>", "Numeric task id"),
+    addDryRunOption(
+      addYesOption(
+        tasksCommand
+          .command("purge")
+          .description(
+            "Permanently delete a task from Trash (cannot be undone)",
+          )
+          .argument("<task-id>", "Numeric task id")
+          .addHelpText("after", HELP_AFTER_TASKS_PURGE),
+      ),
     ),
   ).action(
-    cliAction((taskId: string, options: { yes?: boolean }) =>
-      handleTasksPurge(ctx, taskId, options),
+    cliAction(
+      (taskId: string, options: { yes?: boolean; dryRun?: boolean }) =>
+        handleTasksPurge(ctx, taskId, options),
     ),
   );
 
@@ -267,7 +296,6 @@ export function registerTaskCommands(
     tasksCommand
       .command("move")
       .description("Move a task with server-owned relative placement")
-      .requiredOption("--board <id-or-slug>", "Board id or slug")
       .requiredOption("--to-list <id>", "Destination list id")
       .argument("<task-id>", "Numeric task id")
       .option(
@@ -283,13 +311,13 @@ export function registerTaskCommands(
         "Place after another task in the destination band",
       )
       .option("--first", "Move to the first position in the destination band")
-      .option("--last", "Move to the last position in the destination band"),
+      .option("--last", "Move to the last position in the destination band")
+      .addHelpText("after", HELP_AFTER_TASKS_MOVE),
   ).action(
     cliAction(
       (
         taskId: string,
         options: {
-          board: string;
           toList: string;
           toStatus?: string;
           beforeTask?: string;

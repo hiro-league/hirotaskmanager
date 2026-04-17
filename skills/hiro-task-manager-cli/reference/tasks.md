@@ -4,8 +4,8 @@ Use `hirotm tasks` to inspect, create, update, move, and remove tasks on a board
 
 ## Shared arguments
 
-- `--board <id-or-slug>`: target board id or slug.
-- `<task-id>`: numeric task id.
+- `--board <id-or-slug>`: required for **`tasks list`** and **`tasks add`** (board-scoped listing and creation).
+- `<task-id>`: numeric global task id (required for `tasks show`, `tasks update`, `tasks move`, `tasks delete`, restore/purge).
 - `--yes`: use for non-interactive delete, restore, and purge commands.
 
 ### Body input variants
@@ -41,7 +41,7 @@ Used by `tasks move`. Pass exactly one when you need placement control.
 Format:
 
 ```bash
-hirotm tasks list --board <id-or-slug> [--list <id>] [--group <id>...] [--priority <id>...] [--status <id>...] [--release-id <id>...] [--untagged] [--date-mode opened|closed|any] [--from <yyyy-mm-dd>] [--to <yyyy-mm-dd>] [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm tasks list --board <id-or-slug> [--list <id>] [--group <id>...] [--priority <id>...] [--status <id>...] [--release-id <id>...] [--untagged] [--date-mode opened|closed|any] [--from <yyyy-mm-dd>] [--to <yyyy-mm-dd>] [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 Use this to inspect tasks on a board and narrow the result set before mutation.
@@ -57,7 +57,8 @@ Use this to inspect tasks on a board and narrow the result set before mutation.
 - `--limit <n>`: page size.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
-- `--fields <keys>`: project only selected fields.
+- `--count-only`: return only the total matching row count.
+- `--fields <keys>`: project only selected fields (allowlist includes e.g. `boardId`, `boardSlug` alongside task fields).
 - Supports global `--quiet` with `--format ndjson`.
 
 ### `tasks show`
@@ -68,7 +69,7 @@ Format:
 hirotm tasks show <task-id> [--fields <keys>]
 ```
 
-Print one task by global numeric id (`GET /api/tasks/:taskId`). The server resolves which board the task belongs to and enforces CLI policy for that board (`readBoard`).
+Print one task by global numeric id
 
 ### `tasks add`
 
@@ -94,7 +95,7 @@ Create a task on a board.
 Format:
 
 ```bash
-hirotm tasks update --board <id-or-slug> <task-id> [--title <text>] [--status <id>] [--list <id>] [--group <id>] [--priority <id>] [release selector] [--color <css> | --clear-color] [--emoji <text> | --clear-emoji] [body input]
+hirotm tasks update <task-id> [--title <text>] [--status <id>] [--list <id>] [--group <id>] [--priority <id>] [release selector] [--color <css> | --clear-color] [--emoji <text> | --clear-emoji] [body input]
 ```
 
 Update task fields. Pass at least one change.
@@ -114,7 +115,7 @@ Update task fields. Pass at least one change.
 Format:
 
 ```bash
-hirotm tasks move --board <id-or-slug> --to-list <id> <task-id> [--to-status <id>] [--before-task <id> | --after-task <id> | --first | --last]
+hirotm tasks move --to-list <id> <task-id> [--to-status <id>] [--before-task <id> | --after-task <id> | --first | --last]
 ```
 
 Move a task to another list and optionally change its status in the destination.
@@ -128,10 +129,12 @@ Move a task to another list and optionally change its status in the destination.
 Format:
 
 ```bash
-hirotm tasks delete --board <id-or-slug> <task-id> --yes
+hirotm tasks delete <task-id> [--dry-run] --yes
 ```
 
 Move a task to Trash.
+
+- `--dry-run`: preview the planned request without mutating data.
 
 ### `tasks restore`
 
@@ -148,7 +151,9 @@ Restore a trashed task.
 Format:
 
 ```bash
-hirotm tasks purge <task-id> --yes
+hirotm tasks purge <task-id> [--dry-run] --yes
 ```
 
 Permanently delete a trashed task. This is irreversible.
+
+- `--dry-run`: preview the planned request without mutating data.

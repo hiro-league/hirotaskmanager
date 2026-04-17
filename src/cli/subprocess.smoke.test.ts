@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { TASK_MANAGER_CLIENT_NAME_HEADER } from "../shared/boardCliAccess";
+import { CLI_PACKAGE_VERSION } from "./cliVersion";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..");
 const hirotmEntry = path.join(repoRoot, "src", "cli", "bin", "hirotm.ts");
@@ -233,9 +234,26 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("Usage:");
     expect(stdout.toLowerCase()).toContain("hirotm");
+    expect(stdout).toContain(`(v${CLI_PACKAGE_VERSION})`);
     expect(stdout).toContain("--format");
     expect(stdout).toContain("--quiet");
     expect(stdout).toContain("--port");
+    expect(stdout).toContain("--version");
+    expect(stdout).toContain("docs.hiroleague.com/task-manager/cli/cli-overview");
+  });
+
+  test("--version and -V print package version (stdout) and exit 0", async () => {
+    for (const flag of ["--version", "-V"]) {
+      const proc = spawnHirotm([flag]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+      expect(code).toBe(0);
+      expect(stderr.trim()).toBe("");
+      expect(stdout.trim()).toBe(CLI_PACKAGE_VERSION);
+    }
   });
 
   test("boards --help and query search --help (aspect 3 discoverability spot-check)", async () => {
@@ -250,6 +268,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(await qsearch.exited).toBe(0);
     expect(qsOut).toContain("Usage:");
     expect(qsOut).toContain("--board");
+    // Cli guidelines #3 / #12: examples + anchored doc URL on subcommand help
+    expect(qsOut).toContain(
+      "docs.hiroleague.com/task-manager/cli/search#query-search",
+    );
   });
 
   test("handler validation: empty query → exit 2 and stderr JSON (no server)", async () => {
@@ -351,6 +373,55 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
       expect(line.length).toBeGreaterThanOrEqual(1);
       const row = JSON.parse(line[0]!) as Record<string, unknown>;
       expect(row.ok).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("boards delete --dry-run with stub API → exit 0, dryRun stdout, no DELETE", async () => {
+    let deleteCalls = 0;
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const u = new URL(req.url);
+        if (u.pathname === "/api/boards/x" && req.method === "GET") {
+          return new Response(
+            JSON.stringify({
+              boardId: 1,
+              slug: "x",
+              name: "X",
+              emoji: null,
+              description: "",
+              lists: [],
+              tasks: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u.pathname === "/api/boards/x" && req.method === "DELETE") {
+          deleteCalls += 1;
+          return new Response(null, { status: 204 });
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    try {
+      const proc = spawnHirotm(
+        withPort(server.port, ["boards", "delete", "x", "--dry-run"]),
+      );
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+
+      expect(code).toBe(0);
+      expect(stderr.trim()).toBe("");
+      expect(deleteCalls).toBe(0);
+      const row = JSON.parse(stdout.trim()) as Record<string, unknown>;
+      expect(row.dryRun).toBe(true);
+      expect(row.action).toBe("trash");
     } finally {
       server.stop();
     }
@@ -950,5 +1021,66 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     } finally {
       server.stop();
     }
+  });
+
+  test("no args after entry → concise root help on stdout (exit 0)", async () => {
+    const proc = spawnHirotm([]);
+    const [stdout, stderr] = await Promise.all([
+      readSubprocessStream(proc.stdout),
+      readSubprocessStream(proc.stderr),
+    ]);
+    const code = await proc.exited;
+
+    expect(code).toBe(0);
+    expect(stderr.trim()).toBe("");
+    expect(stdout).toContain("Examples:");
+    expect(stdout).toContain("hirotm boards list");
+    expect(stdout).toContain("Run hirotm --help for all commands");
+  });
+
+  test("tasks list without required --board → stderr ends with --help hint (exit 1)", async () => {
+    const proc = spawnHirotm(["tasks", "list"]);
+    const [stdout, stderr] = await Promise.all([
+      readSubprocessStream(proc.stdout),
+      readSubprocessStream(proc.stderr),
+    ]);
+    const code = await proc.exited;
+
+    expect(code).toBe(1);
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toContain("required option");
+    expect(stderr).toContain(
+      "Run `hirotm tasks list --help` for all options.",
+    );
+  });
+
+  test("tasks list --help shows required --board in usage", async () => {
+    const proc = spawnHirotm(["tasks", "list", "--help"]);
+    const [stdout, stderr] = await Promise.all([
+      readSubprocessStream(proc.stdout),
+      readSubprocessStream(proc.stderr),
+    ]);
+    const code = await proc.exited;
+
+    expect(code).toBe(0);
+    expect(stderr.trim()).toBe("");
+    expect(stdout).toContain(
+      "Usage: hirotm tasks list --board <id-or-slug> [options]",
+    );
+  });
+
+  test("tasks move --help shows required task id and --to-list in usage", async () => {
+    const proc = spawnHirotm(["tasks", "move", "--help"]);
+    const [stdout, stderr] = await Promise.all([
+      readSubprocessStream(proc.stdout),
+      readSubprocessStream(proc.stderr),
+    ]);
+    const code = await proc.exited;
+
+    expect(code).toBe(0);
+    expect(stderr.trim()).toBe("");
+    expect(stdout).toContain(
+      "Usage: hirotm tasks move <task-id> --to-list <id> [options]",
+    );
   });
 });

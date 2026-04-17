@@ -7,6 +7,7 @@ Use `hirotm trash` to inspect what is currently in Trash. These commands are rea
 - `--limit <n>`: page size.
 - `--offset <n>`: skip rows.
 - `--page-all`: merge all pages.
+- `--count-only`: return only the total matching row count.
 - `--fields <keys>`: project only selected fields.
 - Supports global `--quiet` with `--format ndjson`.
 
@@ -24,7 +25,7 @@ Use `hirotm trash` to inspect what is currently in Trash. These commands are rea
 Format:
 
 ```bash
-hirotm trash list boards [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm trash list boards [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 List boards currently in Trash.
@@ -34,7 +35,7 @@ List boards currently in Trash.
 Format:
 
 ```bash
-hirotm trash list lists [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm trash list lists [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 List trashed lists with their board context.
@@ -44,7 +45,7 @@ List trashed lists with their board context.
 Format:
 
 ```bash
-hirotm trash list tasks [--limit <n>] [--offset <n>] [--page-all] [--fields <keys>]
+hirotm trash list tasks [--limit <n>] [--offset <n>] [--page-all] [--count-only] [--fields <keys>]
 ```
 
 List trashed tasks with their board and list context.

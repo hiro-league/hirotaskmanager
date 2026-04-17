@@ -27,10 +27,14 @@ Use this skill when the user wants to work with Hiro Task Manager through the `h
 ## Core rules
 - Use `hirotm` cli command for all operations.
 - use `--help` to get help on any command or sub command `boards --help`, `boards describe --help`.
+- prefer `hirotm --help` and subcommand help when you need examples or docs links.
 - Run commands from the intended workspace root.
 - Inspect current state before making mutations.
+- For paginated reads or search, prefer `--count-only` when you only need cardinality first.
 - Use `--client-name` on mutating commands so changes are attributable.
 - Treat delete, purge, and structural changes as sensitive.
+- Prefer `--dry-run` first for delete, purge, and board structure changes, then rerun with `--yes` only when ready.
+- Use `--no-color` when plain output is easier to inspect for one run.
 
 # Identification
 
@@ -48,11 +52,11 @@ If the command is not found, ask the user to [install](https://docs.hiroleague.c
 - use `boards list` to list all boards.
 - use `boards describe <id-or-slug>` to describe all or some board details.
 - use `tasks list --board <board-id-or-slug>` to list and filter tasks in a board.
-- use `tasks show <task-id>` or `lists show <list-id>` to print one row by global id when you already know the id (`GET /api/tasks/:taskId`, `GET /api/lists/:listId`; CLI policy uses the resolved board).
+- use `tasks show <task-id>` or `lists show <list-id>` to print one row by global id when you already know the id.
 
 # Finding/Adding/Updating Tasks
 
-- When a user refers to an existing task, use `tasks list` with filers, or `search query` to find it.
+- When a user refers to an existing task, use `tasks list` with filters, `tasks show`, or `query search` to find it.
 - If convenient, use limit, offset, fields, or quiet options to manage and the output shape.
 - When adding a task
   - use any available information such as priority, task group, release, etc...
@@ -64,6 +68,12 @@ If the command is not found, ask the user to [install](https://docs.hiroleague.c
 # Access
 
 If you are not allowed to access an entity or perform an operation due to CLI Access Control, explain the situation and suggest the user to give you the necessary permissions. Never attempt to bypass the CLI Access Control.
+
+# Errors
+
+- Prefer the machine-readable stderr `code` over parsing the `error` text.
+- If stderr includes a `hint`, use it as the next recovery step.
+- HTTP/API failures usually include better `hint` guidance than local argument-validation failures.
 
 # Server Operations
 

@@ -23,7 +23,7 @@ import { CLI_DEFAULTS } from "../core/constants";
 import { CLI_ERR } from "../../types/errors";
 import { mapHttpStatusToCliFailure } from "./cli-http-errors";
 import { CliError } from "../output/output";
-import type { RunningServerStatus } from "../../../shared/serverStatus";
+import { buildLocalServerUrl, type RunningServerStatus } from "../../../shared/serverStatus";
 
 /** Uses `CLI_DEFAULTS.API_FETCH_TIMEOUT_MS`; health polling uses short waits in `process.ts`. */
 // Aligns with docs/cli-error-handling.md: timeouts surface as exit 7 + code request_timeout.
@@ -51,7 +51,7 @@ function taskManagerClientHeaders(): Record<string, string> {
 }
 
 function buildBaseUrl(overrides: ConfigOverrides = {}): string {
-  return `http://127.0.0.1:${resolvePort(overrides)}`;
+  return buildLocalServerUrl(resolvePort(overrides));
 }
 
 function buildStartCommand(overrides: ConfigOverrides = {}): string {

@@ -29,14 +29,12 @@ export function registerServerCommands(
         .description("Start the local TaskManager server")
         .option("-b, --background", "Optional alias for the default background start")
         .option("--foreground", "Run the server in the foreground")
-        .option("--data-dir <path>", "Override the task data directory")
         .addHelpText("after", HELP_AFTER_SERVER_START),
     ),
   ).action(
     cliAction((options: {
       background?: boolean;
       foreground?: boolean;
-      dataDir?: string;
     }) => handleServerStart(ctx, options)),
   );
 

@@ -1,5 +1,9 @@
 # Remote CLI Access — Design Document
 
+## Note (current product behavior)
+
+The CLI no longer uses global **`--port`**, **`server start --data-dir`**, **`hirotaskmanager --browser`**, or legacy startup env vars such as **`TASKMANAGER_RUNTIME`**, **`TASKMANAGER_DATA_DIR`**, **`TASKMANAGER_AUTH_DIR`**, **`TASKMANAGER_OPEN_BROWSER`**, **`API_KEY`**, or **`TASKMANAGER_SILENT_STARTUP_LOG`**; port and paths come from the active profile’s **`config.json`** only. The **`TASKMANAGER_API_URL`** env proposed in §2.1 is a **remote** base-URL override layered on profile config, not a replacement for those removed settings.
+
 ## 1. Overview
 
 Run the full TaskManager app (API server + web UI + SQLite + CLI) on a remote

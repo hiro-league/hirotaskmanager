@@ -12,8 +12,7 @@ function baseCtx(overrides: Partial<CliContext> = {}): CliContext {
     ...createDefaultCliContext(),
     resolvePort: (o?: ConfigOverrides) =>
       typeof o?.port === "number" ? o.port : 3020,
-    resolveDataDir: (o?: ConfigOverrides) =>
-      (o?.dataDir as string | undefined) ?? "/tmp/data",
+    resolveDataDir: () => "/tmp/data",
     getRuntime: () => createTestCliRuntime({ port: 3020 }),
     ...overrides,
   };
@@ -44,7 +43,7 @@ describe("handleServerStatus", () => {
 });
 
 describe("handleServerStart / handleServerStop", () => {
-  test("background start passes dataDir + port and prints JSON status", async () => {
+  test("background start passes port and prints JSON status", async () => {
     let startArgs: ConfigOverrides | undefined;
     let startMode: ServerStartMode | undefined;
     const status = {
@@ -57,7 +56,6 @@ describe("handleServerStart / handleServerStop", () => {
     } satisfies RunningServerStatus;
     let printed: unknown;
     const ctx = baseCtx({
-      resolveDataDir: () => "/custom/data",
       resolvePort: () => 3040,
       startServer: async (opts, mode) => {
         startArgs = opts;
@@ -72,7 +70,6 @@ describe("handleServerStart / handleServerStop", () => {
     await handleServerStart(ctx, { background: true });
 
     expect(startArgs).toEqual({
-      dataDir: "/custom/data",
       port: 3040,
     } satisfies ConfigOverrides);
     expect(startMode).toBe("background");

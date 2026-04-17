@@ -7,10 +7,9 @@
  * Usage:
  *   bun run scripts/seed-perf-board.ts --lists 50 --per-list 200
  *   bun run scripts/seed-perf-board.ts --profile dev --lists 10 --per-list 100 --name "Big"
- *   TASKMANAGER_DATA_DIR=/path bun run scripts/seed-perf-board.ts …  (overrides profile data dir)
  *
  * `--profile` matches `hirotm --profile`: data resolves to ~/.taskmanager/profiles/<name>/data
- * unless TASKMANAGER_DATA_DIR or profile config.json `data_dir` overrides it.
+ * unless profile `config.json` `data_dir` overrides it.
  */
 import { parseArgs } from "node:util";
 import { coerceTaskStatus } from "../src/shared/models";

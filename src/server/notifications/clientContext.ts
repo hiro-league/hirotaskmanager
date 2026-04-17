@@ -43,7 +43,7 @@ export function parseNotificationClientContext(c: Context): NotificationClientCo
   let clientName = nameHeader;
   if (!clientName) {
     if (rawClient?.toLowerCase() === TASK_MANAGER_CLIENT_HIROTM) {
-      clientName = "hirotm";
+      clientName = TASK_MANAGER_CLIENT_HIROTM;
     } else if (!rawClient || sourceType === "ui") {
       clientName = "User";
     } else {

@@ -1,7 +1,6 @@
 import { startTaskManagerServer } from "./index";
 import {
   parseBootstrapDevFlagFromArgv,
-  parseBootstrapPortFromArgv,
   parseBootstrapProfileFromArgv,
 } from "./parseBootstrapProfile";
 
@@ -11,5 +10,4 @@ const isDev = parseBootstrapDevFlagFromArgv();
 await startTaskManagerServer({
   kind: isDev ? "dev" : "installed",
   profile: parseBootstrapProfileFromArgv(),
-  port: parseBootstrapPortFromArgv(),
 });

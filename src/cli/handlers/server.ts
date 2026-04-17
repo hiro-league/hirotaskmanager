@@ -7,11 +7,9 @@ export async function handleServerStart(
   options: {
     background?: boolean;
     foreground?: boolean;
-    dataDir?: string;
   },
 ): Promise<void> {
   const port = ctx.resolvePort();
-  const dataDir = ctx.resolveDataDir({ dataDir: options.dataDir });
 
   if (options.background && options.foreground) {
     throw new CliError("Choose either --background or --foreground", 2, {
@@ -24,13 +22,13 @@ export async function handleServerStart(
   const startMode = options.foreground ? "foreground" : "background";
 
   if (startMode === "background") {
-    const status = await ctx.startServer({ dataDir, port }, startMode);
+    const status = await ctx.startServer({ port }, startMode);
     ctx.printJson(status);
     return;
   }
 
   // Run in production mode so the installed CLI uses a stable home data directory by default.
-  await ctx.startServer({ dataDir, port }, startMode);
+  await ctx.startServer({ port }, startMode);
 }
 
 export async function handleServerStatus(ctx: CliContext): Promise<void> {

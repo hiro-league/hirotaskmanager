@@ -5,6 +5,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { withBrowserClientHeaders } from "./clientHeaders";
+import { LONG_STALE_TIME_MS } from "./queryDefaults";
 import {
   boardStatsFilterSignature,
   buildBoardStatsSearchParams,
@@ -185,7 +186,7 @@ export function useStatuses() {
   return useQuery({
     queryKey: ["statuses"],
     queryFn: fetchStatuses,
-    staleTime: 1000 * 60 * 60,
+    staleTime: LONG_STALE_TIME_MS,
   });
 }
 

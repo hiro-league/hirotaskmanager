@@ -255,9 +255,10 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
     // Best-effort; fall through to console printing as a fallback.
   }
 
-  // When the launcher owns terminal output it reads the sidecar file instead,
-  // so skip console printing to avoid duplicates.
-  if (!wroteKeyFile || process.env.TASKMANAGER_SILENT_STARTUP_LOG !== "1") {
+  // If writing the sidecar failed, always print. If it succeeded, only print
+  // when stdout is a TTY (standalone foreground server); background/detached
+  // spawns skip stdout to avoid duplicating what the launcher reads from file.
+  if (!wroteKeyFile || process.stdout.isTTY) {
     printRecoveryKeyToConsole(recoveryKey);
   }
 }

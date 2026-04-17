@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { CLI_DEFAULTS } from "./constants";
+import { DEV_DEFAULT_PORT } from "../../../shared/ports";
 import { CLI_ERR } from "../../types/errors";
 import { getCliOutputFormat, getCliQuiet } from "../output/cliFormat";
 import { CliError, exitWithError } from "../output/output";
@@ -100,7 +101,7 @@ export function addProfileOption(command: Command): Command {
 export function addDevOption(command: Command): Command {
   return command.option(
     "--dev",
-    "Run in dev mode (API-only with dev CORS, port 3002 default)",
+    `Run in dev mode (API-only with dev CORS, port ${DEV_DEFAULT_PORT} default)`,
   );
 }
 

@@ -1,20 +1,30 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Disposable auth/data for the dev API when Playwright starts `npm run dev`.
- * Uses existing runtime env vars (see `resolveDataDir` / `resolveAuthDir` in `src/shared/runtimeConfig.ts`).
- * Each Playwright process gets a fresh temp dir so passphrase-based UI login is deterministic.
+ * Writes `~/.taskmanager/profiles/dev/config.json` under a temp HOME so
+ * `resolveDataDir` / `resolveAuthDir` isolate SQLite + auth from your real profile.
  */
-if (!process.env.TASKMANAGER_DATA_DIR || !process.env.TASKMANAGER_AUTH_DIR) {
-  const e2eScratch = mkdtempSync(path.join(tmpdir(), "tm-e2e-"));
-  mkdirSync(path.join(e2eScratch, "data"), { recursive: true });
-  mkdirSync(path.join(e2eScratch, "auth"), { recursive: true });
-  process.env.TASKMANAGER_DATA_DIR ??= path.join(e2eScratch, "data");
-  process.env.TASKMANAGER_AUTH_DIR ??= path.join(e2eScratch, "auth");
-}
+const e2eScratch = mkdtempSync(path.join(tmpdir(), "tm-e2e-"));
+const dataDir = path.join(e2eScratch, "data");
+const authDir = path.join(e2eScratch, "auth");
+mkdirSync(dataDir, { recursive: true });
+mkdirSync(authDir, { recursive: true });
+
+const e2eHome = path.join(e2eScratch, "home");
+const devProfileDir = path.join(e2eHome, ".taskmanager", "profiles", "dev");
+mkdirSync(devProfileDir, { recursive: true });
+writeFileSync(
+  path.join(devProfileDir, "config.json"),
+  `${JSON.stringify({ data_dir: dataDir, auth_dir: authDir }, null, 2)}\n`,
+  "utf8",
+);
+
+process.env.HOME = e2eHome;
+process.env.USERPROFILE = e2eHome;
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
 
@@ -40,10 +50,14 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: baseURL,
-    // Always spawn so TASKMANAGER_* dirs match this process (reuse would attach to a hand-run dev server on another DB).
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: "pipe",
     stderr: "pipe",
+    env: {
+      ...process.env,
+      HOME: e2eHome,
+      USERPROFILE: e2eHome,
+    },
   },
 });

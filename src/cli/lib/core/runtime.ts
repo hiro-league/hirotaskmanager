@@ -15,7 +15,8 @@ import {
   resolveRuntimeKind,
 } from "./config";
 import { getCliOutputFormat, getCliQuiet } from "../output/cliFormat";
-import { CLI_DEFAULTS } from "./constants";
+import { INSTALLED_DEFAULT_PORT } from "../../../shared/ports";
+import { TASK_MANAGER_CLIENT_HIROTM } from "../../../shared/boardCliAccess";
 
 export type { CliRuntime } from "../../types/context";
 
@@ -41,11 +42,11 @@ export function createTestCliRuntime(
   return {
     outputFormat: "ndjson",
     quiet: false,
-    clientName: "hirotm",
+    clientName: TASK_MANAGER_CLIENT_HIROTM,
     clientInstanceId: "00000000-0000-0000-0000-000000000001",
     profile: "default",
     runtimeKind: "installed",
-    port: CLI_DEFAULTS.INSTALLED_DEFAULT_PORT,
+    port: INSTALLED_DEFAULT_PORT,
     ...overrides,
   };
 }

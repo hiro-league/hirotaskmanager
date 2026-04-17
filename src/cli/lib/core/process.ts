@@ -15,7 +15,6 @@ import {
 } from "../../../shared/serverStatus";
 import {
   getServerPidFilePath,
-  resolveDataDir,
   resolvePort,
   resolveProfileName,
   resolveRuntimeKind,
@@ -100,20 +99,6 @@ function getServerEntryPath(overrides: ConfigOverrides): string {
   return fileURLToPath(new URL(entrypoint, import.meta.url));
 }
 
-function buildServerEnv(overrides: ConfigOverrides): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    TASKMANAGER_RUNTIME: resolveRuntimeKind(overrides),
-  };
-  delete env.TASKMANAGER_PORT;
-
-  // Pass the resolved data directory explicitly so the child process uses the
-  // same profile-aware runtime config as the parent command.
-  env.TASKMANAGER_DATA_DIR = resolveDataDir(overrides);
-
-  return env;
-}
-
 export async function readServerStatus(
   overrides: ConfigOverrides = {},
 ): Promise<ServerStatus> {
@@ -140,18 +125,14 @@ export async function startServer(
   mode: ServerStartMode = "foreground",
   onReady?: ServerReadyCallback,
 ): Promise<ServerStatus> {
-  const port = overrides.port;
-  if (!port) {
-    throw new CliError("Port is required", 2, { code: CLI_ERR.missingRequired });
-  }
+  const resolvedPort = resolvePort(overrides);
 
-  const currentStatus = await readServerStatus({ ...overrides, port });
+  const currentStatus = await readServerStatus({ ...overrides, port: resolvedPort });
   if (currentStatus.running) {
     if (onReady) await onReady(currentStatus);
     return currentStatus;
   }
 
-  const resolvedPort = resolvePort({ ...overrides, port: overrides.port });
   const runDetached = mode !== "foreground";
   const silenceConsole = mode === "background";
   const runtime = resolveRuntimeKind(overrides);
@@ -161,8 +142,6 @@ export async function startServer(
     getServerEntryPath(overrides),
     "--profile",
     resolveProfileName(overrides),
-    "--port",
-    String(resolvedPort),
   ];
   // Pass --dev explicitly so the child bootstrap sets dev runtime.
   if (runtime === "dev") {
@@ -172,7 +151,7 @@ export async function startServer(
     cmd: spawnCmd,
     cwd: process.cwd(),
     detached: runDetached,
-    env: buildServerEnv({ ...overrides, port }),
+    env: { ...process.env },
     // First-run launcher mode keeps the server alive after the launcher exits,
     // but still lets the recovery key print in the same terminal.
     stderr: silenceConsole ? "ignore" : "inherit",
@@ -183,27 +162,27 @@ export async function startServer(
   if (runDetached) {
     child.unref();
 
-    const healthy = await waitForHealth(port, CLI_DEFAULTS.SERVER_START_WAIT_MS);
+    const healthy = await waitForHealth(resolvedPort, CLI_DEFAULTS.SERVER_START_WAIT_MS);
     if (!healthy) {
       throw new CliError("Server failed to start", 7, {
         code: CLI_ERR.serverStartTimeout,
         retryable: true,
         hint: "Try running `hirotm server start --foreground` to inspect logs.",
-        url: `http://127.0.0.1:${port}`,
+        url: buildLocalServerUrl(resolvedPort),
       });
     }
 
-    const health = await fetchHealthStatus({ ...overrides, port });
+    const health = await fetchHealthStatus({ ...overrides, port: resolvedPort });
 
     if (onReady) {
       await onReady(
         health ?? {
           pid: child.pid,
-          port,
+          port: resolvedPort,
           running: true,
           runtime,
           source,
-          url: buildLocalServerUrl(port),
+          url: buildLocalServerUrl(resolvedPort),
         },
       );
     }
@@ -211,46 +190,46 @@ export async function startServer(
     // Persist the pid so later status calls can report a CLI-managed background server.
     writeManagedServerRecord({
       pid: child.pid,
-      port,
+      port: resolvedPort,
       startedAt: new Date().toISOString(),
     }, overrides);
 
     return (
       health ?? {
         pid: child.pid,
-        port,
+        port: resolvedPort,
         running: true,
         runtime,
         source,
-        url: buildLocalServerUrl(port),
+        url: buildLocalServerUrl(resolvedPort),
       }
     );
   }
 
   // Wait for health before handing control back to the launcher so first-run
   // browser open can happen without hiding the server logs users need.
-  const healthy = await waitForHealth(port, CLI_DEFAULTS.SERVER_START_WAIT_MS);
+  const healthy = await waitForHealth(resolvedPort, CLI_DEFAULTS.SERVER_START_WAIT_MS);
   if (!healthy) {
     child.kill("SIGTERM");
     throw new CliError("Server failed to start", 7, {
       code: CLI_ERR.serverStartTimeout,
       retryable: true,
       hint: "Try running `hirotm server start` to inspect startup logs directly.",
-      url: `http://127.0.0.1:${port}`,
+      url: buildLocalServerUrl(resolvedPort),
     });
   }
 
-  const health = await fetchHealthStatus({ ...overrides, port });
+  const health = await fetchHealthStatus({ ...overrides, port: resolvedPort });
 
   if (onReady) {
     await onReady(
       health ?? {
         pid: child.pid,
-        port,
+        port: resolvedPort,
         running: true,
         runtime,
         source,
-        url: buildLocalServerUrl(port),
+        url: buildLocalServerUrl(resolvedPort),
       },
     );
   }

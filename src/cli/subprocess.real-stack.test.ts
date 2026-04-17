@@ -11,6 +11,7 @@ import {
   mkdirSync,
   rmSync,
   mkdtempSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,8 +27,23 @@ const prepareAuthScript = path.join(
 );
 const bootstrapDev = path.join(repoRoot, "src", "server", "bootstrapDev.ts");
 
-/** Real-stack tests use an isolated HOME; pin profile and port via argv on each hirotm/server spawn. */
-const PROFILE_ARGS = ["--profile", "default", "--dev"] as const;
+/** Real-stack tests use an isolated HOME; profile + port + dirs come from `config.json`. */
+const SERVER_BOOTSTRAP_ARGS = ["--profile", "default", "--dev"] as const;
+/** `hirotm` does not register `--dev` globally; runtime kind comes from profile config + same port. */
+const HIROTM_GLOBAL_ARGS = ["--profile", "default"] as const;
+
+function writeDefaultProfileConfig(
+  rootDir: string,
+  config: { port: number; data_dir: string; auth_dir: string },
+): void {
+  const profileDir = path.join(rootDir, ".taskmanager", "profiles", "default");
+  mkdirSync(profileDir, { recursive: true });
+  writeFileSync(
+    path.join(profileDir, "config.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
+}
 
 const runRealStack =
   process.env.RUN_CLI_REAL_STACK === "1" ||
@@ -98,11 +114,12 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     mkdirSync(authDir, { recursive: true });
     port = await pickEphemeralPort();
 
+    writeDefaultProfileConfig(rootDir, { port, data_dir: dataDir, auth_dir: authDir });
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      TASKMANAGER_DATA_DIR: dataDir,
-      TASKMANAGER_AUTH_DIR: authDir,
       HOME: rootDir,
+      USERPROFILE: rootDir,
     };
 
     const prep = Bun.spawn({
@@ -119,7 +136,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     }
 
     serverProc = Bun.spawn({
-      cmd: ["bun", bootstrapDev, ...PROFILE_ARGS, "--port", String(port)],
+      cmd: ["bun", bootstrapDev, ...SERVER_BOOTSTRAP_ARGS],
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -153,9 +170,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         "bun",
         "run",
         hirotmEntry,
-        ...PROFILE_ARGS,
-        "--port",
-        String(port),
+        ...HIROTM_GLOBAL_ARGS,
         ...args,
       ],
       cwd: repoRoot,
@@ -164,6 +179,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       env: {
         ...process.env,
         HOME: rootDir,
+        USERPROFILE: rootDir,
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -179,9 +195,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         "bun",
         "run",
         hirotmEntry,
-        ...PROFILE_ARGS,
-        "--port",
-        String(port),
+        ...HIROTM_GLOBAL_ARGS,
         "boards",
         "list",
       ],
@@ -191,6 +205,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       env: {
         ...process.env,
         HOME: rootDir,
+        USERPROFILE: rootDir,
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -210,9 +225,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
         "bun",
         "run",
         hirotmEntry,
-        ...PROFILE_ARGS,
-        "--port",
-        String(port),
+        ...HIROTM_GLOBAL_ARGS,
         "statuses",
         "list",
       ],
@@ -222,6 +235,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       env: {
         ...process.env,
         HOME: rootDir,
+        USERPROFILE: rootDir,
       },
     });
     const [stdout, stderr] = await Promise.all([
@@ -324,11 +338,10 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       ),
     ).toBe(true);
 
+    // `tasks update` takes <task-id> only; board is resolved server-side from the id.
     r = await runHirotm([
       "tasks",
       "update",
-      "--board",
-      slug,
       taskId,
       "--title",
       "T2",
@@ -347,11 +360,9 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     r = await runHirotm([
       "tasks",
       "move",
-      "--board",
-      slug,
+      taskId,
       "--to-list",
       listBId,
-      taskId,
       "--last",
       ...CLIENT_NAME,
     ]);
@@ -363,7 +374,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       parseNdjsonLines(r.stdout).some((t) => String(t.taskId) === taskId),
     ).toBe(true);
 
-    r = await runHirotm(["tasks", "delete", "--board", slug, taskId, "--yes", ...CLIENT_NAME]);
+    r = await runHirotm(["tasks", "delete", taskId, "--yes", ...CLIENT_NAME]);
     expect(r.code).toBe(0);
   });
 
@@ -382,11 +393,10 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
     expect(myCol).toBeDefined();
     const listId = String(myCol!.listId);
 
+    // `lists update` takes <list-id> only; board is resolved server-side from the id.
     r = await runHirotm([
       "lists",
       "update",
-      "--board",
-      slug,
       listId,
       "--name",
       "RenamedCol",
@@ -399,15 +409,7 @@ describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", 
       parseNdjsonLines(r.stdout).some((l) => l.name === "RenamedCol"),
     ).toBe(true);
 
-    r = await runHirotm([
-      "lists",
-      "delete",
-      "--board",
-      slug,
-      listId,
-      "--yes",
-      ...CLIENT_NAME,
-    ]);
+    r = await runHirotm(["lists", "delete", listId, "--yes", ...CLIENT_NAME]);
     expect(r.code).toBe(0);
   });
 
@@ -585,6 +587,15 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
   test("boards list with no server on port exits 6 (server_unreachable)", async () => {
     const deadPort = await pickEphemeralPort();
     const rootDir = mkdtempSync(path.join(tmpdir(), "hirotm-unreachable-"));
+    const dataDir = path.join(rootDir, "data");
+    const authDir = path.join(rootDir, "auth");
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(authDir, { recursive: true });
+    writeDefaultProfileConfig(rootDir, {
+      port: deadPort,
+      data_dir: dataDir,
+      auth_dir: authDir,
+    });
     const origHome = process.env.HOME;
     process.env.HOME = rootDir;
     try {
@@ -593,9 +604,7 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
           "bun",
           "run",
           hirotmEntry,
-          ...PROFILE_ARGS,
-          "--port",
-          String(deadPort),
+          ...HIROTM_GLOBAL_ARGS,
           "boards",
           "list",
         ],
@@ -605,6 +614,7 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
         env: {
           ...process.env,
           HOME: rootDir,
+          USERPROFILE: rootDir,
         },
       });
       const stderr = await readSubprocessStream(proc.stderr);

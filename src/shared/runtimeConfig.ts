@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { DEV_DEFAULT_PORT, INSTALLED_DEFAULT_PORT } from "./ports";
 
 export type RuntimeKind = "installed" | "dev";
 
@@ -20,26 +21,16 @@ export interface RuntimeConfigFile {
 export interface RuntimeConfigOverrides {
   kind?: RuntimeKind;
   profile?: string;
+  /** Programmatic override only (e.g. tests); not exposed as a CLI flag. */
   port?: number;
-  dataDir?: string;
-  authDir?: string;
-  openBrowser?: boolean;
 }
 
 let selectedRuntimeKind: RuntimeKind | undefined;
 let selectedProfileName: string | undefined;
-/** Set from global `hirotm --port` (parsed before Commander); not read from any env var. */
-let selectedCliPort: number | undefined;
 
 function normalizeProfileName(profile: string | undefined): string | undefined {
   const trimmed = profile?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function readRuntimeKindFromEnv(): RuntimeKind | undefined {
-  const value = process.env.TASKMANAGER_RUNTIME?.trim().toLowerCase();
-  if (value === "installed" || value === "dev") return value;
-  return undefined;
 }
 
 function resolveHomeDir(): string {
@@ -72,25 +63,18 @@ function normalizeBoolean(value: unknown): boolean | undefined {
 export function setRuntimeConfigSelection(selection: {
   kind?: RuntimeKind;
   profile?: string;
-  port?: number;
 }): void {
   if (selection.kind) selectedRuntimeKind = selection.kind;
   if (selection.profile !== undefined) {
     selectedProfileName = normalizeProfileName(selection.profile);
   }
-  if (selection.port !== undefined) {
-    const p = normalizePort(selection.port);
-    selectedCliPort = p;
-  }
 }
 
-// Runtime kind is set explicitly via --dev flag, setRuntimeConfigSelection, or
-// TASKMANAGER_RUNTIME env. Profile name no longer implies runtime kind.
+// Runtime kind is set explicitly via --dev flag or setRuntimeConfigSelection.
 export function resolveRuntimeKind(overrides: RuntimeConfigOverrides = {}): RuntimeKind {
   return (
     overrides.kind ??
     selectedRuntimeKind ??
-    readRuntimeKindFromEnv() ??
     "installed"
   );
 }
@@ -188,12 +172,13 @@ export function writeProfileConfig(
 }
 
 export function getDefaultPort(overrides: RuntimeConfigOverrides = {}): number {
-  return resolveRuntimeKind(overrides) === "dev" ? 3002 : 3001;
+  return resolveRuntimeKind(overrides) === "dev"
+    ? DEV_DEFAULT_PORT
+    : INSTALLED_DEFAULT_PORT;
 }
 
 // All profiles (including dev) use the profile-based data dir under
-// ~/.taskmanager/profiles/<name>/data. Use --data-dir or config.json
-// data_dir to override.
+// ~/.taskmanager/profiles/<name>/data unless `data_dir` in config.json overrides.
 export function getDefaultDataDir(overrides: RuntimeConfigOverrides = {}): string {
   return path.join(getProfileRootDir(overrides), "data");
 }
@@ -210,7 +195,6 @@ export function resolvePort(overrides: RuntimeConfigOverrides = {}): number {
   const config = readProfileConfig(overrides);
   return (
     normalizePort(overrides.port) ??
-    normalizePort(selectedCliPort) ??
     normalizePort(config.port) ??
     getDefaultPort(overrides)
   );
@@ -219,28 +203,20 @@ export function resolvePort(overrides: RuntimeConfigOverrides = {}): number {
 export function resolveDataDir(overrides: RuntimeConfigOverrides = {}): string {
   const config = readProfileConfig(overrides);
   return path.resolve(
-    overrides.dataDir ??
-      process.env.TASKMANAGER_DATA_DIR ??
-      config.data_dir ??
-      getDefaultDataDir(overrides),
+    config.data_dir ?? getDefaultDataDir(overrides),
   );
 }
 
 export function resolveAuthDir(overrides: RuntimeConfigOverrides = {}): string {
   const config = readProfileConfig(overrides);
   return path.resolve(
-    overrides.authDir ??
-      process.env.TASKMANAGER_AUTH_DIR ??
-      config.auth_dir ??
-      getDefaultAuthDir(overrides),
+    config.auth_dir ?? getDefaultAuthDir(overrides),
   );
 }
 
 export function resolveOpenBrowser(overrides: RuntimeConfigOverrides = {}): boolean {
   const config = readProfileConfig(overrides);
   return (
-    normalizeBoolean(overrides.openBrowser) ??
-    normalizeBoolean(process.env.TASKMANAGER_OPEN_BROWSER) ??
     normalizeBoolean(config.open_browser) ??
     true
   );
@@ -249,7 +225,7 @@ export function resolveOpenBrowser(overrides: RuntimeConfigOverrides = {}): bool
 export function resolveApiKey(overrides: RuntimeConfigOverrides = {}): string | undefined {
   const config = readProfileConfig(overrides);
 
-  if (process.env.API_KEY?.trim()) return process.env.API_KEY;
+  // API key comes only from profile config (removed process.env.API_KEY escape hatch).
   if (config.api_key?.trim()) return config.api_key;
 
   return undefined;

@@ -4,4 +4,4 @@ alwaysApply: true
 ---
 
 -  Any code that could fail/break, such as calling external services, database dependency, etc.. must have correct exception handling/raising and proper logging.
-- if your design requires adding an environment variable, please ask first before adding an ENV
+- never add App specific Env Variables as optional override of any configuration.

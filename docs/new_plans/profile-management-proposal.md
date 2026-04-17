@@ -2,6 +2,10 @@
 
 ## Status: Proposal
 
+## Note (current product behavior)
+
+Until `hirotm profile` exists, port and paths are set only via **`config.json`** (or **`hirotaskmanager --setup`**). The **`--port`** / **`--data-dir`** flags in this proposal are **future** subcommand options for `profile create` / `profile update`, not the removed global **`hirotm --port`**, **`server start --data-dir`**, or launcher **`--browser`** overrides.
+
 ## Problems
 
 1. **Hardwired "default" profile** — first install creates a profile named `default`; running without args always uses `default`. No choice at creation time.

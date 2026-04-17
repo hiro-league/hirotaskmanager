@@ -3,7 +3,9 @@
  * Spawns the real `hirotm` entry (argv → Commander → handlers) to catch wiring issues
  * that in-process handler tests miss.
  */
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { TASK_MANAGER_CLIENT_NAME_HEADER } from "../shared/boardCliAccess";
 import { CLI_PACKAGE_VERSION } from "./cliVersion";
@@ -11,12 +13,17 @@ import { CLI_PACKAGE_VERSION } from "./cliVersion";
 const repoRoot = path.resolve(import.meta.dir, "..", "..");
 const hirotmEntry = path.join(repoRoot, "src", "cli", "bin", "hirotm.ts");
 
-function withPort(port: number | undefined, args: string[]): string[] {
-  if (port === undefined || !Number.isFinite(port)) {
-    throw new Error("withPort: expected a listening port from Bun.serve");
+const smokeTempRoots: string[] = [];
+afterEach(() => {
+  while (smokeTempRoots.length) {
+    const d = smokeTempRoots.pop()!;
+    try {
+      rmSync(d, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
-  return ["--port", String(port), ...args];
-}
+});
 
 async function readSubprocessStream(
   stream: ReturnType<typeof Bun.spawn>["stdout"],
@@ -28,17 +35,30 @@ async function readSubprocessStream(
 
 function spawnHirotm(
   args: string[],
-  envOverrides?: Record<string, string>,
+  options?: { stubPort?: number; env?: Record<string, string> },
 ): ReturnType<typeof Bun.spawn> {
+  let env: NodeJS.ProcessEnv = { ...process.env };
+  if (options?.stubPort !== undefined) {
+    const root = mkdtempSync(path.join(tmpdir(), "hirotm-smoke-"));
+    smokeTempRoots.push(root);
+    const cfgDir = path.join(root, ".taskmanager", "profiles", "default");
+    mkdirSync(cfgDir, { recursive: true });
+    writeFileSync(
+      path.join(cfgDir, "config.json"),
+      `${JSON.stringify({ port: options.stubPort }, null, 2)}\n`,
+      "utf8",
+    );
+    env = { ...env, HOME: root, USERPROFILE: root };
+  }
+  if (options?.env) {
+    env = { ...env, ...options.env };
+  }
   return Bun.spawn({
     cmd: ["bun", "run", hirotmEntry, ...args],
     cwd: repoRoot,
     stdout: "pipe",
     stderr: "pipe",
-    env:
-      envOverrides == null
-        ? process.env
-        : { ...process.env, ...envOverrides },
+    env,
   });
 }
 
@@ -68,7 +88,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm(withPort(port, ["boards", "list"]));
+      const proc = spawnHirotm(["boards", "list"], { stubPort: port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -116,7 +136,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm(withPort(port, ["boards", "list", "--format", "human"]));
+      const proc = spawnHirotm(["boards", "list", "--format", "human"], { stubPort: port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -165,7 +185,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const port = server.port;
-      const proc = spawnHirotm(withPort(port, ["--quiet", "boards", "list"]));
+      const proc = spawnHirotm(["--quiet", "boards", "list"], { stubPort: port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -190,7 +210,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["--quiet", "--format", "human", "boards", "list"]),
+        ["--quiet", "--format", "human", "boards", "list"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -209,7 +230,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
   });
 
   test("boards list with no server → exit 6 and stderr JSON contract", async () => {
-    const proc = spawnHirotm(withPort(59123, ["boards", "list"]));
+    const proc = spawnHirotm(["boards", "list"], { stubPort: 59123 });
     const [stdout, stderr] = await Promise.all([
       readSubprocessStream(proc.stdout),
       readSubprocessStream(proc.stderr),
@@ -237,7 +258,6 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(stdout).toContain(`(v${CLI_PACKAGE_VERSION})`);
     expect(stdout).toContain("--format");
     expect(stdout).toContain("--quiet");
-    expect(stdout).toContain("--port");
     expect(stdout).toContain("--version");
     expect(stdout).toContain("docs.hiroleague.com/task-manager/cli/cli-overview");
   });
@@ -275,7 +295,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
   });
 
   test("handler validation: empty query → exit 2 and stderr JSON (no server)", async () => {
-    const proc = spawnHirotm(withPort(59998, ["query", "search", ""]));
+    const proc = spawnHirotm(["query", "search", ""], { stubPort: 59998 });
     const [stdout, stderr] = await Promise.all([
       readSubprocessStream(proc.stdout),
       readSubprocessStream(proc.stderr),
@@ -312,7 +332,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "delete", "x"]));
+      const proc = spawnHirotm(["boards", "delete", "x"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -360,7 +380,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "delete", "x", "--yes"]));
+      const proc = spawnHirotm(["boards", "delete", "x", "--yes"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -408,7 +428,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["boards", "delete", "x", "--dry-run"]),
+        ["boards", "delete", "x", "--dry-run"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -446,7 +467,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "list"]));
+      const proc = spawnHirotm(["boards", "list"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -485,7 +506,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "list"]));
+      const proc = spawnHirotm(["boards", "list"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -520,7 +541,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "list"]));
+      const proc = spawnHirotm(["boards", "list"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -555,7 +576,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["boards", "list"]));
+      const proc = spawnHirotm(["boards", "list"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -610,7 +631,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, [
+        [
           "tasks",
           "add",
           "--board",
@@ -621,7 +642,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
           "1",
           "--title",
           "Hello",
-        ]),
+        ],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -668,7 +690,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["lists", "add", "--board", "b", "Backlog"]),
+        ["lists", "add", "--board", "b", "Backlog"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -719,7 +742,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["releases", "list", "--board", "b"]),
+        ["releases", "list", "--board", "b"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -759,7 +783,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     });
 
     try {
-      const proc = spawnHirotm(withPort(server.port, ["statuses", "list"]));
+      const proc = spawnHirotm(["statuses", "list"], { stubPort: server.port });
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
         readSubprocessStream(proc.stderr),
@@ -812,7 +836,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["query", "search", "test", "--format", "human"]),
+        ["query", "search", "test", "--format", "human"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -869,7 +894,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["tasks", "list", "--board", "b"]),
+        ["tasks", "list", "--board", "b"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -919,7 +945,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["boards", "list", "--fields", "boardId"]),
+        ["boards", "list", "--fields", "boardId"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -966,7 +993,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["--client-name", "Agent", "boards", "list"]),
+        ["--client-name", "Agent", "boards", "list"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),
@@ -1007,7 +1035,8 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
 
     try {
       const proc = spawnHirotm(
-        withPort(server.port, ["boards", "list", "--format", "human"]),
+        ["boards", "list", "--format", "human"],
+        { stubPort: server.port },
       );
       const [stdout, stderr] = await Promise.all([
         readSubprocessStream(proc.stdout),

@@ -117,10 +117,6 @@ export function createHirotmProgram(): Command {
     .version(CLI_PACKAGE_VERSION, "-V, --version")
     .option("--profile <name>", "Runtime profile name (default: default, dev)")
     .option(
-      "--port <port>",
-      "HTTP port for the local API (default: from profile config.json)",
-    )
-    .option(
       "--client-name <name>",
       "Identify yourself to Users (e.g. Cursor Agent)",
     )

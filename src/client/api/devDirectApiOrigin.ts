@@ -1,17 +1,15 @@
+import { DEV_DEFAULT_PORT } from "../../shared/ports";
+import { buildLocalServerUrl } from "../../shared/serverStatus";
+
 /**
  * EventSource and other direct-to-Bun calls must bypass Vite's HTTP proxy (SSE subscriptions
- * do not stay alive through it). The port must match `vite.config.ts` server.proxy `/api`
- * target and `getDefaultPort({ kind: "dev" })` in `runtimeConfig.ts` (currently 3002).
- *
- * Previously this logic used 3001 (installed default), which breaks `npm run dev` where the
- * API listens on 3002 — especially visible as empty/failed requests in Safari Web Inspector.
+ * do not stay alive through it). The port is the shared `DEV_DEFAULT_PORT` used by
+ * `getDefaultPort({ kind: "dev" })` in `shared/runtimeConfig.ts` and vite.config.ts proxy.
  */
-export const DEV_DIRECT_API_PORT = 3002;
-
 export function devDirectApiOrigin(): string {
   if (typeof window === "undefined") {
-    return `http://127.0.0.1:${DEV_DIRECT_API_PORT}`;
+    return buildLocalServerUrl(DEV_DEFAULT_PORT);
   }
   const { protocol, hostname } = window.location;
-  return `${protocol}//${hostname}:${DEV_DIRECT_API_PORT}`;
+  return `${protocol}//${hostname}:${DEV_DEFAULT_PORT}`;
 }

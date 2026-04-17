@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { fetchStatuses } from "./api/queries";
+import { LONG_STALE_TIME_MS } from "./api/queryDefaults";
 import { ThemeRoot } from "@/components/layout/ThemeRoot";
 import "./index.css";
 
@@ -18,7 +19,7 @@ const queryClient = new QueryClient({
 void queryClient.prefetchQuery({
   queryKey: ["statuses"],
   queryFn: fetchStatuses,
-  staleTime: 1000 * 60 * 60,
+  staleTime: LONG_STALE_TIME_MS,
 });
 
 const root = document.getElementById("root");

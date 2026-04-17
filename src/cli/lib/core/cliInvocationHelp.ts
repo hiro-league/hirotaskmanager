@@ -66,7 +66,6 @@ function stripLeadingGlobalHirotmFlags(args: string[]): string[] {
     const a = out[0]!;
     if (
       a === "--profile" ||
-      a === "--port" ||
       a === "--client-name" ||
       a === "--format"
     ) {
@@ -78,7 +77,6 @@ function stripLeadingGlobalHirotmFlags(args: string[]): string[] {
     }
     if (
       a.startsWith("--profile=") ||
-      a.startsWith("--port=") ||
       a.startsWith("--client-name=") ||
       a.startsWith("--format=")
     ) {

@@ -18,10 +18,10 @@ import {
   type CliConfigFile,
 } from "../lib/core/config";
 import { parsePortOption } from "../lib/core/command-helpers";
-import { CLI_ERR } from "../types/errors";
-import { CLI_DEFAULTS } from "../lib/core/constants";
-import { CliError, exitWithError } from "../lib/output/output";
+import { INSTALLED_DEFAULT_PORT } from "../../shared/ports";
+import { exitWithError } from "../lib/output/output";
 import { readServerStatus, startServer, stopServer } from "../lib/core/process";
+import { buildLocalServerUrl } from "../../shared/serverStatus";
 import { canPromptInteractively } from "../lib/core/tty";
 import type { ServerStartMode } from "../ports/process";
 import {
@@ -44,8 +44,6 @@ import {
 
 interface LauncherOptions {
   setup?: boolean;
-  dataDir?: string;
-  browser?: string;
   profile?: string;
 }
 
@@ -54,7 +52,6 @@ interface LauncherServerOptions {
 }
 
 interface LauncherServerStartOptions extends LauncherServerOptions {
-  dataDir?: string;
   foreground?: boolean;
 }
 
@@ -93,49 +90,22 @@ export function resolveLauncherStartPlan(options: {
   };
 }
 
-function parseBrowserMode(browser: string | undefined): boolean | undefined {
-  if (!browser?.trim()) return undefined;
-
-  const normalized = browser.trim().toLowerCase();
-  if (normalized === "auto" || normalized === "open" || normalized === "on") {
-    return true;
-  }
-  if (
-    normalized === "manual" ||
-    normalized === "off" ||
-    normalized === "closed"
-  ) {
-    return false;
-  }
-
-  throw new CliError("Invalid browser mode", 2, {
-    code: CLI_ERR.invalidValue,
-    browser,
-    hint: "Use --browser auto or --browser manual.",
-  });
-}
-
 function resolveLauncherDefaults(overrides: {
   profile?: string;
-  port?: number;
-  dataDir?: string;
-  openBrowser?: boolean;
 }): Required<
   Pick<CliConfigFile, "port" | "data_dir" | "auth_dir" | "open_browser">
 > {
   const configScope = { profile: overrides.profile, kind: "installed" as const };
   const existing = readConfigFile(configScope);
   return {
-    port: overrides.port ?? existing.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT,
+    port: existing.port ?? INSTALLED_DEFAULT_PORT,
     data_dir: path.resolve(
-      overrides.dataDir ??
-        existing.data_dir ??
-        getDefaultInstalledDataDir(configScope),
+      existing.data_dir ?? getDefaultInstalledDataDir(configScope),
     ),
     auth_dir: path.resolve(
       existing.auth_dir ?? getDefaultInstalledAuthDir(configScope),
     ),
-    open_browser: overrides.openBrowser ?? existing.open_browser ?? true,
+    open_browser: existing.open_browser ?? true,
   };
 }
 
@@ -180,9 +150,6 @@ async function promptBoolean(
 
 async function runLauncherSetup(overrides: {
   profile?: string;
-  port?: number;
-  dataDir?: string;
-  openBrowser?: boolean;
 }): Promise<LauncherSetupResult> {
   const defaults = resolveLauncherDefaults(overrides);
   const configScope = { profile: overrides.profile, kind: "installed" as const };
@@ -194,11 +161,7 @@ async function runLauncherSetup(overrides: {
   if (!canPromptInteractively()) {
     const config = { ...existing, ...defaults };
     writeConfigFile(config, configScope);
-    ensureRuntimeDirectories({
-      ...configScope,
-      dataDir: config.data_dir,
-      authDir: config.auth_dir,
-    });
+    ensureRuntimeDirectories(configScope);
     return {
       config,
       setupMeta: {
@@ -251,11 +214,7 @@ async function runLauncherSetup(overrides: {
     open_browser: openBrowser,
   };
   writeConfigFile(config, configScope);
-  ensureRuntimeDirectories({
-    ...configScope,
-    dataDir: config.data_dir,
-    authDir: config.auth_dir,
-  });
+  ensureRuntimeDirectories(configScope);
 
   await spinForMoment(
     machineHadNoProfilesBefore
@@ -266,7 +225,7 @@ async function runLauncherSetup(overrides: {
   printSavedProfileSummary({
     created: machineHadNoProfilesBefore,
     profileName: resolveProfileName(configScope),
-    appUrl: `http://127.0.0.1:${config.port}`,
+    appUrl: buildLocalServerUrl(config.port!),
     dataDir: path.resolve(config.data_dir!),
     openBrowser,
   });
@@ -350,18 +309,9 @@ export function createHirotaskmanagerProgram(): Command {
     .name("hirotaskmanager")
     .description("Launch the local TaskManager app")
     .option("--setup", "Run or rerun launcher setup")
-    .option("--data-dir <path>", "Override the task data directory")
     .option("--profile <name>", "Launcher profile name (default: default)")
-    .option(
-      "--browser <mode>",
-      "Browser mode: auto to open the app, manual to print the URL only",
-    )
     .action(async (options: LauncherOptions) => {
       try {
-        const overrideDataDir = options.dataDir?.trim()
-          ? path.resolve(options.dataDir.trim())
-          : undefined;
-        const overrideOpenBrowser = parseBrowserMode(options.browser);
         const selectedProfile = resolveInstalledLauncherProfile(options.profile);
 
         const shouldRunSetup =
@@ -371,8 +321,6 @@ export function createHirotaskmanagerProgram(): Command {
         const setupResult: LauncherSetupResult = shouldRunSetup
           ? await runLauncherSetup({
               profile: selectedProfile,
-              dataDir: overrideDataDir,
-              openBrowser: overrideOpenBrowser,
             })
           : {
               config: readConfigFile({
@@ -404,15 +352,7 @@ export function createHirotaskmanagerProgram(): Command {
         const launcherConfig = setupResult.config;
 
         const port =
-          launcherConfig.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
-        const dataDir = path.resolve(
-          overrideDataDir ??
-            launcherConfig.data_dir ??
-            getDefaultInstalledDataDir({
-              profile: selectedProfile,
-              kind: "installed",
-            }),
-        );
+          launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
         const authDir = path.resolve(
           launcherConfig.auth_dir ??
             getDefaultInstalledAuthDir({
@@ -420,10 +360,9 @@ export function createHirotaskmanagerProgram(): Command {
               kind: "installed",
             }),
         );
-        const shouldOpenBrowser =
-          overrideOpenBrowser ?? launcherConfig.open_browser ?? true;
+        const shouldOpenBrowser = launcherConfig.open_browser ?? true;
 
-        const url = `http://127.0.0.1:${port}`;
+        const url = buildLocalServerUrl(port);
         const needsRecoveryKeyExitFlow =
           setupResult.setupMeta.justFinishedInteractiveSetup &&
           !isAuthInitialized(authDir);
@@ -435,7 +374,6 @@ export function createHirotaskmanagerProgram(): Command {
               await readServerStatus({
                 kind: "installed",
                 profile: selectedProfile,
-                port,
               })
             ).running;
         const startPlan = resolveLauncherStartPlan({
@@ -448,9 +386,6 @@ export function createHirotaskmanagerProgram(): Command {
         const startupSpinner = startInlineSpinner(
           `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(selectedProfile)}: ${paintValue(url)}`,
         );
-        const previousSilentStartup = process.env.TASKMANAGER_SILENT_STARTUP_LOG;
-        // Let the launcher own startup copy so first-time setup stays compact.
-        process.env.TASKMANAGER_SILENT_STARTUP_LOG = "1";
 
         let browserHandled = false;
         let runningUrl = url;
@@ -459,8 +394,6 @@ export function createHirotaskmanagerProgram(): Command {
             {
               kind: "installed",
               profile: selectedProfile,
-              port,
-              dataDir,
             },
             startPlan.startMode,
             async (status) => {
@@ -488,11 +421,6 @@ export function createHirotaskmanagerProgram(): Command {
             await waitForEnterKey();
           }
         } finally {
-          if (previousSilentStartup === undefined) {
-            delete process.env.TASKMANAGER_SILENT_STARTUP_LOG;
-          } else {
-            process.env.TASKMANAGER_SILENT_STARTUP_LOG = previousSilentStartup;
-          }
           startupSpinner.stop(null);
         }
       } catch (error) {
@@ -508,27 +436,17 @@ export function createHirotaskmanagerProgram(): Command {
     .command("start")
     .description("Start the installed TaskManager server")
     .option("--profile <name>", "Launcher profile name for this command")
-    .option("--data-dir <path>", "Override the task data directory")
     .option("--foreground", "Run the server in the foreground")
     .action(async (options: LauncherServerStartOptions, command: Command) => {
       try {
         const profile = resolveInstalledLauncherProfile(
           (command.optsWithGlobals() as LauncherServerStartOptions).profile ?? options.profile,
         );
-        const overrideDataDir = options.dataDir?.trim()
-          ? path.resolve(options.dataDir.trim())
-          : undefined;
         const config = readConfigFile({ profile, kind: "installed" });
-        const port = config.port ?? CLI_DEFAULTS.INSTALLED_DEFAULT_PORT;
-        const dataDir = path.resolve(
-          overrideDataDir ??
-            config.data_dir ??
-            getDefaultInstalledDataDir({ profile, kind: "installed" }),
-        );
+        const port = config.port ?? INSTALLED_DEFAULT_PORT;
         const status = await readServerStatus({
           kind: "installed",
           profile,
-          port,
         });
         const startPlan = resolveLauncherStartPlan({
           shouldRunSetup: false,
@@ -538,7 +456,7 @@ export function createHirotaskmanagerProgram(): Command {
           preferForegroundWhenNotSetup: options.foreground === true,
         });
         const startupSpinner = startInlineSpinner(
-          `${status.running ? "Checking Server" : "Starting Server"} with profile ${paintValue(profile)}: ${paintValue(status.running ? status.url : `http://127.0.0.1:${port}`)}`,
+          `${status.running ? "Checking Server" : "Starting Server"} with profile ${paintValue(profile)}: ${paintValue(status.running ? status.url : buildLocalServerUrl(port))}`,
         );
 
         try {
@@ -548,8 +466,6 @@ export function createHirotaskmanagerProgram(): Command {
             {
               kind: "installed",
               profile,
-              port,
-              dataDir,
             },
             startPlan.startMode,
             async (started) => {

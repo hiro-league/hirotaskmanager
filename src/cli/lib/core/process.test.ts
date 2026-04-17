@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { getServerPidFilePath } from "./config";
-import { readServerStatus, startServer, stopServer } from "./process";
+import { readServerStatus, stopServer } from "./process";
 import { CLI_ERR } from "../../types/errors";
 import { CliError } from "../output/output";
 
@@ -150,14 +150,6 @@ describe("process.ts server lifecycle (mock fetch)", () => {
     expect(status.runtime).toBe("dev");
     expect(status.source).toBe("repo");
     expect(status.url).toBe(`http://127.0.0.1:${port}`);
-  });
-
-  test("startServer — missing port → exit 2 missing_required", async () => {
-    await expect(startServer({})).rejects.toMatchObject({
-      name: "CliError",
-      exitCode: 2,
-      details: expect.objectContaining({ code: CLI_ERR.missingRequired }),
-    });
   });
 
   test("stopServer — no pid file → exit 1 no_managed_server", async () => {

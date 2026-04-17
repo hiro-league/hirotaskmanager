@@ -9,7 +9,6 @@ export const CLI_DEFAULTS = {
   SERVER_START_WAIT_MS: 8_000,
   /** Deadline for health to go false after SIGTERM when stopping a managed server. */
   SERVER_STOP_WAIT_MS: 10_000,
-  INSTALLED_DEFAULT_PORT: 3001,
 } as const;
 
 /** Short sleeps while polling health during server lifecycle. */

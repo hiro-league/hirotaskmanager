@@ -1,16 +1,18 @@
-let runtimeClientName = "hirotm";
+import { TASK_MANAGER_CLIENT_HIROTM } from "../../../shared/boardCliAccess";
+
+let runtimeClientName: string = TASK_MANAGER_CLIENT_HIROTM;
 let runtimeClientInstanceId: string | null = null;
 
 function generateClientInstanceId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  return `hirotm-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${TASK_MANAGER_CLIENT_HIROTM}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function setRuntimeCliClientName(name: string | undefined): void {
   const trimmed = typeof name === "string" ? name.trim() : "";
-  runtimeClientName = trimmed.length > 0 ? trimmed : "hirotm";
+  runtimeClientName = trimmed.length > 0 ? trimmed : TASK_MANAGER_CLIENT_HIROTM;
 }
 
 export function getRuntimeCliClientName(): string {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * One-shot auth bootstrap for integration tests. Requires env:
- * - TASKMANAGER_AUTH_DIR — directory for auth.json (must exist or be creatable)
+ * One-shot auth bootstrap for integration tests. Uses `resolveAuthDir()` from
+ * profile `config.json` (set `HOME` to an isolated tree with that config).
  *
  * Password is fixed for automation; this script is only for disposable temp dirs.
  */

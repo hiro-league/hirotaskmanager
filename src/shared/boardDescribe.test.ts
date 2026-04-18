@@ -6,7 +6,7 @@ import {
   parseBoardDescribeEntities,
   truncateBoardDescribeDescription,
 } from "./boardDescribe";
-import type { Board, ReleaseDefinition } from "./models";
+import type { Board } from "./models";
 import type { BoardCliPolicy } from "./cliPolicy";
 import { FULL_BOARD_CLI_POLICY } from "./cliPolicy";
 

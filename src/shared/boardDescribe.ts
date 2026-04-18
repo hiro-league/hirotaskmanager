@@ -1,5 +1,5 @@
 import type { BoardCliPolicy } from "./cliPolicy";
-import type { Board, ReleaseDefinition, Status } from "./models";
+import type { Board, Status } from "./models";
 import { sortReleasesForDisplay } from "./releaseSort";
 
 /** Max items per array section in `GET /api/boards/:id/describe` / `hirotm boards describe`. */

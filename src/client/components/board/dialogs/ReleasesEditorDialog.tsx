@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { Board, ReleaseDefinition } from "../../../../shared/models";
+import type { Board } from "../../../../shared/models";
 import { sortReleasesForDisplay } from "../../../../shared/releaseSort";
 import { isValidHexColor } from "../../../../shared/hexColor";
 import {

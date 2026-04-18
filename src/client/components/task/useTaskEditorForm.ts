@@ -25,6 +25,23 @@ interface TaskEditorFormBaseline {
   emoji: string | null;
 }
 
+/**
+ * Board list tasks and `useBoardTaskDetail` share a cache key family but update on different
+ * schedules. Prefer the snapshot with the newer `updatedAt` so optimistic board updates (e.g.
+ * workflow buttons) win over stale detail rows until `onSuccess` refreshes the detail cache.
+ * When timestamps tie, prefer detail — board payloads may be slim until the detail fetch lands.
+ */
+function pickTaskSnapshotForSync(boardTask: Task, detail: Task | undefined): Task {
+  if (detail == null) return boardTask;
+  const boardTime = Date.parse(boardTask.updatedAt);
+  const detailTime = Date.parse(detail.updatedAt);
+  if (!Number.isFinite(boardTime) || !Number.isFinite(detailTime)) {
+    return detail;
+  }
+  if (boardTime > detailTime) return boardTask;
+  return detail;
+}
+
 export interface UseTaskEditorFormArgs {
   board: TaskEditorBoardData;
   open: boolean;
@@ -92,7 +109,7 @@ export function useTaskEditorForm({
         };
         return;
       }
-      const t = taskDetailQuery.data ?? task;
+      const t = pickTaskSnapshotForSync(task, taskDetailQuery.data);
       setTitle(t.title);
       setBody(t.body);
       setEmoji(t.emoji ?? null);
@@ -170,7 +187,14 @@ export function useTaskEditorForm({
     return false;
   }, [open, mode, task, createContext, title, body, group, priority, release, emoji]);
 
-  const handleSave = useCallback(async () => {
+  /**
+   * Merge current form fields into the edit `task` snapshot (same shape as Save).
+   * Used by workflow buttons so status changes cannot overwrite unsaved title/body/etc.
+   */
+  const buildEditTaskFromForm = useCallback((): Task => {
+    if (mode !== "edit" || !task) {
+      throw new Error("buildEditTaskFromForm is only valid in edit mode with a task");
+    }
     const trimmedTitle = normalizeStoredTaskTitle(title.trim() || "Untitled");
     const now = new Date().toISOString();
     const priorityNum = Number(priority);
@@ -178,7 +202,39 @@ export function useTaskEditorForm({
       ? priorityNum
       : (noneTaskPriorityId(board.taskPriorities) ??
         sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId);
+    const gid = Number(group) || task.groupId;
+    const nextReleaseId =
+      release === RELEASE_SELECT_NONE ? null : Number(release);
+    return {
+      ...task,
+      title: trimmedTitle,
+      body,
+      groupId: gid,
+      priorityId,
+      releaseId: nextReleaseId,
+      emoji: emoji ?? null,
+      updatedAt: now,
+    };
+  }, [
+    mode,
+    task,
+    board.taskPriorities,
+    title,
+    body,
+    group,
+    priority,
+    release,
+    emoji,
+  ]);
+
+  const handleSave = useCallback(async () => {
+    const priorityNum = Number(priority);
+    const priorityId = Number.isFinite(priorityNum)
+      ? priorityNum
+      : (noneTaskPriorityId(board.taskPriorities) ??
+        sortPrioritiesByValue(board.taskPriorities)[0]!.priorityId);
     if (mode === "create" && createContext) {
+      const trimmedTitle = normalizeStoredTaskTitle(title.trim() || "Untitled");
       const gid = Number(group) || effectiveDefaultTaskGroupId(board);
       const defaultNone = noneTaskPriorityId(board.taskPriorities);
       let releasePayload: number | null | undefined;
@@ -197,21 +253,9 @@ export function useTaskEditorForm({
         emoji: emoji ?? null,
       });
     } else if (mode === "edit" && task) {
-      const gid = Number(group) || task.groupId;
-      const nextReleaseId =
-        release === RELEASE_SELECT_NONE ? null : Number(release);
       await updateTask.mutateAsync({
         boardId: board.boardId,
-        task: {
-          ...task,
-          title: trimmedTitle,
-          body,
-          groupId: gid,
-          priorityId,
-          releaseId: nextReleaseId,
-          emoji: emoji ?? null,
-          updatedAt: now,
-        },
+        task: buildEditTaskFromForm(),
       });
     }
     onClose();
@@ -232,6 +276,7 @@ export function useTaskEditorForm({
     createTask,
     updateTask,
     onClose,
+    buildEditTaskFromForm,
   ]);
 
   return {
@@ -249,6 +294,7 @@ export function useTaskEditorForm({
     setRelease,
     isDirty,
     handleSave,
+    buildEditTaskFromForm,
     taskDetailQuery,
     createTask,
     updateTask,

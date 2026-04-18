@@ -1,7 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import {
   createBrowserRouter,
-  Navigate,
   Outlet,
   RouterProvider,
 } from "react-router-dom";
@@ -13,6 +12,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { NavigationRegistrar } from "@/components/routing/NavigationRegistrar";
+import { NotFoundRoute } from "@/components/routing/NotFoundRoute";
 import { BoardSearchProvider } from "@/context/BoardSearchContext";
 
 // Route-level code splitting (bundle-dynamic-imports): board/settings/trash/home defer heavy graphs until navigated.
@@ -65,7 +65,7 @@ const authenticatedAppRouter = createBrowserRouter([
       { path: "settings", element: <SettingsPage /> },
       { path: "trash", element: <TrashPage /> },
       { path: "board/:boardId", element: <BoardPage /> },
-      { path: "*", element: <Navigate to="/" replace /> },
+      { path: "*", element: <NotFoundRoute /> },
     ],
   },
 ]);

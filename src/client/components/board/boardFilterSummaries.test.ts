@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 import { RELEASE_FILTER_UNTAGGED } from "../../../shared/boardFilters";
 import { EMPTY_BOARD_CLI_POLICY } from "../../../shared/cliPolicy";
 import type { Board, List } from "../../../shared/models";
-import { buildBoardFilterSummaries } from "./boardFilterSummaries";
+import {
+  boardHasClearableTaskFilters,
+  buildBoardFilterSummaries,
+} from "./boardFilterSummaries";
 import type { TaskDateFilterResolved } from "./boardStatusUtils";
 
 function listRow(listId: number): List {
@@ -92,5 +95,33 @@ describe("buildBoardFilterSummaries", () => {
     const board = minimalBoard({ defaultReleaseId: 2 });
     const s = buildBoardFilterSummaries(board, null, null, null, null);
     expect(s.defaultRelease?.name).toBe("R2");
+  });
+});
+
+describe("boardHasClearableTaskFilters", () => {
+  test("false when all dimensions are default", () => {
+    expect(boardHasClearableTaskFilters(null, null, null, null)).toBe(false);
+  });
+
+  test("true when a group is selected", () => {
+    expect(boardHasClearableTaskFilters(["1"], null, null, null)).toBe(true);
+  });
+
+  test("true when priority filter is explicit (including empty)", () => {
+    expect(boardHasClearableTaskFilters(null, [], null, null)).toBe(true);
+    expect(boardHasClearableTaskFilters(null, ["10"], null, null)).toBe(true);
+  });
+
+  test("true when release filter is explicit", () => {
+    expect(boardHasClearableTaskFilters(null, null, [], null)).toBe(true);
+  });
+
+  test("true when date filter is active", () => {
+    const df: TaskDateFilterResolved = {
+      mode: "any",
+      startDate: "2025-06-01",
+      endDate: "2025-06-01",
+    };
+    expect(boardHasClearableTaskFilters(null, null, null, df)).toBe(true);
   });
 });

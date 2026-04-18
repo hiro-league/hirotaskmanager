@@ -11,6 +11,8 @@ export interface BoardHeaderMultiSelectOption {
   id: string;
   label: string;
   color?: string;
+  /** Board default release — star in the dropdown list. */
+  markAsDefault?: boolean;
 }
 
 interface BoardHeaderMultiSelectProps {
@@ -27,18 +29,22 @@ interface BoardHeaderMultiSelectProps {
   editButtonAriaLabel?: string;
 }
 
-function OptionColorRail({
+/** Release filter: every row gets a fixed-size circle — filled when colored, border-only when not (aligned list). */
+function ReleaseFilterColorSwatch({
   color,
   className,
 }: {
   color?: string;
   className?: string;
 }) {
-  if (!color) return null;
   return (
     <span
-      className={cn("inline-flex h-4 w-1 shrink-0 rounded-full", className)}
-      style={{ backgroundColor: color }}
+      className={cn(
+        "box-border inline-block shrink-0 rounded-full border bg-background",
+        color ? "border-transparent" : "border-border",
+        className,
+      )}
+      style={color ? { backgroundColor: color } : undefined}
       aria-hidden
     />
   );
@@ -105,11 +111,10 @@ export function BoardHeaderMultiSelect({
           options={options.map((option) => ({
             value: option.id,
             label: option.label,
-            icon: option.color
-              ? ({ className }: { className?: string }) => (
-                  <OptionColorRail color={option.color} className={className} />
-                )
-              : undefined,
+            markAsDefault: option.markAsDefault,
+            icon: ({ className }: { className?: string }) => (
+              <ReleaseFilterColorSwatch color={option.color} className={className} />
+            ),
           }))}
           defaultValue={effectiveSelectedIds}
           onValueChange={applySelection}

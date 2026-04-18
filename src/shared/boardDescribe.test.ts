@@ -4,7 +4,6 @@ import {
   BOARD_DESCRIBE_MAX_ITEMS,
   buildBoardDescribeResponse,
   parseBoardDescribeEntities,
-  sortReleasesForDescribe,
   truncateBoardDescribeDescription,
 } from "./boardDescribe";
 import type { Board, ReleaseDefinition } from "./models";
@@ -107,33 +106,6 @@ describe("truncateBoardDescribeDescription", () => {
     const r = truncateBoardDescribeDescription(long);
     expect(r.truncated).toBe(true);
     expect(r.text.length).toBe(BOARD_DESCRIBE_MAX_DESCRIPTION_CHARS);
-  });
-});
-
-describe("sortReleasesForDescribe", () => {
-  test("null dates last; dated desc", () => {
-    const rels: ReleaseDefinition[] = [
-      {
-        releaseId: 1,
-        name: "a",
-        releaseDate: "2024-01-01",
-        createdAt: "2024-01-01T00:00:00.000Z",
-      },
-      {
-        releaseId: 2,
-        name: "b",
-        releaseDate: null,
-        createdAt: "2024-06-01T00:00:00.000Z",
-      },
-      {
-        releaseId: 3,
-        name: "c",
-        releaseDate: "2025-01-01",
-        createdAt: "2024-01-01T00:00:00.000Z",
-      },
-    ];
-    const s = sortReleasesForDescribe(rels);
-    expect(s.map((r) => r.releaseId)).toEqual([3, 1, 2]);
   });
 });
 

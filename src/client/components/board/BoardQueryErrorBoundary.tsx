@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { RedirectCountdownNotice } from "@/components/routing/RedirectCountdownNotice";
 
 /** Board GET returns 404 JSON when the board is gone or in Trash. */
 function isBoardDetailNotFound(error: unknown): boolean {
@@ -17,7 +17,7 @@ interface BoardQueryErrorBoundaryState {
 
 /**
  * Catches errors from `useSuspenseQuery` for board fetch (e.g. network/404) so we can
- * redirect to Trash for missing boards instead of an uncaught render throw (Priority 3 — Suspense).
+ * show a friendly message and timed redirect home instead of an uncaught render throw (Priority 3 — Suspense).
  */
 export class BoardQueryErrorBoundary extends Component<
   BoardQueryErrorBoundaryProps,
@@ -49,13 +49,20 @@ export class BoardQueryErrorBoundary extends Component<
   render(): ReactNode {
     const { error } = this.state;
     if (error && isBoardDetailNotFound(error)) {
-      return <Navigate to="/trash" replace />;
+      return (
+        <RedirectCountdownNotice
+          title="Board not found"
+          description="This board ID or link doesn’t exist, or the board may have been removed."
+        />
+      );
     }
     if (error) {
       return (
-        <div className="flex min-h-0 flex-1 flex-col p-8">
-          <p className="text-destructive">{error.message}</p>
-        </div>
+        <RedirectCountdownNotice
+          title="Couldn’t load this board"
+          description="Something went wrong while loading the board. You can go home or wait for the redirect."
+          detail={error.message}
+        />
       );
     }
     return this.props.children;

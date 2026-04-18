@@ -267,6 +267,48 @@
   }
 
   /*
+   * Redirect countdown (missing board / unknown route): block-style spinner.
+   * Uses --foreground so light/dark themes match body text; original used #fff for dark UIs only.
+   */
+  .redirect-countdown-loader {
+    width: 55px;
+    aspect-ratio: 1;
+    color: var(--foreground);
+    --rc-g1: conic-gradient(from 90deg at 3px 3px, #0000 90deg, currentColor 0);
+    --rc-g2: conic-gradient(from -90deg at 22px 22px, #0000 90deg, currentColor 0);
+    background: var(--rc-g1), var(--rc-g1), var(--rc-g1), var(--rc-g2), var(--rc-g2),
+      var(--rc-g2);
+    background-size: 25px 25px;
+    background-repeat: no-repeat;
+    animation: redirect-countdown-l7 1.5s infinite;
+  }
+
+  @keyframes redirect-countdown-l7 {
+    0% {
+      background-position: 0 0, 0 100%, 100% 100%;
+    }
+    25% {
+      background-position: 100% 0, 0 100%, 100% 100%;
+    }
+    50% {
+      background-position: 100% 0, 0 0, 100% 100%;
+    }
+    75% {
+      background-position: 100% 0, 0 0, 0 100%;
+    }
+    100% {
+      background-position: 100% 100%, 0 0, 0 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .redirect-countdown-loader {
+      animation: none !important;
+      opacity: 0.85;
+    }
+  }
+
+  /*
    * Task MD editor (@uiw/react-md-editor): Tailwind Preflight sets ul/ol { list-style: none },
    * which removes bullets and numbers in the preview pane. Restore normal list styling here.
    * Checkbox task lines use .contains-task-list li.task-list-item { list-style: none } from the library.

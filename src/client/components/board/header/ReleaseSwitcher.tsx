@@ -1,5 +1,6 @@
 import { startTransition, useMemo } from "react";
 import { RELEASE_FILTER_UNTAGGED } from "../../../../shared/boardFilters";
+import { sortReleasesForDisplay } from "../../../../shared/releaseSort";
 import { EMPTY_SORTABLE_IDS } from "@/components/board/dnd/dndIds";
 import type { Board } from "../../../../shared/models";
 import {
@@ -23,14 +24,17 @@ export function ReleaseSwitcher({
   const activeReleaseIds = useResolvedActiveReleaseIds(board.boardId, board.releases);
   const options = useMemo(
     () => [
-      { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
-      ...board.releases.map((r) => ({
+      ...sortReleasesForDisplay(board.releases).map((r) => ({
         id: String(r.releaseId),
         label: r.name,
         color: r.color ?? undefined,
+        markAsDefault:
+          board.defaultReleaseId != null &&
+          r.releaseId === board.defaultReleaseId,
       })),
+      { id: RELEASE_FILTER_UNTAGGED, label: "Unassigned" },
     ],
-    [board.releases],
+    [board.defaultReleaseId, board.releases],
   );
 
   return (

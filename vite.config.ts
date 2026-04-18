@@ -93,7 +93,14 @@ export default defineConfig({
   },
   server: {
     watch: {
-      ignored: ["**/data/**"],
+      // Exclude non-app paths so edits there don't trigger full-page HMR reloads.
+      ignored: [
+        "**/data/**",
+        "**/docs/**",
+        "**/*.md",
+        "**/coverage/**",
+        "**/playwright-report/**",
+      ],
     },
     proxy: {
       "/api": {

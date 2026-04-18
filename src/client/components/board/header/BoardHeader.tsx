@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Bot, ChevronDown, ChevronUp, MoreVertical } from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, MoreVertical, Star, X } from "lucide-react";
 import {
   createContext,
   use,
@@ -46,8 +46,19 @@ export interface BoardHeaderEmojiProps {
   pickBoardEmoji: (next: string | null) => void | Promise<void>;
 }
 
+/** Star toggles UI auto-assign; release name applies the release filter (see default-release chip UX). */
+export interface BoardHeaderDefaultReleaseChipProps {
+  patchBoardPending: boolean;
+  autoAssignUiOn: boolean;
+  onToggleAutoAssignUi: () => void | Promise<void>;
+  onFilterToDefaultRelease: () => void;
+}
+
 export interface BoardHeaderFiltersProps {
   filterSummaries: BoardFilterSummaries;
+  defaultReleaseChip?: BoardHeaderDefaultReleaseChipProps | null;
+  /** When set, a compact clear chip is shown before the filter summary badges (title row). */
+  onClearTaskFilters?: () => void;
 }
 
 export interface BoardHeaderStatsRowProps {
@@ -353,10 +364,21 @@ function BoardHeaderTitle() {
 }
 
 function BoardHeaderFilterSummaries() {
-  const { filterSummaries } = useBoardHeaderFilters();
+  const { filterSummaries, onClearTaskFilters } = useBoardHeaderFilters();
 
   return (
     <div className="hidden shrink-0 items-center gap-2 @min-[900px]:flex">
+      {onClearTaskFilters ? (
+        <button
+          type="button"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+          title="Clear all task filters"
+          aria-label="Clear all task filters"
+          onClick={onClearTaskFilters}
+        >
+          <X className="size-3.5 shrink-0" strokeWidth={2} aria-hidden />
+        </button>
+      ) : null}
       {filterSummaries.group ? (
         <div
           className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
@@ -530,7 +552,7 @@ function BoardHeaderCollapseButton() {
 function BoardHeaderFilterStrip() {
   const board = useBoardHeaderBoard();
   const { filterCollapsed, headerScroll } = useBoardHeaderShell();
-  const { filterSummaries } = useBoardHeaderFilters();
+  const { filterSummaries, defaultReleaseChip } = useBoardHeaderFilters();
   const { openGroupsEditor, openPrioritiesEditor, openReleasesEditor } =
     useBoardDialogs();
 
@@ -567,24 +589,67 @@ function BoardHeaderFilterStrip() {
               onOpenReleasesEditor={openReleasesEditor}
             />
           </div>
-          {filterSummaries.defaultRelease ? (
-            <div
-              className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
-              title={`Default release: ${filterSummaries.defaultRelease.name}`}
-            >
-              <span className="uppercase tracking-wide">Default</span>
-              {filterSummaries.defaultRelease.color ? (
-                <span
-                  className="size-2.5 shrink-0 rounded-full border border-black/30"
-                  style={{
-                    backgroundColor: filterSummaries.defaultRelease.color,
-                  }}
+          {filterSummaries.defaultRelease && defaultReleaseChip ? (
+            <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-1.5 py-1 text-xs text-muted-foreground">
+              <button
+                type="button"
+                tabIndex={headerScroll.headerHovered ? 0 : -1}
+                disabled={defaultReleaseChip.patchBoardPending}
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground disabled:opacity-50",
+                  defaultReleaseChip.autoAssignUiOn && "text-amber-500",
+                )}
+                title={
+                  defaultReleaseChip.autoAssignUiOn
+                    ? "Turn off: new tasks created in the UI will not be defaulted to this release."
+                    : "Turn on: new tasks created in the UI will be defaulted to this release."
+                }
+                aria-label={
+                  defaultReleaseChip.autoAssignUiOn
+                    ? "Default release applied to new tasks created in the app (on). Press to turn off."
+                    : "Default release not applied to new tasks created in the app (off). Press to turn on."
+                }
+                aria-pressed={defaultReleaseChip.autoAssignUiOn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void defaultReleaseChip.onToggleAutoAssignUi();
+                }}
+              >
+                <Star
+                  className={cn(
+                    "size-4",
+                    defaultReleaseChip.autoAssignUiOn
+                      ? "fill-amber-500 text-amber-500"
+                      : "fill-none",
+                  )}
                   aria-hidden
                 />
-              ) : null}
-              <span className="truncate font-medium text-foreground">
-                {filterSummaries.defaultRelease.name}
-              </span>
+              </button>
+              {/* Swatch + name share one control so “filter to this release” matches the visible chip. */}
+              <button
+                type="button"
+                tabIndex={headerScroll.headerHovered ? 0 : -1}
+                className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-foreground hover:bg-muted/80 hover:underline"
+                title={`Filter tasks using this release.`}
+                aria-label={`Filter tasks using release ${filterSummaries.defaultRelease.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  defaultReleaseChip.onFilterToDefaultRelease();
+                }}
+              >
+                {filterSummaries.defaultRelease.color ? (
+                  <span
+                    className="size-2.5 shrink-0 rounded-full border border-black/30"
+                    style={{
+                      backgroundColor: filterSummaries.defaultRelease.color,
+                    }}
+                    aria-hidden
+                  />
+                ) : null}
+                <span className="min-w-0 truncate">
+                  {filterSummaries.defaultRelease.name}
+                </span>
+              </button>
             </div>
           ) : null}
         </div>

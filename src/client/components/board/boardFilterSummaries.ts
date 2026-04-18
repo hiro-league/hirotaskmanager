@@ -9,6 +9,19 @@ import {
 import { formatMonthDayShortMaybeYear } from "@/lib/intlDateFormat";
 import type { TaskDateFilterResolved } from "./boardStatusUtils";
 
+/** True when any task filter deviates from “all groups, all priorities, all releases, date filter off”. */
+export function boardHasClearableTaskFilters(
+  activeTaskGroupIds: string[] | null,
+  activeTaskPriorityIds: string[] | null,
+  activeReleaseIds: string[] | null,
+  dateFilterResolved: TaskDateFilterResolved | null,
+): boolean {
+  if (activeTaskGroupIds != null && activeTaskGroupIds.length > 0) return true;
+  if (activeTaskPriorityIds != null) return true;
+  if (activeReleaseIds != null) return true;
+  return dateFilterResolved != null;
+}
+
 export interface BoardFilterSummaryChip {
   summary: string;
   tooltip?: string;

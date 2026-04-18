@@ -280,6 +280,8 @@ interface BoardFiltersState extends BoardFiltersPersistedState {
     mode: TaskCardViewMode,
   ) => void;
   pruneBoardScopedPreferences: (boardIds: Iterable<string | number>) => void;
+  /** Reset group, priority, release, and date task filters for one board (card size unchanged). */
+  clearTaskFiltersForBoard: (boardId: string | number) => void;
 }
 
 export const useBoardFiltersStore = create<BoardFiltersState>()(
@@ -337,6 +339,30 @@ export const useBoardFiltersStore = create<BoardFiltersState>()(
             [String(boardId)]: mode,
           },
         })),
+      clearTaskFiltersForBoard: (boardId) =>
+        set((s) => {
+          const key = String(boardId);
+          const nextGroups = { ...s.activeTaskGroupIdsByBoardId };
+          delete nextGroups[key];
+          const nextPriorities = { ...s.activeTaskPriorityIdsByBoardId };
+          delete nextPriorities[key];
+          const nextReleases = { ...s.activeReleaseIdsByBoardId };
+          delete nextReleases[key];
+          const existingDate = s.taskDateFilterByBoardId[key];
+          const nextTaskDateFilterByBoardId =
+            existingDate?.enabled === true
+              ? {
+                  ...s.taskDateFilterByBoardId,
+                  [key]: { ...existingDate, enabled: false },
+                }
+              : s.taskDateFilterByBoardId;
+          return {
+            activeTaskGroupIdsByBoardId: nextGroups,
+            activeTaskPriorityIdsByBoardId: nextPriorities,
+            activeReleaseIdsByBoardId: nextReleases,
+            taskDateFilterByBoardId: nextTaskDateFilterByBoardId,
+          };
+        }),
       pruneBoardScopedPreferences: (boardIds) =>
         set((s) => {
           const validIds = new Set(Array.from(boardIds, (id) => String(id)));

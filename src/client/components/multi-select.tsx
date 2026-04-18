@@ -6,6 +6,7 @@ import {
 	ChevronDown,
 	XIcon,
 	WandSparkles,
+	Star,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -89,6 +90,8 @@ interface MultiSelectOption {
 	icon?: React.ComponentType<{ className?: string }>;
 	/** Whether this option is disabled */
 	disabled?: boolean;
+	/** When true, show a star after the label (e.g. board default release in header filter). */
+	markAsDefault?: boolean;
 	/** Custom styling for the option */
 	style?: {
 		/** Custom badge color */
@@ -1100,7 +1103,9 @@ export function MultiSelect({
 														aria-disabled={option.disabled}
 														aria-label={`${option.label}${
 															isSelected ? ", selected" : ", not selected"
-														}${option.disabled ? ", disabled" : ""}`}
+														}${option.disabled ? ", disabled" : ""}${
+															option.markAsDefault ? ", default release" : ""
+														}`}
 														className={cn(
 															"cursor-pointer",
 															option.disabled && "opacity-50 cursor-not-allowed"
@@ -1122,7 +1127,15 @@ export function MultiSelect({
 																aria-hidden="true"
 															/>
 														)}
-														<span>{option.label}</span>
+														<span className="inline-flex min-w-0 items-center gap-1">
+															{option.label}
+															{option.markAsDefault ? (
+																<Star
+																	className="size-3.5 shrink-0 fill-amber-500 text-amber-500"
+																	aria-hidden
+																/>
+															) : null}
+														</span>
 													</CommandItem>
 												);
 											})}
@@ -1141,7 +1154,9 @@ export function MultiSelect({
 													aria-disabled={option.disabled}
 													aria-label={`${option.label}${
 														isSelected ? ", selected" : ", not selected"
-													}${option.disabled ? ", disabled" : ""}`}
+													}${option.disabled ? ", disabled" : ""}${
+														option.markAsDefault ? ", default release" : ""
+													}`}
 													className={cn(
 														"cursor-pointer",
 														option.disabled && "opacity-50 cursor-not-allowed"
@@ -1163,7 +1178,15 @@ export function MultiSelect({
 															aria-hidden="true"
 														/>
 													)}
-													<span>{option.label}</span>
+													<span className="inline-flex min-w-0 items-center gap-1">
+														{option.label}
+														{option.markAsDefault ? (
+															<Star
+																className="size-3.5 shrink-0 fill-amber-500 text-amber-500"
+																aria-hidden
+															/>
+														) : null}
+													</span>
 												</CommandItem>
 											);
 										})}

@@ -1,5 +1,6 @@
 import type { BoardCliPolicy } from "./cliPolicy";
 import type { Board, ReleaseDefinition, Status } from "./models";
+import { sortReleasesForDisplay } from "./releaseSort";
 
 /** Max items per array section in `GET /api/boards/:id/describe` / `hirotm boards describe`. */
 export const BOARD_DESCRIBE_MAX_ITEMS = 100;
@@ -121,34 +122,7 @@ export function truncateBoardDescribeDescription(raw: string): {
   };
 }
 
-/**
- * Sort releases for describe: `releaseDate` descending, null dates last; tie-break `createdAt` desc, then `releaseId` desc.
- */
-export function sortReleasesForDescribe(
-  releases: readonly ReleaseDefinition[],
-): ReleaseDefinition[] {
-  return [...releases].sort((a, b) => {
-    const ad =
-      a.releaseDate != null && String(a.releaseDate).trim() !== ""
-        ? String(a.releaseDate).trim()
-        : null;
-    const bd =
-      b.releaseDate != null && String(b.releaseDate).trim() !== ""
-        ? String(b.releaseDate).trim()
-        : null;
-    if (ad !== null && bd !== null) {
-      const c = bd.localeCompare(ad);
-      if (c !== 0) return c;
-    } else if (ad !== null && bd === null) {
-      return -1;
-    } else if (ad === null && bd !== null) {
-      return 1;
-    }
-    const tc = b.createdAt.localeCompare(a.createdAt);
-    if (tc !== 0) return tc;
-    return b.releaseId - a.releaseId;
-  });
-}
+export { sortReleasesForDisplay as sortReleasesForDescribe };
 
 export type ParsedBoardDescribeEntities =
   | {
@@ -261,7 +235,7 @@ export function buildBoardDescribeResponse(
       value: p.value,
     })),
   );
-  const releaseSorted = sortReleasesForDescribe(board.releases);
+  const releaseSorted = sortReleasesForDisplay(board.releases);
   const defId = board.defaultReleaseId;
   const releaseSlice = capItems(
     releaseSorted.map((r) => ({

@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Board, ReleaseDefinition } from "../../../../shared/models";
+import { sortReleasesForDisplay } from "../../../../shared/releaseSort";
 import { isValidHexColor } from "../../../../shared/hexColor";
 import {
   ClearColorIconButton,
@@ -39,31 +40,6 @@ interface ReleasesEditorDialogProps {
   board: Board;
   open: boolean;
   onClose: () => void;
-}
-
-/** Editor list only: non-empty release dates descending, then undated rows in creation order. */
-function sortReleasesForEditorDisplay(
-  releases: readonly ReleaseDefinition[],
-): ReleaseDefinition[] {
-  const dated: ReleaseDefinition[] = [];
-  const undated: ReleaseDefinition[] = [];
-  for (const r of releases) {
-    const d = r.releaseDate?.trim() ?? "";
-    if (d !== "") dated.push(r);
-    else undated.push(r);
-  }
-  dated.sort((a, b) => {
-    const da = (a.releaseDate ?? "").trim();
-    const db = (b.releaseDate ?? "").trim();
-    const cmp = db.localeCompare(da);
-    if (cmp !== 0) return cmp;
-    return b.releaseId - a.releaseId;
-  });
-  undated.sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.releaseId - b.releaseId,
-  );
-  return [...dated, ...undated];
 }
 
 export function ReleasesEditorDialog({
@@ -128,7 +104,7 @@ export function ReleasesEditorDialog({
   }, [board.tasks]);
 
   const releasesInEditorOrder = useMemo(
-    () => sortReleasesForEditorDisplay(board.releases),
+    () => sortReleasesForDisplay(board.releases),
     [board.releases],
   );
 

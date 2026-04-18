@@ -86,7 +86,7 @@ describe("HomeRedirect", () => {
     expect(document.querySelector(".animate-pulse")).toBeTruthy();
   });
 
-  test("shows error message when boards query fails", () => {
+  test("shows countdown error when boards query fails", () => {
     useBoardsMock.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -94,7 +94,10 @@ describe("HomeRedirect", () => {
       error: new Error("fetch failed"),
     });
     renderHomeRoutes();
-    expect(screen.getByText("fetch failed")).toBeTruthy();
+    expect(screen.getByTestId("redirect-countdown-notice")).toBeTruthy();
+    expect(screen.getByTestId("redirect-countdown-detail")).toHaveTextContent(
+      "fetch failed",
+    );
   });
 
   test("renders no-board-selected empty state when there are no boards", () => {

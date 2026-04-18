@@ -28,6 +28,15 @@ import type {
   TrashedTaskItem,
 } from "../../shared/trashApi";
 
+/** Thrown by {@link fetchJson} on non-OK responses so callers can skip TanStack Query retries for 4xx. */
+export type HttpError = Error & { status: number };
+
+function isClientHttpError(error: unknown): error is HttpError {
+  if (!(error instanceof Error)) return false;
+  const status = (error as HttpError).status;
+  return typeof status === "number" && status >= 400 && status < 500;
+}
+
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -37,7 +46,9 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    const err = new Error(text || res.statusText) as HttpError;
+    err.status = res.status;
+    throw err;
   }
   return res.json() as Promise<T>;
 }
@@ -160,12 +171,19 @@ export function useBoards() {
   });
 }
 
+/** Don’t retry 4xx (e.g. missing board) — default Query retries would delay the not-found UI by seconds. */
+function boardDetailRetry(failureCount: number, error: unknown): boolean {
+  if (isClientHttpError(error)) return false;
+  return failureCount < 3;
+}
+
 export function useBoard(id: string | number | null) {
   const key = boardDetailQueryKey(id);
   return useQuery({
     queryKey: [...boardKeys.all, key],
     queryFn: () => fetchBoard(id!),
     enabled: key != null,
+    retry: boardDetailRetry,
   });
 }
 
@@ -178,6 +196,7 @@ export function useSuspenseBoard(boardId: string | number) {
   return useSuspenseQuery({
     queryKey: [...boardKeys.all, key],
     queryFn: () => fetchBoard(boardId),
+    retry: boardDetailRetry,
   });
 }
 

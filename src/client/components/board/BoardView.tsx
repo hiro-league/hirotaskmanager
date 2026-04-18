@@ -23,6 +23,7 @@ import { BoardFilterResolutionProvider } from "@/context/BoardFilterResolutionCo
 import { BoardEditingProvider } from "@/context/BoardEditingContext";
 import { useBoardSearch } from "@/context/BoardSearchContext";
 import {
+  useBoardFiltersStore,
   usePreferencesStore,
   useResolvedActiveReleaseIds,
   useResolvedActiveTaskGroupIds,
@@ -45,7 +46,10 @@ import {
   type BoardStatsDisplayValue,
 } from "./BoardStatsContext";
 import { BoardShortcutBindings } from "./BoardShortcutBindings";
-import { buildBoardFilterSummaries } from "./boardFilterSummaries";
+import {
+  boardHasClearableTaskFilters,
+  buildBoardFilterSummaries,
+} from "./boardFilterSummaries";
 import { getBoardThemeStyle } from "./boardTheme";
 import { ReleasesEditorDialog } from "./dialogs/ReleasesEditorDialog";
 import {
@@ -63,6 +67,7 @@ import { useBoardHeaderScrollMetrics } from "./useBoardHeaderScrollMetrics";
 import {
   BoardTaskCompletionCelebrationProvider,
 } from "@/gamification";
+import { RedirectCountdownNotice } from "@/components/routing/RedirectCountdownNotice";
 import { BoardQueryErrorBoundary } from "./BoardQueryErrorBoundary";
 
 function BoardViewLoadingFallback() {
@@ -87,14 +92,10 @@ export function BoardView({ boardId }: BoardViewProps) {
 
   if (!boardId) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
-        <h1 className="text-balance text-lg font-medium text-foreground">
-          No board selected
-        </h1>
-        <p className="max-w-sm text-pretty text-sm">
-          Choose a board from the sidebar or create a new one.
-        </p>
-      </div>
+      <RedirectCountdownNotice
+        title="No board selected"
+        description="Choose a board from the sidebar or create a new one."
+      />
     );
   }
 
@@ -161,6 +162,12 @@ function BoardViewBody({ boardId }: { boardId: string }) {
   );
   const dateFilterResolved = useResolvedTaskDateFilter(String(data.boardId));
   const taskCardViewMode = useResolvedTaskCardViewMode(String(data.boardId));
+  const setActiveReleaseIdsForBoard = useBoardFiltersStore(
+    (s) => s.setActiveReleaseIdsForBoard,
+  );
+  const clearTaskFiltersForBoard = useBoardFiltersStore(
+    (s) => s.clearTaskFiltersForBoard,
+  );
 
   const boardFilterResolution = useMemo(
     () => ({
@@ -287,6 +294,59 @@ function BoardViewBody({ boardId }: { boardId: string }) {
     dateFilterResolved,
   );
 
+  const defaultReleaseChip = useMemo(() => {
+    if (!filterSummaries.defaultRelease) return null;
+    return {
+      patchBoardPending: patchBoard.isPending,
+      autoAssignUiOn: data.autoAssignReleaseOnCreateUi,
+      onToggleAutoAssignUi: async () => {
+        try {
+          await patchBoard.mutateAsync({
+            boardId: data.boardId,
+            autoAssignReleaseOnCreateUi: !data.autoAssignReleaseOnCreateUi,
+          });
+        } catch {
+          /* server rejected; cache rolls back via mutation onError */
+        }
+      },
+      onFilterToDefaultRelease: () => {
+        if (data.defaultReleaseId == null) return;
+        startTransition(() =>
+          setActiveReleaseIdsForBoard(data.boardId, [
+            String(data.defaultReleaseId),
+          ]),
+        );
+      },
+    };
+  }, [
+    data.autoAssignReleaseOnCreateUi,
+    data.boardId,
+    data.defaultReleaseId,
+    filterSummaries.defaultRelease,
+    patchBoard,
+    setActiveReleaseIdsForBoard,
+  ]);
+
+  const clearableTaskFilters = useMemo(
+    () =>
+      boardHasClearableTaskFilters(
+        activeTaskGroupIds,
+        activeTaskPriorityIds,
+        activeReleaseIds,
+        dateFilterResolved,
+      ),
+    [
+      activeTaskGroupIds,
+      activeTaskPriorityIds,
+      activeReleaseIds,
+      dateFilterResolved,
+    ],
+  );
+
+  const handleClearTaskFilters = useCallback(() => {
+    startTransition(() => clearTaskFiltersForBoard(data.boardId));
+  }, [clearTaskFiltersForBoard, data.boardId]);
+
   return (
     <ShortcutScopeProvider>
       <BoardStatsDisplayProvider value={boardStatsDisplay}>
@@ -336,7 +396,13 @@ function BoardViewBody({ boardId }: { boardId: string }) {
                             patchBoardPending: patchBoard.isPending,
                             pickBoardEmoji,
                           }}
-                          filters={{ filterSummaries }}
+                          filters={{
+                            filterSummaries,
+                            defaultReleaseChip,
+                            onClearTaskFilters: clearableTaskFilters
+                              ? handleClearTaskFilters
+                              : undefined,
+                          }}
                           stats={{
                             boardStatsDisplay,
                             boardStats,

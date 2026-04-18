@@ -1,7 +1,9 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { useBoards } from "@/api/queries";
+import { boardKeys, useBoards } from "@/api/queries";
 import { BoardView } from "@/components/board/BoardView";
+import { RedirectCountdownNotice } from "@/components/routing/RedirectCountdownNotice";
 import {
   boardPath,
   LAST_BOARD_STORAGE_KEY,
@@ -10,6 +12,7 @@ import {
 export function HomeRedirect() {
   const { data: boards, isLoading, isError, error } = useBoards();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (isLoading || isError) return;
@@ -22,11 +25,17 @@ export function HomeRedirect() {
 
   if (isError) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col p-8">
-        <p className="text-destructive">
-          {error instanceof Error ? error.message : "Failed to load boards"}
-        </p>
-      </div>
+      <RedirectCountdownNotice
+        title="Couldn’t load boards"
+        description="Check your connection or try again later."
+        detail={
+          error instanceof Error ? error.message : "Failed to load boards"
+        }
+        onRedirect={() => {
+          // Already on `/` — replace alone won’t remount; invalidate so boards can refetch.
+          void queryClient.invalidateQueries({ queryKey: boardKeys.all });
+        }}
+      />
     );
   }
 

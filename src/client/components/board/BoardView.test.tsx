@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useParams } from "react-router-dom";
 import { BoardSearchProvider } from "@/context/BoardSearchContext";
 import { usePreferencesStore } from "@/store/preferences";
 import { buildTestBoard } from "@/test/fixtures";
@@ -42,6 +43,11 @@ vi.mock("@/components/board/columns/BoardColumnsStacked", () => ({
   BoardColumnsStacked: () => <div data-testid="board-columns-stacked" />,
 }));
 
+function BoardViewFromParams() {
+  const { boardId } = useParams();
+  return <BoardView boardId={boardId ?? null} />;
+}
+
 function renderBoardView(
   ui: ReactElement,
   options: { initialEntries?: string[]; routePath?: string } = {},
@@ -63,7 +69,7 @@ describe("BoardView", () => {
   });
 
   test("shows no-board-selected empty state when boardId is null", () => {
-    renderBoardView(<BoardView boardId={null} />);
+    renderBoardView(<BoardView boardId={null} />, { initialEntries: ["/"] });
     expect(screen.getByText("No board selected")).toBeTruthy();
   });
 
@@ -76,30 +82,39 @@ describe("BoardView", () => {
     expect(document.querySelector(".animate-pulse")).toBeTruthy();
   });
 
-  test("shows error message when board detail fails for a non-404 error", () => {
+  test("shows countdown error when board detail fails for a non-404 error", () => {
     useSuspenseBoardMock.mockImplementation(() => {
       throw new Error("upstream unavailable");
     });
-    renderBoardView(<BoardView boardId="1" />);
-    expect(screen.getByText("upstream unavailable")).toBeTruthy();
+    renderBoardView(
+      <Routes>
+        <Route path="/board/:boardId" element={<BoardViewFromParams />} />
+        <Route path="/" element={<div data-testid="home-mark">home</div>} />
+      </Routes>,
+      { initialEntries: ["/board/1"] },
+    );
+    expect(screen.getByTestId("redirect-countdown-notice")).toBeTruthy();
+    expect(screen.getByTestId("redirect-countdown-detail")).toHaveTextContent(
+      "upstream unavailable",
+    );
   });
 
-  test("redirects to Trash when board GET reports not found", async () => {
+  test("shows countdown when board GET reports not found, then can go home", async () => {
+    const user = userEvent.setup();
     useSuspenseBoardMock.mockImplementation(() => {
       throw new Error("Board not found");
     });
     renderBoardView(
       <Routes>
-        <Route
-          path="/"
-          element={<BoardView boardId="1" />}
-        />
-        <Route path="/trash" element={<div data-testid="trash-page">Trash</div>} />
+        <Route path="/board/:boardId" element={<BoardViewFromParams />} />
+        <Route path="/" element={<div data-testid="home-mark">home</div>} />
       </Routes>,
-      { initialEntries: ["/"] },
+      { initialEntries: ["/board/1"] },
     );
+    expect(screen.getByTestId("redirect-countdown-notice")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /go home now/i }));
     await waitFor(() => {
-      expect(screen.getByTestId("trash-page")).toBeTruthy();
+      expect(screen.getByTestId("home-mark")).toBeTruthy();
     });
   });
 

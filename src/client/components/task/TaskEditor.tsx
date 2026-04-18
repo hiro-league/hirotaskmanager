@@ -19,6 +19,7 @@ import {
   sortTaskGroupsForDisplay,
   type Task,
 } from "../../../shared/models";
+import { sortReleasesForDisplay } from "../../../shared/releaseSort";
 import { clampTaskTitleInput } from "../../../shared/taskTitle";
 import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
 import { useDeleteTask, useUpdateTask } from "@/api/mutations";
@@ -136,6 +137,7 @@ export function TaskEditor({
     setRelease,
     isDirty,
     handleSave,
+    buildEditTaskFromForm,
     taskDetailQuery,
     createTask,
   } = useTaskEditorForm({
@@ -258,7 +260,8 @@ export function TaskEditor({
       label: "Unassigned",
       fillColor: null as string | null,
     };
-    const releaseRows = board.releases.map((r) => {
+    // Match header release filter: latest dated first, undated last (alphabetical among undated).
+    const releaseRows = sortReleasesForDisplay(board.releases).map((r) => {
       const name = r.name.trim() || String(r.releaseId);
       const isDefault =
         board.defaultReleaseId != null && board.defaultReleaseId === r.releaseId;
@@ -326,18 +329,29 @@ export function TaskEditor({
           anchorEl: dialogRef.current ?? undefined,
         });
       }
-      const nextClosedAt = isClosing ? (task.closedAt ?? now) : null;
+      // Merge form state (title/body/…) so workflow transitions do not persist a stale board snapshot.
+      const merged = buildEditTaskFromForm();
+      const nextClosedAt = isClosing ? (merged.closedAt ?? now) : null;
       await updateTask.mutateAsync({
         boardId: board.boardId,
         task: {
-          ...task,
+          ...merged,
           status: nextStatusId,
           updatedAt: now,
           closedAt: nextClosedAt,
         },
       });
     },
-    [mode, task, statuses, board.boardId, updateTask, closedStatusId, completion],
+    [
+      mode,
+      task,
+      statuses,
+      board.boardId,
+      updateTask,
+      closedStatusId,
+      completion,
+      buildEditTaskFromForm,
+    ],
   );
 
   const runDelete = useCallback(async () => {

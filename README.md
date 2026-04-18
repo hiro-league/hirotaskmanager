@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/hiro-league/hirotaskmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/hiro-league/hirotaskmanager/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40hiroleague%2Ftaskmanager?label=npm&logo=npm)](https://www.npmjs.com/package/@hiroleague/taskmanager)
+[![Docs](https://img.shields.io/badge/docs-hiroleague.com-8B5CF6)](https://docs.hiroleague.com/task-manager/get-started/quickstart)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Task management for solo builders with endless ideas and a talent for forgetting. Hiro Task Manager adds superpowers to your task lists with AI-agent access control.

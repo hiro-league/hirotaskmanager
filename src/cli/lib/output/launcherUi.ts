@@ -124,18 +124,40 @@ export function printInteractiveSetupHeader(opts: {
 export function printSavedProfileSummary(opts: {
   created: boolean;
   profileName: string;
+  /** Local loopback URL the server actually listens for the local CLI/browser. */
   appUrl: string;
   dataDir: string;
   openBrowser: boolean;
+  /** Bind address as written to the profile. Used to clarify reachability when non-loopback. */
+  bindAddress?: string;
 }): void {
   line(
     `${opts.created ? paintSuccess("Profile Created:") : paintSuccess("Profile Saved:")} ${paintValue(opts.profileName)}`,
   );
   line(`  ${paintWarning("App URL:")}      ${paintValue(opts.appUrl)}`);
+  // When the server is bound to a non-loopback address (e.g. 0.0.0.0), the
+  // loopback URL above only works locally. The real public URL depends on the
+  // operator's network/reverse-proxy choice and we cannot know it from the
+  // profile alone — surface a clear note instead of silently misleading.
+  // (issue #20 follow-up: previously this only ever showed 127.0.0.1.)
+  if (opts.bindAddress && !isLoopbackAddrLiteral(opts.bindAddress)) {
+    line(
+      `  ${paintWarning("Bind:")}         ${paintValue(opts.bindAddress)} ${paint(
+        out,
+        "(remote callers reach this via your reverse proxy / public host, not the App URL above)",
+        ansi.dim,
+      )}`,
+    );
+  }
   line(`  ${paintWarning("Data Path:")}    ${paintValue(opts.dataDir)}`);
   line(
     `  ${paintWarning("Open Browser:")} ${paintValue(opts.openBrowser ? "Yes" : "No")}`,
   );
+}
+
+function isLoopbackAddrLiteral(addr: string): boolean {
+  const t = addr.trim().toLowerCase();
+  return t === "127.0.0.1" || t === "localhost" || t === "::1";
 }
 
 export function printSetupNextSteps(opts: {

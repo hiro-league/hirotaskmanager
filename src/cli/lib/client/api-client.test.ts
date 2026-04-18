@@ -130,8 +130,8 @@ describe("api-client (mock fetch)", () => {
       const ce = e as CliError;
       expect(ce.exitCode).toBe(6);
       expect(ce.details?.code).toBe(CLI_ERR.serverUnreachable);
-      expect(String(ce.details?.hint)).toContain("hirotm");
-      expect(String(ce.details?.hint)).toContain("server");
+      expect(String(ce.details?.hint)).toContain("hirotaskmanager");
+      expect(String(ce.details?.hint)).toContain("server start");
       expect(ce.details?.retryable).toBe(true);
     }
   });

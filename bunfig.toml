@@ -1,0 +1,5 @@
+# Align `bun test` with `npm run test`: Playwright e2e specs and Vitest-backed
+# client tests must not be executed by Bun's runner (wrong harness / no DOM).
+[test]
+preload = ["./src/test/bun-test-setup.ts"]
+pathIgnorePatterns = ["**/src/client/**", "e2e/**"]

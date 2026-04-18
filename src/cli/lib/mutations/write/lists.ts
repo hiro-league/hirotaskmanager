@@ -51,7 +51,7 @@ export async function runListsList(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     limit?: string;
     offset?: string;
     pageAll?: boolean;
@@ -90,7 +90,7 @@ export async function runListsAdd(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     name?: string;
     emoji?: string;
   },
@@ -133,7 +133,7 @@ export async function runListsUpdate(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     listId: string | undefined;
     name?: string;
     color?: string;
@@ -203,7 +203,7 @@ export async function runListsDelete(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     listId: string | undefined;
   },
 ): Promise<void> {
@@ -248,7 +248,7 @@ export async function runListsMove(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     listId: string | undefined;
     before?: string;
     after?: string;

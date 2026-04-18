@@ -16,4 +16,11 @@ export const CLI_POLLING = {
   HEALTH_INTERVAL_MS: 250,
   FOREGROUND_PROGRESS_MS: 200,
   BACKGROUND_WAIT_MS: 300,
+  /**
+   * Per-attempt timeout for /api/health probes. Must be short so a foreign
+   * process holding the port (e.g. another dev server that accepts the
+   * connection but never responds) doesn't block the launcher far beyond
+   * SERVER_START_WAIT_MS.
+   */
+  HEALTH_FETCH_TIMEOUT_MS: 1_500,
 } as const;

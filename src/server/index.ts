@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import {
+  resolveBindAddress,
   resolvePort,
   resolveProfileName,
   setRuntimeConfigSelection,
@@ -53,6 +54,15 @@ export function createTaskManagerApp(kind: RuntimeKind): Hono<AppBindings> {
       cors({
         origin: (origin) => origin ?? "http://localhost:5173",
         credentials: true,
+        // Allow Authorization explicitly so a dev-mode SPA (or curl from
+        // localhost) can send Bearer tokens; default cors() omits it from
+        // preflight Access-Control-Allow-Headers, which would block any
+        // CLI-key authenticated request from the browser side.
+        allowHeaders: [
+          "Authorization",
+          "Content-Type",
+          "X-Requested-With",
+        ],
       }),
     );
   }
@@ -125,9 +135,13 @@ export async function startTaskManagerServer(options: {
   kind: RuntimeKind;
   profile?: string;
 }): Promise<ReturnType<typeof Bun.serve>> {
-  setRuntimeConfigSelection({
+  const profileName = resolveProfileName({
     kind: options.kind,
     profile: options.profile,
+  });
+  setRuntimeConfigSelection({
+    kind: options.kind,
+    profile: profileName,
   });
 
   await ensureDataDir();
@@ -138,16 +152,14 @@ export async function startTaskManagerServer(options: {
     assertInstalledDistReady();
   }
 
+  const profileScope = { kind: options.kind, profile: profileName };
+  const bindHost = resolveBindAddress(profileScope);
+
   const app = createTaskManagerApp(options.kind);
   const server = Bun.serve({
-    // Bun's default IPv4-only bind skips ::1; on macOS, `localhost` often resolves to IPv6
-    // first, so Safari (and credentialed EventSource to the API port) would fail to connect.
-    hostname: "::",
+    hostname: bindHost,
     ipv6Only: false,
-    port: resolvePort({
-      kind: options.kind,
-      profile: options.profile,
-    }),
+    port: resolvePort(profileScope),
     fetch: app.fetch,
     // SSE keeps requests open by design, so raise the idle timeout above the
     // keepalive cadence instead of relying on Bun's shorter default.
@@ -159,8 +171,9 @@ export async function startTaskManagerServer(options: {
   if (process.stdout.isTTY) {
     console.log(`Profile: ${resolveProfileName()}`);
     console.log(`Database: ${path.resolve(getDbFilePath())}`);
+    console.log(`Bind address: ${bindHost}`);
     console.log(
-      `${options.kind === "installed" ? "TaskManager" : "TaskManager dev API"} server listening on http://localhost:${server.port}`,
+      `${options.kind === "installed" ? "TaskManager" : "TaskManager dev API"} server listening on http://${bindHost}:${server.port}`,
     );
   }
 

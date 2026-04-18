@@ -52,7 +52,7 @@ export async function runTasksAdd(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     list?: string;
     group?: string;
     title?: string;
@@ -167,7 +167,7 @@ export async function runTasksUpdate(
   ctx: CliContext,
   opts: {
   port?: number;
-  board: string | undefined;
+  board?: string;
   taskId: string | undefined;
   title?: string;
   status?: string;
@@ -296,7 +296,7 @@ export async function runTasksDelete(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     taskId: string | undefined;
   },
 ): Promise<void> {
@@ -335,7 +335,7 @@ export async function runTasksMove(
   ctx: CliContext,
   opts: {
     port?: number;
-    board: string | undefined;
+    board?: string;
     taskId: string | undefined;
     toList?: string;
     toStatus?: string;

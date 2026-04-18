@@ -34,41 +34,60 @@ Hiro Task Manager is in active development and is not yet ready for production u
 - **Detailed Documentation** - for developers and AI Agents.
 - **Your data, your machine, your models** - Privacy stays under your control.
 
-## Install
+## Install (same machine, server + CLI together)
 
-1. Bootstrap with bun or npm
+This is the simplest setup: the server, the web UI, and the CLI all run on the same machine.
+
+1. Install with bun
 
 ```bash
 bun install -g @hiroleague/taskmanager
 ```
 
-2. Create default Profile and Start App
+2. Run the launcher — it walks you through first-run setup, then starts the server
 
 ```bash
-hirotaskmanager     # Follow on Screen Instructions
+hirotaskmanager     # interactive: pick port, data dir, open browser, start server
 ```
 
-3. Add AI Agent Skills to your AI Agents
+   The launcher writes a profile under `~/.taskmanager/profiles/<name>/` and sets it as the default. Loopback-bound (the default) means **no API key** is required for the local CLI.
+
+3. Add AI Agent Skills
 
 ```bash
-npx skills add hiro-league/hirotaskmanager # add skills from our repo
-npx skills add "$HOME/.taskmanager/skills" # Or Alternatively add skills from local install
+npx skills add hiro-league/hirotaskmanager        # from our repo
+npx skills add "$HOME/.taskmanager/skills"        # or from the local install
 ```
 
-Follow npx skills instructions on screen to pick your AI Agents and whether to install the skills globally or in specific folders.
+4. Use the CLI from anywhere — no `--profile` needed
 
-## Update New Verions
+```bash
+hirotm boards list
+```
+
+For **remote/split installs** (server on a VPS, CLI on a desktop), **hardened single-host** setups (loopback + forced API key), and the **developer dual-profile** workflow, see [Advanced setup](https://docs.hiroleague.com/task-manager/get-started/advanced-setup). The full walkthrough lives in the [Quickstart](https://docs.hiroleague.com/task-manager/get-started/quickstart).
+
+## Update
 
 ```bash
 bun update -g @hiroleague/taskmanager
 npx skills update
 ```
 
-Follow [QuickStart](https://docs.hiroleague.com/task-manager/get-started/quickstart) Guide for more details.
+## Two binaries
 
-## CLI
+This package installs two commands on your `PATH`:
 
-Hiro Task Manager exposes `hirotm` cli for command line and ai agent friendly control. You can use cli to manage your boards, lists, and tasks. AI Agents can create, update and delete all entities. Defensive and granular access control is built in.
+| Binary | Use it for |
+|--------|------------|
+| **`hirotaskmanager`** | First-run setup (`--setup-server`, `--setup-client`), server lifecycle (`server start/stop/status`), CLI API key management (`server api-key generate/list/revoke`), and changing the default profile (`profile use`). |
+| **`hirotm`** | Day-to-day data ops: boards, lists, tasks, releases, search, trash. |
+
+Both binaries dispatch into the same code; the split is a UX convention so agents and scripts only ever touch `hirotm`.
+
+## `hirotm` command index
+
+Hiro Task Manager exposes `hirotm` for command-line and AI-agent-friendly control. AI Agents can create, update, and delete entities subject to per-board CLI access control.
 
 | Command | Summary |
 |---------|---------|
@@ -80,6 +99,15 @@ Hiro Task Manager exposes `hirotm` cli for command line and ai agent friendly co
 | **`statuses`** | List global workflow statuses. |
 | **`query`** | Run full-text task search with `query search`. |
 | **`trash`** | Read items currently in Trash. Restore and purge stay under their resource commands. |
+
+## `hirotaskmanager` admin commands
+
+| Command | Summary |
+|---------|---------|
+| **`--setup-server` / `--setup-client`** | Interactive first-run wizards for server-mode or client-mode profiles. |
+| **`server start/stop/status`** | Manage the local server process. |
+| **`server api-key generate/list/revoke`** | Mint, list, or revoke CLI API keys (server profile only; file-system only — no HTTP needed). |
+| **`profile use <name>`** | Set the default profile so commands run without `--profile`. |
 
 ## Contributing
 

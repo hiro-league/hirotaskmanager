@@ -43,9 +43,22 @@ function spawnHirotm(
     smokeTempRoots.push(root);
     const cfgDir = path.join(root, ".taskmanager", "profiles", "default");
     mkdirSync(cfgDir, { recursive: true });
+    const dataDir = path.join(root, "data");
+    const authDir = path.join(root, "auth");
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(authDir, { recursive: true });
     writeFileSync(
       path.join(cfgDir, "config.json"),
-      `${JSON.stringify({ port: options.stubPort }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          role: "server",
+          port: options.stubPort,
+          data_dir: dataDir,
+          auth_dir: authDir,
+        },
+        null,
+        2,
+      )}\n`,
       "utf8",
     );
     env = { ...env, HOME: root, USERPROFILE: root };
@@ -244,7 +257,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(err.error).toBeDefined();
     expect(err.code).toBe("server_unreachable");
     expect(err.retryable).toBe(true);
-    expect(String(err.hint ?? "")).toContain("hirotm");
+    expect(String(err.hint ?? "")).toMatch(/hirotaskmanager|server start/);
   });
 
   test("--help exits 0 (bootstrap + Commander)", async () => {

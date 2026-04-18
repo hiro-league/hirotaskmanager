@@ -4,29 +4,32 @@ import process from "node:process";
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
 import {
-  ensureRuntimeDirectories,
-  hasAnyProfileConfigOnDisk,
+  listProfileNamesWithConfig,
+  resolveAuthDir,
+  resolveDefaultProfileName,
 } from "../../shared/runtimeConfig";
+import {
+  generateCliApiKey,
+  listCliApiKeyRecords,
+  revokeCliApiKeyByPrefix,
+} from "../../server/cliApiKeys";
+import { CLI_ERR } from "../types/errors";
 import { ensureBundledSkills } from "../../shared/skillsInstall";
 import {
   getDefaultInstalledAuthDir,
-  getDefaultInstalledDataDir,
   hasCliConfigFile,
   readConfigFile,
   resolveProfileName,
   writeConfigFile,
-  type CliConfigFile,
+  writeDefaultProfileName,
 } from "../lib/core/config";
-import { parsePortOption } from "../lib/core/command-helpers";
 import { INSTALLED_DEFAULT_PORT } from "../../shared/ports";
-import { exitWithError } from "../lib/output/output";
+import { CliError, exitWithError } from "../lib/output/output";
 import { readServerStatus, startServer, stopServer } from "../lib/core/process";
 import { buildLocalServerUrl } from "../../shared/serverStatus";
 import { canPromptInteractively } from "../lib/core/tty";
 import type { ServerStartMode } from "../ports/process";
 import {
-  formatBooleanPrompt,
-  formatTextPrompt,
   isAuthInitialized,
   paintValue,
   printSetupContinuePrompt,
@@ -34,16 +37,23 @@ import {
   printPassphraseHint,
   printRecoveryKey,
   printRecoveryKeyExitHint,
-  printInteractiveSetupHeader,
-  printSavedProfileSummary,
-  spinForMoment,
   startInlineSpinner,
 } from "../lib/output/launcherUi";
+import {
+  chooseSetupModeInteractive,
+  runClientSetupWizard,
+  runServerSetupWizard,
+  type LauncherSetupResult,
+} from "./setupWizards";
+
+export type { LauncherSetupResult };
 
 /** Phase 3: installed-app launcher logic (formerly all of app.ts). */
 
 interface LauncherOptions {
   setup?: boolean;
+  setupServer?: boolean;
+  setupClient?: boolean;
   profile?: string;
 }
 
@@ -55,14 +65,13 @@ interface LauncherServerStartOptions extends LauncherServerOptions {
   foreground?: boolean;
 }
 
-export interface LauncherSetupResult {
-  config: CliConfigFile;
-  setupMeta: {
-    /** User went through interactive prompts (not bunx / non-TTY defaults). */
-    justFinishedInteractiveSetup: boolean;
-    /** No profile had config.json on disk before this run’s save. */
-    firstProfileOnMachine: boolean;
-  };
+interface LauncherApiKeyOptions {
+  profile?: string;
+}
+
+interface LauncherApiKeyGenerateOptions extends LauncherApiKeyOptions {
+  label?: string;
+  saveToProfile?: boolean;
 }
 
 export function resolveLauncherStartPlan(options: {
@@ -87,155 +96,6 @@ export function resolveLauncherStartPlan(options: {
     readyLabel: options.alreadyRunning ? "Already started" : "Started",
     shouldOpenBrowserOnReady:
       options.shouldOpenBrowser && !options.alreadyRunning,
-  };
-}
-
-function resolveLauncherDefaults(overrides: {
-  profile?: string;
-}): Required<
-  Pick<CliConfigFile, "port" | "data_dir" | "auth_dir" | "open_browser">
-> {
-  const configScope = { profile: overrides.profile, kind: "installed" as const };
-  const existing = readConfigFile(configScope);
-  return {
-    port: existing.port ?? INSTALLED_DEFAULT_PORT,
-    data_dir: path.resolve(
-      existing.data_dir ?? getDefaultInstalledDataDir(configScope),
-    ),
-    auth_dir: path.resolve(
-      existing.auth_dir ?? getDefaultInstalledAuthDir(configScope),
-    ),
-    open_browser: existing.open_browser ?? true,
-  };
-}
-
-async function promptWithDefault(
-  question: string,
-  defaultValue: string,
-): Promise<string> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    const answer = await rl.question(`${question} `);
-    return answer.trim() || defaultValue;
-  } finally {
-    rl.close();
-  }
-}
-
-async function promptBoolean(
-  question: string,
-  defaultValue: boolean,
-): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    for (;;) {
-      const answer = (await rl.question(`${question}: `))
-        .trim()
-        .toLowerCase();
-      if (!answer) return defaultValue;
-      if (answer === "y" || answer === "yes") return true;
-      if (answer === "n" || answer === "no") return false;
-      console.log("Please answer yes or no.");
-    }
-  } finally {
-    rl.close();
-  }
-}
-
-async function runLauncherSetup(overrides: {
-  profile?: string;
-}): Promise<LauncherSetupResult> {
-  const defaults = resolveLauncherDefaults(overrides);
-  const configScope = { profile: overrides.profile, kind: "installed" as const };
-  const existing = readConfigFile(configScope);
-  const machineHadNoProfilesBefore = !hasAnyProfileConfigOnDisk();
-
-  // Keep the first-run path working for bunx and other non-interactive entry
-  // points by saving sane defaults instead of failing on missing prompts.
-  if (!canPromptInteractively()) {
-    const config = { ...existing, ...defaults };
-    writeConfigFile(config, configScope);
-    ensureRuntimeDirectories(configScope);
-    return {
-      config,
-      setupMeta: {
-        justFinishedInteractiveSetup: false,
-        firstProfileOnMachine: machineHadNoProfilesBefore,
-      },
-    };
-  }
-
-  printInteractiveSetupHeader({
-    profileName: resolveProfileName(configScope),
-    firstProfileOnMachine: machineHadNoProfilesBefore,
-  });
-
-  // Show the profile context line first so the user understands why the
-  // following prompts are being asked.
-  await spinForMoment(
-    "Looking for existing profiles...",
-    machineHadNoProfilesBefore
-      ? `Creating Profile: ${paintValue(resolveProfileName(configScope))}`
-      : `Using Profile: ${paintValue(resolveProfileName(configScope))}`,
-  );
-
-  const portValue = await promptWithDefault(
-    formatTextPrompt("Pick a port for web/api", String(defaults.port)),
-    String(defaults.port),
-  );
-
-  const dataDirValue = await promptWithDefault(
-    formatTextPrompt(
-      "Pick a Data Directory to place the database",
-      defaults.data_dir,
-    ),
-    defaults.data_dir,
-  );
-
-  const openBrowser = await promptBoolean(
-    formatBooleanPrompt(
-      "Open default browser when starting the server with hirotaskmanager",
-      defaults.open_browser,
-    ),
-    defaults.open_browser,
-  );
-
-  const config: CliConfigFile = {
-    ...existing,
-    port: parsePortOption(portValue) ?? defaults.port,
-    data_dir: path.resolve(dataDirValue),
-    auth_dir: defaults.auth_dir,
-    open_browser: openBrowser,
-  };
-  writeConfigFile(config, configScope);
-  ensureRuntimeDirectories(configScope);
-
-  await spinForMoment(
-    machineHadNoProfilesBefore
-      ? `Saving Profile: ${paintValue(resolveProfileName(configScope))}`
-      : `Saving Profile: ${paintValue(resolveProfileName(configScope))}`,
-  );
-
-  printSavedProfileSummary({
-    created: machineHadNoProfilesBefore,
-    profileName: resolveProfileName(configScope),
-    appUrl: buildLocalServerUrl(config.port!),
-    dataDir: path.resolve(config.data_dir!),
-    openBrowser,
-  });
-
-  return {
-    config,
-    setupMeta: {
-      justFinishedInteractiveSetup: true,
-      firstProfileOnMachine: machineHadNoProfilesBefore,
-    },
   };
 }
 
@@ -299,6 +159,24 @@ function resolveInstalledLauncherProfile(profile: string | undefined): string {
   });
 }
 
+function assertLauncherServerProfileForApiKeys(profile: string): void {
+  const config = readConfigFile({ profile, kind: "installed" });
+  if (!config) {
+    throw new CliError(
+      `No profile config found for "${profile}". Run hirotaskmanager --setup first.`,
+      2,
+      { code: CLI_ERR.missingRequired, profile },
+    );
+  }
+  if (config.role !== "server") {
+    throw new CliError(
+      `Profile "${profile}" is not a server profile — CLI API keys are managed on the server machine only.`,
+      2,
+      { code: CLI_ERR.invalidArgs, role: config.role },
+    );
+  }
+}
+
 function printLauncherJson(data: unknown): void {
   process.stdout.write(`${JSON.stringify(data)}\n`);
 }
@@ -308,55 +186,186 @@ export function createHirotaskmanagerProgram(): Command {
   program
     .name("hirotaskmanager")
     .description("Launch the local TaskManager app")
-    .option("--setup", "Run or rerun launcher setup")
+    .option("--setup", "Run or rerun launcher setup for the active profile (role unchanged)")
+    .option(
+      "--setup-server",
+      "Interactive setup: run the API + database on this machine",
+    )
+    .option(
+      "--setup-client",
+      "Interactive setup: CLI only, connect to a remote server",
+    )
     .option("--profile <name>", "Launcher profile name (default: default)")
     .action(async (options: LauncherOptions) => {
       try {
         const selectedProfile = resolveInstalledLauncherProfile(options.profile);
 
-        const shouldRunSetup =
-          options.setup ||
-          !hasCliConfigFile({ profile: selectedProfile, kind: "installed" });
+        if (options.setup && (options.setupServer || options.setupClient)) {
+          throw new CliError(
+            "Cannot combine --setup with --setup-server or --setup-client.",
+            2,
+            { code: CLI_ERR.invalidArgs },
+          );
+        }
+        if (options.setupServer && options.setupClient) {
+          throw new CliError(
+            "Cannot combine --setup-server and --setup-client.",
+            2,
+            { code: CLI_ERR.invalidArgs },
+          );
+        }
 
-        const setupResult: LauncherSetupResult = shouldRunSetup
-          ? await runLauncherSetup({
+        let setupResult: LauncherSetupResult | undefined;
+        let wizardRan = false;
+        let workingProfile = selectedProfile;
+
+        if (options.setupServer) {
+          setupResult = await runServerSetupWizard({
+            profile: selectedProfile,
+            rerun: false,
+          });
+          wizardRan = true;
+          workingProfile = setupResult.profileName;
+        } else if (options.setupClient) {
+          setupResult = await runClientSetupWizard({
+            profile: selectedProfile,
+            rerun: false,
+          });
+          wizardRan = true;
+          workingProfile = setupResult.profileName;
+        } else if (options.setup) {
+          if (
+            !hasCliConfigFile({ profile: selectedProfile, kind: "installed" })
+          ) {
+            throw new CliError(
+              `No profile config found for "${selectedProfile}". Run hirotaskmanager --setup-server or --setup-client first.`,
+              2,
+              { code: CLI_ERR.missingRequired, profile: selectedProfile },
+            );
+          }
+          const prior = readConfigFile({
+            profile: selectedProfile,
+            kind: "installed",
+          })!;
+          if (prior.role === "server") {
+            setupResult = await runServerSetupWizard({
               profile: selectedProfile,
-            })
-          : {
-              config: readConfigFile({
+              rerun: true,
+            });
+          } else {
+            setupResult = await runClientSetupWizard({
+              profile: selectedProfile,
+              rerun: true,
+            });
+          }
+          wizardRan = true;
+          workingProfile = setupResult.profileName;
+        } else if (
+          !hasCliConfigFile({ profile: selectedProfile, kind: "installed" })
+        ) {
+          if (canPromptInteractively()) {
+            const mode = await chooseSetupModeInteractive();
+            if (mode === "client") {
+              setupResult = await runClientSetupWizard({
                 profile: selectedProfile,
-                kind: "installed",
-              }),
-              setupMeta: {
-                justFinishedInteractiveSetup: false,
-                firstProfileOnMachine: false,
-              },
-            };
+                rerun: false,
+              });
+            } else {
+              setupResult = await runServerSetupWizard({
+                profile: selectedProfile,
+                rerun: false,
+              });
+            }
+          } else {
+            // Refuse to silently auto-provision a server profile in CI / no-TTY
+            // contexts: the previous default ran the server wizard non-
+            // interactively, which surprised operators piping `hirotaskmanager`
+            // into ansible/packer when they actually wanted a client profile
+            // (or no setup at all). Force the operator to choose explicitly.
+            throw new CliError(
+              `No profile config for "${selectedProfile}" and no TTY to ask. ` +
+                "Pass --setup-server or --setup-client to choose a setup mode non-interactively.",
+              2,
+              { code: CLI_ERR.invalidArgs, profile: selectedProfile },
+            );
+          }
+          wizardRan = true;
+          workingProfile = setupResult!.profileName;
+        }
 
-        // Registry installs can skip lifecycle hooks, so setup itself must
-        // print the exact `npx skills` commands users should run next.
+        if (!setupResult) {
+          const config = readConfigFile({
+            profile: workingProfile,
+            kind: "installed",
+          });
+          if (!config) {
+            throw new CliError(
+              `No profile config found for "${workingProfile}". Run hirotaskmanager --setup first.`,
+              2,
+              { code: CLI_ERR.missingRequired, profile: workingProfile },
+            );
+          }
+          setupResult = {
+            config,
+            profileName: workingProfile,
+            setupMeta: {
+              justFinishedInteractiveSetup: false,
+              firstProfileOnMachine: false,
+              shouldStartLocalServer: true,
+            },
+          };
+        }
+
+        const launcherConfig = setupResult.config;
+
+        if (launcherConfig.role === "client") {
+          const skillsInstalled = ensureBundledSkills();
+          if (setupResult.setupMeta.justFinishedInteractiveSetup) {
+            printSetupNextSteps({
+              profileName: workingProfile,
+              skillsInstalled,
+            });
+          } else {
+            console.log(
+              `Profile "${workingProfile}" is a client profile (remote CLI only). Use hirotm for day-to-day commands.`,
+            );
+          }
+          return;
+        }
+
+        if (!setupResult.setupMeta.shouldStartLocalServer) {
+          const skillsInstalled = ensureBundledSkills();
+          if (setupResult.setupMeta.justFinishedInteractiveSetup) {
+            printSetupNextSteps({
+              profileName: workingProfile,
+              skillsInstalled,
+            });
+          }
+          return;
+        }
+
+        const shouldRunSetupForPlan = wizardRan;
+
         const skillsInstalled = ensureBundledSkills();
-        if (shouldRunSetup) {
+        if (
+          setupResult.setupMeta.justFinishedInteractiveSetup ||
+          setupResult.setupMeta.firstProfileOnMachine
+        ) {
           printSetupNextSteps({
-            profileName: selectedProfile,
+            profileName: workingProfile,
             skillsInstalled,
           });
           if (setupResult.setupMeta.justFinishedInteractiveSetup) {
-            // Keep setup blocked here so users see the required skills step
-            // before the server starts and the browser steals focus.
             printSetupContinuePrompt();
             await waitForEnterKey();
           }
         }
 
-        const launcherConfig = setupResult.config;
-
-        const port =
-          launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
+        const port = launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
         const authDir = path.resolve(
           launcherConfig.auth_dir ??
             getDefaultInstalledAuthDir({
-              profile: selectedProfile,
+              profile: workingProfile,
               kind: "installed",
             }),
         );
@@ -366,25 +375,23 @@ export function createHirotaskmanagerProgram(): Command {
         const needsRecoveryKeyExitFlow =
           setupResult.setupMeta.justFinishedInteractiveSetup &&
           !isAuthInitialized(authDir);
-        // Keep normal launcher runs non-blocking, and avoid reopening the browser
-        // when the launcher is only attaching to an already running profile.
-        const alreadyRunning = shouldRunSetup
+        const alreadyRunning = shouldRunSetupForPlan
           ? false
           : (
               await readServerStatus({
                 kind: "installed",
-                profile: selectedProfile,
+                profile: workingProfile,
               })
             ).running;
         const startPlan = resolveLauncherStartPlan({
-          shouldRunSetup,
+          shouldRunSetup: shouldRunSetupForPlan,
           needsRecoveryKeyExitFlow,
           alreadyRunning,
           shouldOpenBrowser,
         });
 
         const startupSpinner = startInlineSpinner(
-          `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(selectedProfile)}: ${paintValue(url)}`,
+          `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(workingProfile)}: ${paintValue(url)}`,
         );
 
         let browserHandled = false;
@@ -393,7 +400,7 @@ export function createHirotaskmanagerProgram(): Command {
           await startServer(
             {
               kind: "installed",
-              profile: selectedProfile,
+              profile: workingProfile,
             },
             startPlan.startMode,
             async (status) => {
@@ -428,6 +435,56 @@ export function createHirotaskmanagerProgram(): Command {
       }
     });
 
+  program
+    .command("profile")
+    .description("Manage the default hirotm profile pointer (~/.taskmanager/config.json)")
+    .command("use")
+    .argument("<name>", "Existing profile name (must have profiles/<name>/config.json)")
+    .description("Set default_profile so hirotm can omit --profile")
+    .action(async (name: string) => {
+      try {
+        const trimmed = name.trim();
+        if (!trimmed) {
+          throw new CliError("Profile name is required.", 2, {
+            code: CLI_ERR.invalidValue,
+          });
+        }
+        if (!hasCliConfigFile({ profile: trimmed, kind: "installed" })) {
+          const available = listProfileNamesWithConfig();
+          throw new CliError(
+            `No profile named "${trimmed}" found.${
+              available.length ? ` Available: ${available.join(", ")}` : ""
+            }`,
+            2,
+            {
+              code: CLI_ERR.notFound,
+              profile: trimmed,
+              available,
+            },
+          );
+        }
+        // Capture the previous pointer so JSON consumers (and humans reading
+        // stderr) can see the transition rather than guessing whether the
+        // command was a no-op (issue #16 follow-up).
+        const previous = resolveDefaultProfileName() ?? null;
+        writeDefaultProfileName(trimmed);
+        if (previous && previous !== trimmed) {
+          process.stderr.write(
+            `Default profile changed: ${previous} -> ${trimmed}\n`,
+          );
+        } else if (!previous) {
+          process.stderr.write(`Default profile set to "${trimmed}"\n`);
+        }
+        printLauncherJson({
+          ok: true,
+          default_profile: trimmed,
+          previous_default_profile: previous,
+        });
+      } catch (error) {
+        exitWithError(error);
+      }
+    });
+
   const server = program
     .command("server")
     .description("Start, stop, or inspect the installed TaskManager server");
@@ -443,6 +500,13 @@ export function createHirotaskmanagerProgram(): Command {
           (command.optsWithGlobals() as LauncherServerStartOptions).profile ?? options.profile,
         );
         const config = readConfigFile({ profile, kind: "installed" });
+        if (!config) {
+          throw new CliError(
+            `No profile config found for "${profile}". Run hirotaskmanager --setup first.`,
+            2,
+            { code: CLI_ERR.missingRequired, profile },
+          );
+        }
         const port = config.port ?? INSTALLED_DEFAULT_PORT;
         const status = await readServerStatus({
           kind: "installed",
@@ -527,6 +591,134 @@ export function createHirotaskmanagerProgram(): Command {
         exitWithError(error);
       }
     });
+
+  const apiKey = server
+    .command("api-key")
+    .description(
+      "Create and manage CLI API keys in cli-api-keys.json (server profile only)",
+    );
+
+  apiKey
+    .command("generate")
+    .description(
+      "Generate a new CLI API key and print it once (stdout). Does not require the HTTP server.",
+    )
+    .option("--label <text>", "Optional label stored with the key")
+    .option(
+      "--save-to-profile",
+      "Also write the key to this profile config as api_key (local CLI)",
+    )
+    .option("--profile <name>", "Installed profile name")
+    .action(
+      async (
+        options: LauncherApiKeyGenerateOptions,
+        command: Command,
+      ): Promise<void> => {
+        try {
+          const profile = resolveInstalledLauncherProfile(
+            (command.optsWithGlobals() as LauncherServerOptions).profile ??
+              options.profile,
+          );
+          assertLauncherServerProfileForApiKeys(profile);
+          const authDir = resolveAuthDir({ kind: "installed", profile });
+          const { key } = await generateCliApiKey({
+            authDir,
+            label: options.label,
+          });
+          process.stdout.write(`${key}\n`);
+          if (options.saveToProfile) {
+            const cfg = readConfigFile({ profile, kind: "installed" });
+            if (!cfg) {
+              throw new CliError(
+                `No profile config found for "${profile}".`,
+                2,
+                { code: CLI_ERR.missingRequired, profile },
+              );
+            }
+            // Surface silent rotation: the previous version overwrote any
+            // existing api_key without a peep, which made it easy to bork the
+            // local CLI by re-running `generate --save-to-profile` without
+            // realizing it invalidates the prior key for this machine. Warn
+            // on stderr so JSON consumers parsing stdout are unaffected.
+            if (cfg.api_key && cfg.api_key !== key) {
+              process.stderr.write(
+                `[taskmanager] Warning: replaced existing api_key in profile "${profile}". ` +
+                  "The previous local-CLI key for this profile is no longer valid for this machine.\n",
+              );
+            }
+            writeConfigFile(
+              { ...cfg, api_key: key },
+              { kind: "installed", profile },
+            );
+          }
+        } catch (error) {
+          exitWithError(error);
+        }
+      },
+    );
+
+  apiKey
+    .command("list")
+    .description("List CLI API key ids, labels, and createdAt (hashes never shown)")
+    .option("--profile <name>", "Installed profile name")
+    .action(async (options: LauncherApiKeyOptions, command: Command) => {
+      try {
+        const profile = resolveInstalledLauncherProfile(
+          (command.optsWithGlobals() as LauncherServerOptions).profile ??
+            options.profile,
+        );
+        assertLauncherServerProfileForApiKeys(profile);
+        const authDir = resolveAuthDir({ kind: "installed", profile });
+        const rows = await listCliApiKeyRecords(authDir);
+        printLauncherJson(
+          rows.map((r) => ({
+            id: r.id,
+            label: r.label,
+            createdAt: r.createdAt,
+          })),
+        );
+      } catch (error) {
+        exitWithError(error);
+      }
+    });
+
+  apiKey
+    .command("revoke")
+    .description("Revoke a key by id prefix (minimum 4 characters)")
+    .argument("<prefix>", "Key id prefix, e.g. tmk-a3f8")
+    .option("--profile <name>", "Installed profile name")
+    .action(
+      async (
+        prefix: string,
+        options: LauncherApiKeyOptions,
+        command: Command,
+      ) => {
+        try {
+          const profile = resolveInstalledLauncherProfile(
+            (command.optsWithGlobals() as LauncherServerOptions).profile ??
+              options.profile,
+          );
+          assertLauncherServerProfileForApiKeys(profile);
+          const authDir = resolveAuthDir({ kind: "installed", profile });
+          let revoked;
+          try {
+            revoked = await revokeCliApiKeyByPrefix(authDir, prefix);
+          } catch (e) {
+            if (e instanceof Error) {
+              throw new CliError(e.message, 2, { code: CLI_ERR.invalidValue });
+            }
+            throw e;
+          }
+          printLauncherJson({
+            id: revoked.id,
+            label: revoked.label,
+            createdAt: revoked.createdAt,
+          });
+        } catch (error) {
+          exitWithError(error);
+        }
+      },
+    );
 
   return program;
 }

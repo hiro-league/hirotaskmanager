@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { DEV_DEFAULT_PORT } from "./src/shared/ports";
 
 /**
  * Disposable auth/data for the dev API when Playwright starts `npm run dev`.
@@ -19,7 +20,16 @@ const devProfileDir = path.join(e2eHome, ".taskmanager", "profiles", "dev");
 mkdirSync(devProfileDir, { recursive: true });
 writeFileSync(
   path.join(devProfileDir, "config.json"),
-  `${JSON.stringify({ data_dir: dataDir, auth_dir: authDir }, null, 2)}\n`,
+  `${JSON.stringify(
+    {
+      role: "server",
+      port: DEV_DEFAULT_PORT,
+      data_dir: dataDir,
+      auth_dir: authDir,
+    },
+    null,
+    2,
+  )}\n`,
   "utf8",
 );
 

@@ -1,6 +1,10 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import {
+  applyOwnerOnlyFilePermissions,
+  ensureOwnerOnlyDir,
+} from "./secretsFs";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {
@@ -10,7 +14,12 @@ import {
 } from "../shared/auth";
 import type { BoardIndexEntry } from "../shared/models";
 import { ansi, colorEnabled, paint } from "../shared/terminalColors";
-import { resolveAuthDir } from "../shared/runtimeConfig";
+import {
+  resolveAuthDir,
+  resolveRequireCliApiKey,
+} from "../shared/runtimeConfig";
+import { constantTimeHexEquals, sha256Hex } from "./cryptoHex";
+import { hasCliApiKeys, validateCliApiKey } from "./cliApiKeys";
 
 interface StoredAuthState {
   version: 1;
@@ -38,6 +47,14 @@ const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 400;
 
 let cachedAuthState: StoredAuthState | null | undefined;
 
+/**
+ * Clears the in-memory auth.json cache so tests can swap profiles or auth files on disk.
+ * Production uses a single process-scoped profile; tests share the module and must reset.
+ */
+export function resetAuthDiskCacheForTests(): void {
+  cachedAuthState = undefined;
+}
+
 function resolveAuthRootDir(): string {
   return resolveAuthDir();
 }
@@ -46,36 +63,8 @@ function resolveAuthFilePath(): string {
   return path.join(resolveAuthRootDir(), "auth.json");
 }
 
-async function applyOwnerOnlyPermissions(targetPath: string): Promise<void> {
-  if (process.platform === "win32") return;
-  try {
-    await chmod(targetPath, 0o600);
-  } catch {
-    // Best effort only; some filesystems may reject chmod semantics.
-  }
-}
-
 async function ensureAuthDir(): Promise<void> {
-  const dir = resolveAuthRootDir();
-  await mkdir(dir, { recursive: true });
-  if (process.platform === "win32") return;
-  try {
-    await chmod(dir, 0o700);
-  } catch {
-    // Best effort only; some filesystems may reject chmod semantics.
-  }
-}
-
-function sha256Hex(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function constantTimeHexEquals(a: string, b: string): boolean {
-  if (!a || !b || a.length !== b.length) return false;
-  const left = Buffer.from(a, "hex");
-  const right = Buffer.from(b, "hex");
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
+  await ensureOwnerOnlyDir(resolveAuthRootDir());
 }
 
 function normalizeRecoveryKeyInput(value: string): string {
@@ -135,9 +124,9 @@ async function writeStoredAuthState(next: StoredAuthState): Promise<void> {
   const tmpPath = `${filePath}.tmp`;
   const payload = `${JSON.stringify(next, null, 2)}\n`;
   await writeFile(tmpPath, payload, "utf8");
-  await applyOwnerOnlyPermissions(tmpPath);
+  await applyOwnerOnlyFilePermissions(tmpPath);
   await rename(tmpPath, filePath);
-  await applyOwnerOnlyPermissions(filePath);
+  await applyOwnerOnlyFilePermissions(filePath);
   cachedAuthState = next;
 }
 
@@ -159,6 +148,13 @@ function isAuthRoute(pathname: string): boolean {
 
 function isSetupSafeRoute(pathname: string): boolean {
   return pathname === "/api/health" || isAuthRoute(pathname);
+}
+
+/** Routes that skip CLI Bearer enforcement (health checks, web session auth). Design §2.6. */
+function isCliApiKeyExemptPath(pathname: string): boolean {
+  if (pathname === "/api/health") return true;
+  if (pathname === "/api/auth" || pathname.startsWith("/api/auth/")) return true;
+  return false;
 }
 
 function buildLoginRequiredResponse(c: Context<AppBindings>): Response {
@@ -199,6 +195,51 @@ export const authMiddleware: MiddlewareHandler<AppBindings> = async (c, next) =>
     principal: authenticated ? "web" : "cli",
     authenticated,
   });
+
+  if (!authenticated && !isCliApiKeyExemptPath(pathname)) {
+    const authDir = resolveAuthDir();
+    const requireKey = resolveRequireCliApiKey();
+    const bearerRaw =
+      c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+
+    if (requireKey) {
+      // Bootstrap caveat (design §2.6): when require_cli_api_key is true but
+      // no keys are minted yet, surface auth_cli_key_required even if the
+      // caller sent a Bearer — otherwise a typo'd key would shadow the real
+      // "no keys exist; run `hirotaskmanager server api-key generate`" hint.
+      if (!(await hasCliApiKeys(authDir))) {
+        return c.json(
+          {
+            error: "CLI API key required",
+            code: "auth_cli_key_required",
+            hint: "No CLI API keys exist yet. Run `hirotaskmanager server api-key generate` on the server.",
+          },
+          401,
+        );
+      }
+      if (!bearerRaw) {
+        return c.json(
+          { error: "CLI API key required", code: "auth_cli_key_required" },
+          401,
+        );
+      }
+      if (!(await validateCliApiKey(authDir, bearerRaw))) {
+        return c.json(
+          { error: "Invalid CLI API key", code: "auth_invalid_cli_key" },
+          401,
+        );
+      }
+    } else if (
+      bearerRaw &&
+      (await hasCliApiKeys(authDir)) &&
+      !(await validateCliApiKey(authDir, bearerRaw))
+    ) {
+      return c.json(
+        { error: "Invalid CLI API key", code: "auth_invalid_cli_key" },
+        401,
+      );
+    }
+  }
 
   await next();
 };
@@ -249,7 +290,7 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
   try {
     const keyFilePath = resolveRecoveryKeyFilePath();
     await writeFile(keyFilePath, recoveryKey, "utf8");
-    await applyOwnerOnlyPermissions(keyFilePath);
+    await applyOwnerOnlyFilePermissions(keyFilePath);
     wroteKeyFile = true;
   } catch {
     // Best-effort; fall through to console printing as a fallback.

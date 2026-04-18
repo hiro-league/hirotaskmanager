@@ -15,6 +15,7 @@ import {
 } from "../../../shared/serverStatus";
 import {
   getServerPidFilePath,
+  readConfigFile,
   resolvePort,
   resolveProfileName,
   resolveRuntimeKind,
@@ -35,6 +36,30 @@ interface ManagedServerRecord {
 export type { ServerStatus };
 
 type ServerReadyCallback = (status: RunningServerStatus) => void | Promise<void>;
+
+function assertServerProfileForLifecycle(overrides: ConfigOverrides): void {
+  // Single config read: previously called resolveProfileRole + resolveApiUrl,
+  // each of which re-loads and re-validates the same profile config file.
+  const config = readConfigFile(overrides);
+  if (!config) {
+    throw new CliError(
+      "No profile config found — run hirotaskmanager --setup-server first.",
+      2,
+      { code: CLI_ERR.missingRequired },
+    );
+  }
+  if (config.role !== "server") {
+    throw new CliError(
+      "This profile is a client profile — server start/stop only works on a server profile",
+      2,
+      {
+        code: CLI_ERR.invalidArgs,
+        role: config.role,
+        api_url: config.api_url,
+      },
+    );
+  }
+}
 
 function buildStoppedStatus(): ServerStatus {
   return { running: false };
@@ -92,10 +117,15 @@ async function waitForHealth(port: number, timeoutMs: number): Promise<boolean> 
 
 function getServerEntryPath(overrides: ConfigOverrides): string {
   const runtime = resolveRuntimeKind(overrides);
+  // This file lives at src/cli/lib/core/process.ts; the server bootstraps live
+  // at src/server/. That is three "../" hops, not two — the previous
+  // "../../server/..." resolved to src/cli/server/... which does not exist,
+  // so the spawned child died with "Module not found" before binding the
+  // port and the launcher only saw a health-check timeout.
   const entrypoint =
     runtime === "dev"
-      ? "../../server/bootstrapDev.ts"
-      : "../../server/bootstrapInstalled.ts";
+      ? "../../../server/bootstrapDev.ts"
+      : "../../../server/bootstrapInstalled.ts";
   return fileURLToPath(new URL(entrypoint, import.meta.url));
 }
 
@@ -125,6 +155,7 @@ export async function startServer(
   mode: ServerStartMode = "foreground",
   onReady?: ServerReadyCallback,
 ): Promise<ServerStatus> {
+  assertServerProfileForLifecycle(overrides);
   const resolvedPort = resolvePort(overrides);
 
   const currentStatus = await readServerStatus({ ...overrides, port: resolvedPort });
@@ -267,6 +298,7 @@ export async function startServer(
 export async function stopServer(
   overrides: ConfigOverrides = {},
 ): Promise<ServerStatus> {
+  assertServerProfileForLifecycle(overrides);
   const port = resolvePort(overrides);
   const record = readManagedServerRecord(overrides);
 

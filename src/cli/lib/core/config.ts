@@ -7,13 +7,19 @@ import {
   hasProfileConfigFile,
   readProfileConfig,
   resolveApiKey as resolveRuntimeApiKey,
+  resolveApiUrl as resolveRuntimeApiUrl,
   resolveAuthDir as resolveRuntimeAuthDir,
+  resolveBindAddress as resolveRuntimeBindAddress,
+  resolveDefaultProfileName as resolveRuntimeDefaultProfileName,
   resolveOpenBrowser as resolveRuntimeOpenBrowser,
   resolvePort as resolveRuntimePort,
   resolveDataDir as resolveRuntimeDataDir,
   resolveProfileName,
+  resolveProfileRole as resolveRuntimeProfileRole,
+  resolveRequireCliApiKey as resolveRuntimeRequireCliApiKey,
   resolveRuntimeKind,
   setRuntimeConfigSelection,
+  writeDefaultProfileName as writeRuntimeDefaultProfileName,
   writeProfileConfig,
   type RuntimeConfigFile,
   type RuntimeKind,
@@ -74,3 +80,12 @@ export function resolveOpenBrowser(overrides: ConfigOverrides = {}): boolean {
 export function resolveApiKey(overrides: ConfigOverrides = {}): string | undefined {
   return resolveRuntimeApiKey(overrides);
 }
+
+export {
+  resolveRuntimeApiUrl as resolveApiUrl,
+  resolveRuntimeBindAddress as resolveBindAddress,
+  resolveRuntimeDefaultProfileName as resolveDefaultProfileName,
+  resolveRuntimeProfileRole as resolveProfileRole,
+  resolveRuntimeRequireCliApiKey as resolveRequireCliApiKey,
+  writeRuntimeDefaultProfileName as writeDefaultProfileName,
+};

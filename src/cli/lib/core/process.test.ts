@@ -25,6 +25,23 @@ describe("process.ts server lifecycle (mock fetch)", () => {
   beforeEach(() => {
     testHome = mkdtempSync(path.join(tmpdir(), "hirotm-process-test-"));
     process.env.HOME = testHome;
+    process.env.USERPROFILE = testHome;
+    const profileDir = path.join(testHome, ".taskmanager", "profiles", "default");
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(
+      path.join(profileDir, "config.json"),
+      `${JSON.stringify(
+        {
+          role: "server",
+          port: 3001,
+          data_dir: path.join(profileDir, "data"),
+          auth_dir: path.join(profileDir, "auth"),
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
     globalThis.fetch = origFetch;
   });
 

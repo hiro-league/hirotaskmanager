@@ -14,16 +14,15 @@ import {
 } from "./clientIdentity";
 import {
   resolveApiKey,
-  resolvePort,
-  resolveProfileName,
-  resolveRuntimeKind,
+  resolveApiUrl,
+  resolveProfileRole,
   type ConfigOverrides,
 } from "../core/config";
-import { CLI_DEFAULTS } from "../core/constants";
+import { CLI_DEFAULTS, CLI_POLLING } from "../core/constants";
 import { CLI_ERR } from "../../types/errors";
 import { mapHttpStatusToCliFailure } from "./cli-http-errors";
 import { CliError } from "../output/output";
-import { buildLocalServerUrl, type RunningServerStatus } from "../../../shared/serverStatus";
+import type { RunningServerStatus } from "../../../shared/serverStatus";
 
 /** Uses `CLI_DEFAULTS.API_FETCH_TIMEOUT_MS`; health polling uses short waits in `process.ts`. */
 // Aligns with docs/cli-error-handling.md: timeouts surface as exit 7 + code request_timeout.
@@ -50,23 +49,41 @@ function taskManagerClientHeaders(): Record<string, string> {
   };
 }
 
-function buildBaseUrl(overrides: ConfigOverrides = {}): string {
-  return buildLocalServerUrl(resolvePort(overrides));
+function authHeaders(overrides: ConfigOverrides): Record<string, string> {
+  const apiKey = resolveApiKey(overrides);
+  if (!apiKey) return {};
+  return { Authorization: `Bearer ${apiKey}` };
 }
 
-function buildStartCommand(overrides: ConfigOverrides = {}): string {
-  const command = ["hirotm", "server", "start"];
-  const profile = resolveProfileName(overrides);
-  const runtime = resolveRuntimeKind(overrides);
-
-  if (profile !== "default") {
-    command.push("--profile", profile);
+/** True when URL host is loopback (CLI unreachable hints; design §2.4). */
+export function isLoopbackUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  } catch {
+    return false;
   }
-  if (runtime === "dev") {
-    command.push("--dev");
-  }
+}
 
-  return command.join(" ");
+function buildUnreachableHint(overrides: ConfigOverrides): string {
+  const url = resolveApiUrl(overrides);
+  let role: "server" | "client";
+  try {
+    role = resolveProfileRole(overrides);
+  } catch {
+    return `Server not reachable at ${url} — check profile config and that the API is running.`;
+  }
+  if (role === "server") {
+    return `Server not reachable at ${url} — start it with: hirotaskmanager server start`;
+  }
+  if (isLoopbackUrl(url)) {
+    return `Server not reachable at ${url} — make sure the local server is running (this client profile points at loopback, but does not manage it)`;
+  }
+  return `Server not reachable at ${url} — verify the remote server is running and the URL is correct`;
+}
+
+function buildBaseUrl(overrides: ConfigOverrides = {}): string {
+  return resolveApiUrl(overrides).replace(/\/+$/, "");
 }
 
 async function parseErrorResponse(
@@ -111,14 +128,11 @@ async function apiRequest<T>(
   spec: ApiRequestSpec,
 ): Promise<T> {
   const baseUrl = buildBaseUrl(overrides);
-  const apiKey = resolveApiKey(overrides);
 
   const headers: Record<string, string> = {
     ...taskManagerClientHeaders(),
+    ...authHeaders(overrides),
   };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
 
   let method: string;
   let body: string | undefined;
@@ -155,7 +169,7 @@ async function apiRequest<T>(
     }
     throw new CliError("Server not reachable", 6, {
       code: CLI_ERR.serverUnreachable,
-      hint: `Run: ${buildStartCommand(overrides)}`,
+      hint: buildUnreachableHint(overrides),
       url: baseUrl,
       retryable: true,
     });
@@ -220,8 +234,18 @@ export async function fetchHealthStatus(
   const baseUrl = buildBaseUrl(overrides);
 
   try {
+    // Always pass a short abort signal: during launcher startup the port may
+    // be occupied by an unrelated process (e.g. another dev server) that
+    // accepts the TCP connection but never responds to /api/health. Without
+    // this timeout the launcher's waitForHealth loop blocked forever instead
+    // of failing fast with serverStartTimeout. Use a dedicated short timeout
+    // here, not API_FETCH_TIMEOUT_MS (which is sized for real data calls).
     const response = await fetch(`${baseUrl}/api/health`, {
-      headers: taskManagerClientHeaders(),
+      headers: {
+        ...taskManagerClientHeaders(),
+        ...authHeaders(overrides),
+      },
+      signal: AbortSignal.timeout(CLI_POLLING.HEALTH_FETCH_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as {

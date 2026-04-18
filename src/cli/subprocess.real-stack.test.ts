@@ -18,6 +18,13 @@ import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..");
 const hirotmEntry = path.join(repoRoot, "src", "cli", "bin", "hirotm.ts");
+const hirotaskmanagerEntry = path.join(
+  repoRoot,
+  "src",
+  "cli",
+  "bin",
+  "hirotaskmanager.ts",
+);
 const prepareAuthScript = path.join(
   repoRoot,
   "src",
@@ -40,7 +47,11 @@ function writeDefaultProfileConfig(
   mkdirSync(profileDir, { recursive: true });
   writeFileSync(
     path.join(profileDir, "config.json"),
-    `${JSON.stringify(config, null, 2)}\n`,
+    `${JSON.stringify(
+      { role: "server" as const, ...config },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 }
@@ -633,3 +644,210 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
     }
   });
 });
+
+/**
+ * Happy-path coverage for the remote-CLI-access setup flow:
+ *   `hirotaskmanager --setup-server` (non-interactive, no TTY)
+ *     → `hirotaskmanager server start` (background)
+ *     → `hirotm boards list` (auth via auto-minted CLI API key)
+ *     → `hirotaskmanager server stop`
+ *
+ * This is the integration gap called out in the design review: per-piece tests
+ * exist (validateRuntimeConfigFile, cliApiKeys, authMiddleware, role guards),
+ * but nothing previously checked the full bootstrap loop end-to-end through
+ * the real launcher. Run via:
+ *   RUN_CLI_REAL_STACK=1 bun test ./src/cli/subprocess.real-stack.test.ts
+ */
+describe.skipIf(!runRealStack)(
+  "hirotaskmanager non-interactive setup → start → boards list → stop (happy path)",
+  () => {
+    let rootDir: string;
+    let port: number;
+
+    beforeEach(async () => {
+      rootDir = mkdtempSync(path.join(tmpdir(), "hirotm-setup-happy-"));
+      port = await pickEphemeralPort();
+    });
+
+    afterEach(async () => {
+      // Best effort: stop any server we may have left running. Use the same
+      // launcher CLI to avoid leaking a Bun child if the test failed mid-flow.
+      try {
+        const stop = Bun.spawn({
+          cmd: [
+            "bun",
+            "run",
+            hirotaskmanagerEntry,
+            "--profile",
+            "default",
+            "--dev",
+            "server",
+            "stop",
+          ],
+          cwd: repoRoot,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, HOME: rootDir, USERPROFILE: rootDir },
+        });
+        await stop.exited;
+      } catch {
+        /* ignore */
+      }
+      try {
+        rmSync(rootDir, { recursive: true, force: true });
+      } catch {
+        /* Windows may hold locks briefly */
+      }
+    });
+
+    test("--setup-server (no TTY) seeds profile + mints CLI key; server start serves boards list", async () => {
+      // Pre-seed only the port so the wizard doesn't grab the hard-coded 3001
+      // (which would conflict with a developer's running install). The wizard
+      // fills in role + dirs + auto-mints a CLI key in non-TTY mode.
+      const profileDir = path.join(
+        rootDir,
+        ".taskmanager",
+        "profiles",
+        "default",
+      );
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(
+        path.join(profileDir, "config.json"),
+        `${JSON.stringify({ port }, null, 2)}\n`,
+        "utf8",
+      );
+
+      const env = { ...process.env, HOME: rootDir, USERPROFILE: rootDir };
+
+      // 1. Non-interactive --setup-server. Stdin: ignore forces the no-TTY
+      //    branch that auto-mints the CLI key (design §2.8 / launcher.ts).
+      const setup = Bun.spawn({
+        cmd: [
+          "bun",
+          "run",
+          hirotaskmanagerEntry,
+          "--setup-server",
+          "--profile",
+          "default",
+          "--dev",
+        ],
+        cwd: repoRoot,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env,
+      });
+      const [setupOut, setupErr] = await Promise.all([
+        readSubprocessStream(setup.stdout),
+        readSubprocessStream(setup.stderr),
+      ]);
+      const setupCode = await setup.exited;
+      expect(setupCode).toBe(0);
+      // Setup should not auto-start the server when invoked with the explicit
+      // --setup-server flag (server lifecycle is left to the operator).
+      // Non-interactive bind defaults to loopback, so no key is required and
+      // we should NOT see the auto-mint banner. Make this explicit: a regression
+      // that flips the bind default to 0.0.0.0 would leak a key to stdout in CI.
+      expect(setupOut).not.toContain("Minted CLI API key");
+      // Sanity: the launcher should NOT have refused the call (the rejection
+      // path we just added is for *implicit* setup; --setup-server must work).
+      expect(setupErr).not.toContain("--setup-server or --setup-client");
+
+      // 2. Start the server in the background via the launcher subcommand.
+      const start = Bun.spawn({
+        cmd: [
+          "bun",
+          "run",
+          hirotaskmanagerEntry,
+          "--profile",
+          "default",
+          "--dev",
+          "server",
+          "start",
+        ],
+        cwd: repoRoot,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env,
+      });
+      const startCode = await start.exited;
+      expect(startCode).toBe(0);
+
+      await waitForHealth(port, 30_000);
+
+      // 3. The local CLI should be able to call its own server. Loopback bind
+      //    + no require_cli_api_key means no Bearer token needed; this test
+      //    therefore validates the *default* happy path, not the API-key path
+      //    (the auth middleware test suite covers the keyed flow).
+      const list = Bun.spawn({
+        cmd: [
+          "bun",
+          "run",
+          hirotmEntry,
+          "--profile",
+          "default",
+          "boards",
+          "list",
+        ],
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+        env,
+      });
+      const [listOut, listErr] = await Promise.all([
+        readSubprocessStream(list.stdout),
+        readSubprocessStream(list.stderr),
+      ]);
+      const listCode = await list.exited;
+      expect(listCode).toBe(0);
+      expect(listErr.trim()).toBe("");
+      // Empty DB on a fresh setup → no NDJSON rows, just exit 0.
+      expect(listOut.trim()).toBe("");
+
+      // 4. Stop the server. We rely on afterEach as a safety net but assert
+      //    here so a stop regression fails this test rather than the next.
+      const stop = Bun.spawn({
+        cmd: [
+          "bun",
+          "run",
+          hirotaskmanagerEntry,
+          "--profile",
+          "default",
+          "--dev",
+          "server",
+          "stop",
+        ],
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+        env,
+      });
+      const stopCode = await stop.exited;
+      expect(stopCode).toBe(0);
+    });
+
+    test("implicit `hirotaskmanager` (no flags, no TTY) refuses to auto-provision (fix #1)", async () => {
+      // This guards the regression fixed in launcher.ts: previously, running
+      // `hirotaskmanager` with no flags + no TTY + no profile silently ran
+      // the server wizard. Now it must error with invalid_args.
+      const proc = Bun.spawn({
+        cmd: ["bun", "run", hirotaskmanagerEntry],
+        cwd: repoRoot,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, HOME: rootDir, USERPROFILE: rootDir },
+      });
+      const [out, err] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+      expect(code).toBe(2);
+      expect(out.trim()).toBe("");
+      expect(err).toContain("--setup-server or --setup-client");
+    });
+  },
+);
+

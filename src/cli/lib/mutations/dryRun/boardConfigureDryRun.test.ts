@@ -16,12 +16,12 @@ function makeCtx(
   const ctx: CliContext = {
     ...createDefaultCliContext(),
     resolvePort: () => 3000,
-    fetchApi: async (path: string) => {
+    fetchApi: async <T>(path: string) => {
       if (String(path).includes("/describe?entities=group")) {
-        return describe;
+        return describe as T;
       }
       if (String(path).includes("/describe?entities=priority")) {
-        return describe;
+        return describe as T;
       }
       throw new Error(`unexpected GET ${path}`);
     },

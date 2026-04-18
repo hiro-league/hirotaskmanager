@@ -17,6 +17,10 @@ export const CLI_ERR = {
   forbidden: "forbidden",
   httpError: "http_error",
   internalError: "internal_error",
+  /** Profile `config.json` or top-level `~/.taskmanager/config.json` violates schema or role rules. */
+  invalidConfig: "invalid_config",
+  /** Arguments or profile role incompatible with the command (e.g. server start on a client profile). */
+  invalidArgs: "invalid_args",
   invalidJson: "invalid_json",
   invalidInputShape: "invalid_input_shape",
   invalidValue: "invalid_value",

@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { DEV_DEFAULT_PORT } from "./src/shared/ports";
@@ -8,7 +8,16 @@ import { DEV_DEFAULT_PORT } from "./src/shared/ports";
  * Disposable auth/data for the dev API when Playwright starts `npm run dev`.
  * Writes `~/.taskmanager/profiles/dev/config.json` under a temp HOME so
  * `resolveDataDir` / `resolveAuthDir` isolate SQLite + auth from your real profile.
+ *
+ * Playwright resolves browser binaries under `$HOME/.cache/ms-playwright`. We still
+ * override HOME for app isolation, so pin the browsers path to the real user cache
+ * (or CI install path) before mutating HOME — otherwise `npx playwright install`
+ * and test runs disagree (e.g. GitHub Actions).
  */
+const playwrightBrowsersPath =
+  process.env.PLAYWRIGHT_BROWSERS_PATH ??
+  path.join(homedir(), ".cache", "ms-playwright");
+
 const e2eScratch = mkdtempSync(path.join(tmpdir(), "tm-e2e-"));
 const dataDir = path.join(e2eScratch, "data");
 const authDir = path.join(e2eScratch, "auth");
@@ -35,6 +44,7 @@ writeFileSync(
 
 process.env.HOME = e2eHome;
 process.env.USERPROFILE = e2eHome;
+process.env.PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsersPath;
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
 
@@ -68,6 +78,7 @@ export default defineConfig({
       ...process.env,
       HOME: e2eHome,
       USERPROFILE: e2eHome,
+      PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsersPath,
     },
   },
 });

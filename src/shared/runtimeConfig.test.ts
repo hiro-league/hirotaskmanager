@@ -8,10 +8,12 @@ import {
   resetRuntimeConfigSelectionForTests,
   resetRuntimeConfigWarningsForTests,
   resolveApiUrl,
+  resolvePort,
   resolveProfileName,
   validateRuntimeConfigFile,
   writeDefaultProfileName,
 } from "./runtimeConfig";
+import { INSTALLED_DEFAULT_PORT } from "./ports";
 
 describe("validateRuntimeConfigFile", () => {
   test("server profile: rejects client api_url", () => {
@@ -263,6 +265,92 @@ describe("resolveApiUrl", () => {
       expect(resolveApiUrl({ profile: "remote", kind: "installed" })).toBe(
         "https://api.example.com",
       );
+      process.env.HOME = prevHome;
+      process.env.USERPROFILE = prevHome;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolvePort", () => {
+  // Regression: previously asserted server profile and broke every read/mutate
+  // CLI command on client profiles (e.g. `hirotm boards list` against a remote
+  // API). Client profiles target `api_url` over HTTP(S); `port` is unused on
+  // that path, so resolvePort must not throw.
+  test("client profile returns the override port when supplied", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tm-rt-"));
+    try {
+      const profileDir = path.join(dir, ".taskmanager", "profiles", "remote");
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(
+        path.join(profileDir, "config.json"),
+        JSON.stringify({
+          role: "client",
+          api_url: "https://api.example.com",
+          api_key: `tmk-${"d".repeat(64)}`,
+        }),
+        "utf8",
+      );
+      const prevHome = process.env.HOME;
+      process.env.HOME = dir;
+      process.env.USERPROFILE = dir;
+      expect(
+        resolvePort({ profile: "remote", kind: "installed", port: 4321 }),
+      ).toBe(4321);
+      process.env.HOME = prevHome;
+      process.env.USERPROFILE = prevHome;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("client profile falls back to runtime default port without throwing", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tm-rt-"));
+    try {
+      const profileDir = path.join(dir, ".taskmanager", "profiles", "remote");
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(
+        path.join(profileDir, "config.json"),
+        JSON.stringify({
+          role: "client",
+          api_url: "https://api.example.com",
+          api_key: `tmk-${"e".repeat(64)}`,
+        }),
+        "utf8",
+      );
+      const prevHome = process.env.HOME;
+      process.env.HOME = dir;
+      process.env.USERPROFILE = dir;
+      expect(resolvePort({ profile: "remote", kind: "installed" })).toBe(
+        INSTALLED_DEFAULT_PORT,
+      );
+      process.env.HOME = prevHome;
+      process.env.USERPROFILE = prevHome;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("server profile prefers configured port over default", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tm-rt-"));
+    try {
+      const profileDir = path.join(dir, ".taskmanager", "profiles", "default");
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(
+        path.join(profileDir, "config.json"),
+        JSON.stringify({
+          role: "server",
+          port: 3055,
+          data_dir: path.join(profileDir, "data"),
+          auth_dir: path.join(profileDir, "auth"),
+        }),
+        "utf8",
+      );
+      const prevHome = process.env.HOME;
+      process.env.HOME = dir;
+      process.env.USERPROFILE = dir;
+      expect(resolvePort({ profile: "default", kind: "installed" })).toBe(3055);
       process.env.HOME = prevHome;
       process.env.USERPROFILE = prevHome;
     } finally {

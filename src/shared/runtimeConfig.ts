@@ -726,8 +726,14 @@ export function resolvePort(overrides: RuntimeConfigOverrides = {}): number {
       normalizePort(overrides.port) ?? getDefaultPort(overrides)
     );
   }
-  const configPath = getProfileConfigFilePath(overrides);
-  assertRoleServer(config, configPath);
+  // Client profiles target a remote API over `api_url` (resolved by
+  // `resolveApiUrl`), so `port` is not meaningful for them. Returning the
+  // override or default keeps callers (CLI runtime snapshot, handler
+  // plumbing) working without forcing a server-only assertion that broke
+  // every read/mutate command on a client profile.
+  if (config.role !== "server") {
+    return normalizePort(overrides.port) ?? getDefaultPort(overrides);
+  }
   return (
     normalizePort(overrides.port) ??
     normalizePort(config.port) ??

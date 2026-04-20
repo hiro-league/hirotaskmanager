@@ -27,6 +27,9 @@ export async function runBoardsList(
       fieldAllowlist: FIELDS_BOARD_INDEX,
       columns: COLUMNS_BOARDS_LIST,
       quietDefaults: QUIET_DEFAULT_BOARD_INDEX,
+      emptyMessage: "No boards visible to this CLI key.",
+      emptyHint:
+        'no boards are visible to this CLI key. Ask an admin to grant board access, or run "hirotm server api-key list" to inspect your key.',
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<BoardIndexEntry>>(path, { port }),
     },

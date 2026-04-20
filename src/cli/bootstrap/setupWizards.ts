@@ -33,6 +33,7 @@ import { CliError } from "../lib/output/output";
 import {
   formatBooleanPrompt,
   formatTextPrompt,
+  printCliApiKey,
   printInteractiveSetupHeader,
   printSavedProfileSummary,
   spinForMoment,
@@ -138,6 +139,56 @@ async function promptBoolean(
       if (answer === "y" || answer === "yes") return true;
       if (answer === "n" || answer === "no") return false;
       console.log("Please answer yes or no.");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Prompt for a value with validation, re-prompting on bad input. Mirrors
+ * `promptBoolean`'s loop-until-valid pattern (issue #31343: previously a single
+ * typo in the api_url/api_key prompt threw and exited the wizard, forcing the
+ * operator to restart `--setup-client` from scratch).
+ *
+ * - On empty input, falls back to `defaultValue` (which is itself fed through
+ *   `validate`, so a blank default like "" is rejected naturally).
+ * - On `CliError` from `validate`, prints the message and re-prompts. No retry
+ *   cap — Ctrl+C is the user's exit. Other errors propagate.
+ * - On EOF / closed stdin (no human to retry), throws once instead of looping
+ *   forever.
+ */
+async function promptValidatedWithDefault<T>(
+  question: string,
+  defaultValue: string,
+  validate: (raw: string) => T,
+): Promise<T> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    for (;;) {
+      let answer: string;
+      try {
+        answer = await rl.question(`${question} `);
+      } catch {
+        throw new CliError(
+          "Setup aborted: stdin closed before a valid value was provided.",
+          2,
+          { code: CLI_ERR.invalidArgs },
+        );
+      }
+      const raw = answer.trim() || defaultValue;
+      try {
+        return validate(raw);
+      } catch (err) {
+        if (err instanceof CliError) {
+          console.log(err.message);
+          continue;
+        }
+        throw err;
+      }
     }
   } finally {
     rl.close();
@@ -317,21 +368,26 @@ function isLoopbackUrlHost(hostname: string): boolean {
   return h === "localhost" || h === "127.0.0.1" || h === "::1";
 }
 
-function normalizeClientApiUrl(raw: string): string {
+export function normalizeClientApiUrl(raw: string): string {
   const trimmed = raw.trim();
   let u: URL;
   try {
     u = new URL(trimmed);
   } catch {
+    // issue #31343: bare hostnames (e.g. "tm.example.com") are the most common
+    // mistake. Collapse the two separate "not a URL" / "missing scheme" errors
+    // into one actionable message that tells the operator exactly what to type.
     throw new CliError(
-      `Invalid api_url: not a valid URL (${trimmed})`,
+      `Invalid api_url: "${trimmed}" is not a valid URL. ` +
+        "Enter the full URL including http:// or https://, " +
+        "e.g. https://tm.example.com",
       2,
       { code: CLI_ERR.invalidValue, field: "api_url" },
     );
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     throw new CliError(
-      "api_url must start with http:// or https://",
+      `Invalid api_url: "${trimmed}" must start with http:// or https://`,
       2,
       { code: CLI_ERR.invalidValue, field: "api_url" },
     );
@@ -342,6 +398,34 @@ function normalizeClientApiUrl(raw: string): string {
     );
   }
   return trimmed.replace(/\/+$/, "");
+}
+
+/**
+ * Validate a CLI API key pasted into the setup wizard. Trim only; no quote or
+ * `Bearer ` stripping (issue #31343: keep the contract strict so the operator
+ * pastes exactly what `hirotaskmanager server api-key generate` printed).
+ * Reuses `isWellFormedCliApiKey` so the wizard and `runtimeConfig` agree on
+ * the shape (common-code rule).
+ */
+export function validateCliApiKeyInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new CliError(
+      "api_key is required. Paste the key printed by " +
+        "'hirotaskmanager server api-key generate' on the server.",
+      2,
+      { code: CLI_ERR.missingRequired, field: "api_key" },
+    );
+  }
+  if (!isWellFormedCliApiKey(trimmed)) {
+    throw new CliError(
+      "api_key looks malformed: expected `tmk-` followed by 64 hex chars. " +
+        "Re-generate on the server with `hirotaskmanager server api-key generate`.",
+      2,
+      { code: CLI_ERR.invalidValue, field: "api_key" },
+    );
+  }
+  return trimmed;
 }
 
 /**
@@ -426,16 +510,14 @@ export async function runServerSetupWizard(options: {
         profile: activeProfile,
         kind: "installed",
       });
-      // Print to stdout so the operator capturing the non-interactive output
-      // (CI, ansible, packer) can pipe the key into the next step. The key is
-      // also persisted to the profile so the local CLI works immediately.
-      process.stdout.write(
-        `[taskmanager] Minted CLI API key for non-interactive setup of profile "${activeProfile}":\n`,
-      );
-      process.stdout.write(`${key}\n`);
-      process.stdout.write(
-        `[taskmanager] Saved to profile config; copy this value to client machines that will connect to this server.\n`,
-      );
+      // Non-interactive output (CI, ansible, packer) must stay pipe-friendly:
+      // print the key on its own line in a plain unboxed format so capture
+      // and grep keep working. The key is also persisted to the profile so
+      // the local CLI works immediately.
+      printCliApiKey(key, {
+        profileName: activeProfile,
+        nonInteractive: true,
+      });
     }
 
     return {
@@ -583,10 +665,9 @@ export async function runServerSetupWizard(options: {
         authDir: authDirResolved,
         label: `setup-${path.basename(activeProfile)}`,
       });
-      console.log(
-        "\nCopy this key now — it will not be shown again. It is also saved to this profile as api_key.\n",
-      );
-      process.stdout.write(`${key}\n\n`);
+      // Boxed, color-emphasised display so the one-time key is not lost in
+      // the surrounding wizard output (#31342).
+      printCliApiKey(key, { profileName: activeProfile });
       nextConfig = { ...config, api_key: key };
       writeConfigFile(nextConfig, { profile: activeProfile, kind: "installed" });
     }
@@ -679,40 +760,35 @@ export async function runClientSetupWizard(options: {
   const existingClient: Partial<CliConfigFile> =
     readConfigFile({ profile: activeProfile, kind: "installed" }) ?? {};
 
-  const apiUrlRaw = await promptWithDefault(
-    formatTextPrompt(
-      "Server base URL (api_url)",
-      String(existingClient.api_url ?? "https://"),
-    ),
-    String(existingClient.api_url ?? "https://"),
+  // issue #31343: previously this prompt showed `[https://]` as a fake default
+  // (which is itself not a valid URL) and exited the whole wizard on the first
+  // typo. Now: only show a default when re-running over an existing profile,
+  // and re-prompt on validation failure.
+  const apiUrlPrompt = existingClient.api_url
+    ? formatTextPrompt(
+        "Server base URL (api_url)",
+        String(existingClient.api_url),
+      )
+    : "Server base URL (api_url, e.g. https://tm.example.com):";
+  const apiUrl = await promptValidatedWithDefault(
+    apiUrlPrompt,
+    String(existingClient.api_url ?? ""),
+    normalizeClientApiUrl,
   );
-  const apiUrl = normalizeClientApiUrl(apiUrlRaw);
 
-  const apiKey = await promptWithDefault(
-    formatTextPrompt(
-      "CLI API key (from the server: hirotaskmanager server api-key generate)",
-      String(existingClient.api_key ?? ""),
-    ),
+  // Same retry treatment for the api_key prompt: a paste mistake should not
+  // kill the wizard. Validation lives in `validateCliApiKeyInput`.
+  const apiKeyPrompt = existingClient.api_key
+    ? formatTextPrompt(
+        "CLI API key (from the server: hirotaskmanager server api-key generate)",
+        String(existingClient.api_key),
+      )
+    : "CLI API key (from the server: hirotaskmanager server api-key generate):";
+  const apiKeyTrimmed = await promptValidatedWithDefault(
+    apiKeyPrompt,
     String(existingClient.api_key ?? ""),
+    validateCliApiKeyInput,
   );
-  const apiKeyTrimmed = apiKey.trim();
-  if (!apiKeyTrimmed) {
-    throw new CliError(
-      "api_key is required for a client profile.",
-      2,
-      { code: CLI_ERR.missingRequired, field: "api_key" },
-    );
-  }
-  // Validate at the wizard so the operator sees an actionable message right
-  // after pasting (instead of the generic schema error from writeConfigFile).
-  if (!isWellFormedCliApiKey(apiKeyTrimmed)) {
-    throw new CliError(
-      "api_key looks malformed: expected `tmk-` followed by 64 hex chars. " +
-        "Re-generate on the server with `hirotaskmanager server api-key generate`.",
-      2,
-      { code: CLI_ERR.invalidValue, field: "api_key" },
-    );
-  }
 
   const config: CliConfigFile = {
     role: "client",

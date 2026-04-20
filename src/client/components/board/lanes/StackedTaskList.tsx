@@ -18,6 +18,7 @@ import { parseTaskSortableId } from "../dnd/dndIds";
 import { SortableTaskRow } from "../dnd/SortableTaskRow";
 import { useBoardTaskContainerDroppableReact } from "../dnd/useBoardTaskContainerDroppableReact";
 import { useVirtualizedBand } from "./useVirtualizedBand";
+import type { TaskCardOverflowBoardData } from "@/components/board/boardColumnData";
 
 /** Per-row component that derives stable callbacks from task id */
 export const StackedSortableTaskRowById = memo(function StackedSortableTaskRowById({
@@ -37,6 +38,7 @@ export const StackedSortableTaskRowById = memo(function StackedSortableTaskRowBy
   onTitleCommit,
   onTitleCancel,
   titleEditBusy,
+  taskOverflowBoard,
 }: {
   sid: string;
   containerId: string;
@@ -45,6 +47,7 @@ export const StackedSortableTaskRowById = memo(function StackedSortableTaskRowBy
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   releases: Board["releases"];
+  taskOverflowBoard: TaskCardOverflowBoardData;
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
@@ -80,6 +83,7 @@ export const StackedSortableTaskRowById = memo(function StackedSortableTaskRowBy
       onCompleteFromCircle={
         task.status === "open" ? handleCompleteFromCircle : undefined
       }
+      overflowActionsBoard={taskOverflowBoard}
     />
   );
 });
@@ -105,11 +109,13 @@ export const StackedSortableList = memo(function StackedSortableList({
   quickAddComposer,
   getScrollElement,
   enableVirtualization,
+  taskOverflowBoard,
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   releases: Board["releases"];
+  taskOverflowBoard: TaskCardOverflowBoardData;
   viewMode: TaskCardViewMode;
   listId: number;
   containerId: string;
@@ -203,6 +209,7 @@ export const StackedSortableList = memo(function StackedSortableList({
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
                   titleEditBusy={titleEditBusy}
+                  taskOverflowBoard={taskOverflowBoard}
                 />
               </div>
             );
@@ -234,6 +241,7 @@ export const StackedSortableList = memo(function StackedSortableList({
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
                   titleEditBusy={titleEditBusy}
+                  taskOverflowBoard={taskOverflowBoard}
                 />
                 {quickAddInsertIndex === index + 1 ? quickAddComposer : null}
               </div>

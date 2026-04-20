@@ -2,6 +2,7 @@ import { ChevronsLeft, ChevronsRight, Command, Moon, Search, Sun } from "lucide-
 import { useLocation } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
 import { useBoardSearchOptional } from "@/context/BoardSearchContext";
+import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/lib/utils";
 import { dispatchOpenShortcutHelp } from "@/lib/shortcutHelpEvents";
 import { usePreferencesStore } from "@/store/preferences";
@@ -62,11 +63,20 @@ export function AppHeader() {
           height={32}
           decoding="async"
         />
-        <span
-          translate="no"
-          className="app-title-gradient inline-block truncate text-lg font-semibold tracking-tight"
-        >
-          Hiro Task Manager
+        <span className="inline-flex min-w-0 max-w-full items-baseline gap-1">
+          <span
+            translate="no"
+            className="app-title-gradient min-w-0 truncate text-lg font-semibold tracking-tight"
+          >
+            Hiro Task Manager
+          </span>
+          <sup
+            translate="no"
+            className="shrink-0 text-[0.6em] font-normal leading-none text-muted-foreground/50"
+            aria-label={`Version ${APP_VERSION}`}
+          >
+            ({APP_VERSION})
+          </sup>
         </span>
       </div>
 

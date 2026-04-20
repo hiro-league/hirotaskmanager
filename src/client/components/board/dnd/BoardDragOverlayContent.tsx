@@ -27,6 +27,7 @@ export function BoardTaskDragOverlay({
         groupLabel={groupDisplayLabelForId(board.taskGroups, task.groupId)}
         releasePill={taskReleasePill(board, task)}
         onOpen={() => {}}
+        showOverflowMenu={false}
       />
     </div>
   );

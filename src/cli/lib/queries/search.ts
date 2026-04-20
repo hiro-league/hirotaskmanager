@@ -46,12 +46,19 @@ export async function runSearch(
     return params;
   };
 
+  const scope = options.board?.trim()
+    ? ` on board "${options.board.trim()}"`
+    : "";
   await executePaginatedListRead(
     {
       kind: "search",
       fieldAllowlist: FIELDS_SEARCH_HIT,
       columns: COLUMNS_SEARCH_HITS,
       quietDefaults: QUIET_DEFAULT_SEARCH_HIT,
+      emptyMessage: `No matches for "${q}"${scope}.`,
+      emptyHint: options.noPrefix
+        ? `no matches for "${q}". Try removing --no-prefix to enable prefix matching, or broaden the query.`
+        : `no matches for "${q}". Try a shorter or different term, or remove --board to search all boards.`,
       buildPath: (off, lim) => `/search?${buildParams(off, lim).toString()}`,
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<SearchHit>>(path, { port }),

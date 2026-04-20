@@ -1,6 +1,7 @@
 import type { PaginatedListBody } from "../../../shared/pagination";
 import { CLI_ERR, CliError } from "../../types/errors";
 import type { QuietListPlan, TableColumn } from "../../types/output";
+import { ansi } from "./ansi";
 import { getCliOutputFormat, getCliQuiet } from "./cliFormat";
 import { writeHumanStderrError, writeHumanStdoutObject } from "./humanText";
 import { renderRecordsTable } from "./textTable";
@@ -80,13 +81,49 @@ export function printCountOnly(total: number): void {
   process.stdout.write(`count ${total}\n`);
 }
 
+/** Optional context for the empty-result branch (clig.dev: data → stdout, messaging → stderr). */
+export type EmptyListMessages = {
+  /** Human-mode stdout replacement for the generic "No rows." line. */
+  emptyMessage?: string;
+  /** TTY-only, non-quiet stderr hint with a recovery suggestion. */
+  emptyHint?: string;
+};
+
+/**
+ * `total === 0` branch shared by paginated list reads.
+ * - ndjson stdout: silent (preserves NDJSON one-object-per-line contract).
+ * - human stdout: `emptyMessage` (default `No rows.`) + paging footer.
+ * - --quiet: silent on both streams.
+ * - stderr: write `emptyHint` only when stderr is a TTY (avoids polluting captured logs).
+ */
+function emitEmptyListResult<T>(
+  body: PaginatedListBody<T>,
+  empty: EmptyListMessages,
+): void {
+  const quiet = getCliQuiet();
+  if (!quiet && getCliOutputFormat() === "human") {
+    const message = empty.emptyMessage ?? "No rows.";
+    const footer = `total ${body.total} · showing 0 · limit ${body.limit} · offset ${body.offset}`;
+    process.stdout.write(`${message}\n${footer}\n`);
+  }
+  // ndjson stdout intentionally silent: empty stream is the valid encoding for "no items".
+  if (!quiet && empty.emptyHint && process.stderr.isTTY === true) {
+    process.stderr.write(`${ansi.dim}hint:${ansi.reset} ${empty.emptyHint}\n`);
+  }
+}
+
 /** Paginated list read: NDJSON lines, `--quiet` lines, or fixed-width table + paging footer. */
 export function printPaginatedListRead<T>(
   body: PaginatedListBody<T>,
   displayItems: readonly unknown[],
   columns: readonly TableColumn[],
   quietPlan: QuietListPlan,
+  empty: EmptyListMessages = {},
 ): void {
+  if (displayItems.length === 0 && body.total === 0) {
+    emitEmptyListResult(body, empty);
+    return;
+  }
   // Global `--quiet` overrides ndjson/human for list stdout (plain lines, not JSON or tables).
   if (getCliQuiet()) {
     printQuietListLines(displayItems, quietPlan);

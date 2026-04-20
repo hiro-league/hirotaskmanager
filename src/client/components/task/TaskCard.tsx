@@ -28,6 +28,8 @@ import {
   getTaskCardTimeline,
 } from "@/lib/taskCardDate";
 import { clampTaskTitleInput } from "../../../shared/taskTitle";
+import type { TaskCardOverflowBoardData } from "@/components/board/boardColumnData";
+import { TaskCardOverflowMenu } from "@/components/task/TaskCardOverflowMenu";
 
 function taskCardBodyPaddingClass(viewMode: TaskCardViewMode): string {
   return viewMode === "small" ? "px-2 py-2" : "px-2.5 py-2";
@@ -173,6 +175,12 @@ interface TaskCardProps {
    * SortableTaskRow sets true so only the row wrapper registers once per task.
    */
   skipNavRegistration?: boolean;
+  /**
+   * When false, no right-slot overflow menu (e.g. drag overlay clone should not expose actions).
+   */
+  showOverflowMenu?: boolean;
+  /** Board metadata for overflow quick actions (release / priority / group). */
+  overflowActionsBoard?: TaskCardOverflowBoardData;
 }
 
 /** Shown when the task was created by the CLI principal (Phase 2 provenance). */
@@ -500,9 +508,13 @@ function TaskCardContent({
 
 const TASK_CARD_INLINE_PADDING_REM = 0.625;
 const TASK_CARD_STATUS_SLOT_REM = 1.375;
-const TASK_CARD_RIGHT_SLOT_REM = 0.25;
+/** Width reserved for the hover-only overflow control; horizontal padding sits inside this slot. */
+const TASK_CARD_RIGHT_SLOT_REM = 1.0;
 
-function openTaskContentRailStyle(viewMode: TaskCardViewMode): CSSProperties {
+function taskCardLayoutCssVars(
+  viewMode: TaskCardViewMode,
+  rightSlotRem: number,
+): CSSProperties {
   const inlinePaddingRem = viewMode === "small" ? 0.5 : TASK_CARD_INLINE_PADDING_REM;
   const blockPaddingRem = viewMode === "small" ? 0.375 : 0.5;
   return {
@@ -511,7 +523,12 @@ function openTaskContentRailStyle(viewMode: TaskCardViewMode): CSSProperties {
     ["--task-card-inline-padding" as string]: `${inlinePaddingRem}rem`,
     ["--task-card-block-padding" as string]: `${blockPaddingRem}rem`,
     ["--task-card-status-slot" as string]: `${TASK_CARD_STATUS_SLOT_REM}rem`,
-    ["--task-card-right-slot" as string]: `${TASK_CARD_RIGHT_SLOT_REM}rem`,
+    ["--task-card-right-slot" as string]: `${rightSlotRem}rem`,
+  };
+}
+
+function openTaskInnerRailWidthStyle(): CSSProperties {
+  return {
     width:
       "calc(100% - var(--task-card-status-slot) - var(--task-card-right-slot))",
   };
@@ -529,6 +546,8 @@ export const TaskCard = memo(function TaskCard({
   onCompleteFromCircle,
   isDragging,
   skipNavRegistration = false,
+  showOverflowMenu = true,
+  overflowActionsBoard,
 }: TaskCardProps) {
   const nav = useBoardKeyboardNavOptional();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -549,8 +568,12 @@ export const TaskCard = memo(function TaskCard({
   const canCompleteFromCircle =
     task.status === "open" && onCompleteFromCircle !== undefined;
   const isOpenTask = task.status === "open";
-  const openTaskRailStyle = openTaskContentRailStyle(viewMode);
   const bodyPaddingClass = taskCardBodyPaddingClass(viewMode);
+  const rightSlotRem =
+    showOverflowMenu && inlineEdit == null && !isDragging
+      ? TASK_CARD_RIGHT_SLOT_REM
+      : 0;
+  const layoutVars = taskCardLayoutCssVars(viewMode, rightSlotRem);
 
   return (
     <div
@@ -576,58 +599,80 @@ export const TaskCard = memo(function TaskCard({
         task.color && "border-l-4",
         isDragging && "opacity-40",
       )}
-      style={task.color ? { borderLeftColor: task.color } : undefined}
+      style={{
+        ...layoutVars,
+        ...(task.color ? { borderLeftColor: task.color } : undefined),
+      }}
     >
       {isOpenTask ? (
-        <div
-          className={cn("relative", bodyPaddingClass)}
-          style={openTaskRailStyle}
-        >
-          {canCompleteFromCircle ? (
-            <button
-              type="button"
-              data-task-complete-button
-              className={cn(
-                "absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start rounded-sm opacity-0 outline-none transition-opacity duration-150 ring-offset-background pointer-events-none group-hover/task-card:pointer-events-auto group-hover/task-card:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
-              )}
-              aria-label="Mark complete"
-              title="Mark complete"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                // Completing from the card is still a task interaction, so keep
-                // this task current before applying the status change.
-                nav?.selectTask(task.taskId);
-                onCompleteFromCircle(e.currentTarget);
-              }}
-            >
-              <OpenStatusCircle />
-            </button>
-          ) : (
-            <div className="absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start">
-              <TaskStatusIndicator status={task.status} />
-            </div>
-          )}
+        <>
           <div
-            className={cn(
-              "min-w-0 translate-x-0 transition-transform duration-150 ease-out group-hover/task-card:translate-x-[var(--task-card-status-slot)]",
-            )}
+            className={cn("relative", bodyPaddingClass)}
+            style={openTaskInnerRailWidthStyle()}
           >
-            <TaskCardContent
-              task={task}
-              taskPriorities={taskPriorities}
-              viewMode={viewMode}
-              groupLabel={groupLabel}
-              releasePill={releasePill}
-              preview={preview}
-              onOpen={onOpen}
-              inlineEdit={inlineEdit}
-            />
+            {canCompleteFromCircle ? (
+              <button
+                type="button"
+                data-task-complete-button
+                className={cn(
+                  "absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start rounded-sm opacity-0 outline-none transition-opacity duration-150 ring-offset-background pointer-events-none group-hover/task-card:pointer-events-auto group-hover/task-card:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+                aria-label="Mark complete"
+                title="Mark complete"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Completing from the card is still a task interaction, so keep
+                  // this task current before applying the status change.
+                  nav?.selectTask(task.taskId);
+                  onCompleteFromCircle(e.currentTarget);
+                }}
+              >
+                <OpenStatusCircle />
+              </button>
+            ) : (
+              <div className="absolute left-[var(--task-card-inline-padding)] top-[var(--task-card-block-padding)] inline-flex w-[var(--task-card-status-slot)] items-start justify-start">
+                <TaskStatusIndicator status={task.status} />
+              </div>
+            )}
+            <div
+              className={cn(
+                "min-w-0 translate-x-0 transition-transform duration-150 ease-out group-hover/task-card:translate-x-[var(--task-card-status-slot)]",
+              )}
+            >
+              <TaskCardContent
+                task={task}
+                taskPriorities={taskPriorities}
+                viewMode={viewMode}
+                groupLabel={groupLabel}
+                releasePill={releasePill}
+                preview={preview}
+                onOpen={onOpen}
+                inlineEdit={inlineEdit}
+              />
+            </div>
           </div>
-        </div>
+          {rightSlotRem > 0 ? (
+            <div
+              className={cn(
+                "pointer-events-none absolute top-[var(--task-card-block-padding)] right-[var(--task-card-inline-padding)] z-[1]",
+                "flex w-[var(--task-card-right-slot)] items-start justify-center",
+              )}
+            >
+              {/* Nested wrapper: menu trigger enables pointer-events so the row stays draggable. */}
+              <div className="pointer-events-auto">
+                <TaskCardOverflowMenu
+                  task={task}
+                  board={overflowActionsBoard}
+                  onEdit={onOpen}
+                />
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : (
         // Non-open tasks: normal flex layout with status always visible.
-        <div className={cn("flex gap-2", bodyPaddingClass)}>
+        <div className={cn("flex items-start gap-2", bodyPaddingClass)}>
           <div className="shrink-0">
             <TaskStatusIndicator status={task.status} />
           </div>
@@ -641,6 +686,15 @@ export const TaskCard = memo(function TaskCard({
             onOpen={onOpen}
             inlineEdit={inlineEdit}
           />
+          {rightSlotRem > 0 ? (
+            <div className="flex w-[var(--task-card-right-slot)] shrink-0 justify-center">
+              <TaskCardOverflowMenu
+                task={task}
+                board={overflowActionsBoard}
+                onEdit={onOpen}
+              />
+            </div>
+          ) : null}
         </div>
       )}
     </div>

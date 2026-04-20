@@ -296,10 +296,13 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
     // Best-effort; fall through to console printing as a fallback.
   }
 
-  // If writing the sidecar failed, always print. If it succeeded, only print
-  // when stdout is a TTY (standalone foreground server); background/detached
-  // spawns skip stdout to avoid duplicating what the launcher reads from file.
-  if (!wroteKeyFile || process.stdout.isTTY) {
+  // Fix for task #31339: the sidecar is the single source of truth for the
+  // launcher (and any other consumer) to display the key exactly once. The
+  // previous TTY-based guard double-printed under `background-attached` mode
+  // (detached child that still inherits the launcher's TTY): the server
+  // printed once and the launcher then printed again from the sidecar. Only
+  // fall back to console output when the sidecar write actually failed.
+  if (!wroteKeyFile) {
     printRecoveryKeyToConsole(recoveryKey);
   }
 }

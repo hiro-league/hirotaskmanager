@@ -6,6 +6,7 @@ import {
   useRef,
   type RefCallback,
 } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { MoreVertical } from "lucide-react";
 import { useDeleteList, usePatchList } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
@@ -75,7 +76,6 @@ export function ListHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   /** Measures the truncated list name span so we only show a native tooltip when text overflows. */
   const listNameSpanRef = useRef<HTMLSpanElement | null>(null);
   const [listNameTruncated, setListNameTruncated] = useState(false);
@@ -122,21 +122,6 @@ export function ListHeader({
       setEditValue(list.name);
     }
   }, [boardId, editValue, list.listId, list.name, patchList]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDocPointerDown = (e: Event) => {
-      const el = menuRef.current;
-      const t = e.target;
-      if (el && t instanceof Node && !el.contains(t)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", onDocPointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", onDocPointerDown);
-    };
-  }, [menuOpen]);
 
   // Phase 4: Esc for list menu goes through scoped shortcut stack (board shortcuts stay suppressed).
   useShortcutOverlay(
@@ -303,49 +288,48 @@ export function ListHeader({
         </div>
       )}
       {!editing && (
-        <div ref={menuRef} className="relative z-10 shrink-0">
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted/80 group-hover/list-header:opacity-100 data-[open]:opacity-100"
-            aria-label={`Actions for ${displayName}`}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            data-open={menuOpen ? "" : undefined}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            <MoreVertical className="size-4" aria-hidden />
-          </button>
-          {menuOpen ? (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-50 mt-1 min-w-[9.5rem] rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+        <DropdownMenu.Root
+          modal={false}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+        >
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted/80 group-hover/list-header:opacity-100 data-[state=open]:opacity-100"
+              aria-label={`Actions for ${displayName}`}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full rounded px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                  setMenuOpen(false);
+              <MoreVertical className="size-4" aria-hidden />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              side="right"
+              align="start"
+              sideOffset={4}
+              collisionPadding={8}
+              className="z-[100] min-w-[9.5rem] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto overscroll-y-contain rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+            >
+              <DropdownMenu.Item
+                className="flex cursor-default rounded px-2 py-1.5 outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                onSelect={() => {
                   startRename();
                 }}
               >
                 Rename
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full rounded px-2 py-1.5 text-left text-destructive hover:bg-destructive/10"
-                onClick={() => {
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="flex cursor-default rounded px-2 py-1.5 text-destructive outline-none hover:bg-destructive/10 focus:bg-destructive/10"
+                onSelect={() => {
                   handleDelete();
                 }}
               >
                 Move to Trash
-              </button>
-            </div>
-          ) : null}
-        </div>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       )}
     </div>
 

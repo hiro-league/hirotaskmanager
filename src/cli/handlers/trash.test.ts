@@ -169,7 +169,7 @@ describe("trash list handlers", () => {
     expect(outQ.trimEnd()).toBe("3");
   });
 
-  test("empty trash boards — NDJSON empty; human No rows.", async () => {
+  test("empty trash boards — NDJSON empty; human contextual empty-trash message", async () => {
     const empty: PaginatedListBody<TrashedBoardItem> = {
       items: [],
       total: 0,
@@ -185,6 +185,6 @@ describe("trash list handlers", () => {
 
     syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
     const outHu = await captureStdout(() => handleTrashBoards(ctx, {}));
-    expect(outHu).toContain("No rows.");
+    expect(outHu).toContain("Trash is empty (no boards).");
   });
 });

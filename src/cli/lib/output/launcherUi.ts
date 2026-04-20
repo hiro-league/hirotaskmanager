@@ -202,6 +202,54 @@ export async function printPassphraseHint(): Promise<void> {
   await spinForMoment(text, text);
 }
 
+/**
+ * Prints the freshly-minted CLI API key so an operator can copy it on the
+ * one (and only) chance they get.
+ *
+ * Copy-safety is the design constraint: the key MUST sit on its own line
+ * with NOTHING before or after it (no `| `, no quotes, no trailing spaces),
+ * so a triple-click selects exactly the key value with no surrounding
+ * characters. Visual emphasis is therefore placed on the lines ABOVE and
+ * BELOW the key (rules + label + bold-cyan tint of the key itself), never
+ * on the same line as the key.
+ *
+ * Pipe-safe: when stdout is not a TTY (CI, `| tee`, redirected setup logs)
+ * the helper drops the rules/colors and just prints heading + key + hint,
+ * each on its own line, so captured output stays easy to grep and pipe.
+ */
+export function printCliApiKey(
+  key: string,
+  opts: { profileName: string; nonInteractive?: boolean },
+): void {
+  const headingLabel = `CLI API Key for profile "${opts.profileName}" (one-time display):`;
+  const savedHint =
+    "Saved to this profile as api_key. It will not be shown again.";
+  const copyHint =
+    "Tip: triple-click the key line above to select just the key.";
+
+  if (!out.isTTY || opts.nonInteractive) {
+    line();
+    line(headingLabel);
+    line(key);
+    line(savedHint);
+    line();
+    return;
+  }
+
+  // Bracket the key with horizontal rules to draw the eye, but keep the
+  // key's own line completely clean so copy-paste captures only the key
+  // (issue #31342).
+  const rule = "=".repeat(Math.max(72, key.length));
+  line();
+  line(paintWarning(headingLabel));
+  line(paint(out, rule, ansi.yellow));
+  line(paintValue(key));
+  line(paint(out, rule, ansi.yellow));
+  line(paint(out, savedHint, ansi.dim));
+  line(paint(out, copyHint, ansi.dim));
+  line();
+}
+
 export function printRecoveryKey(recoveryKey: string): void {
   line();
   line(paintWarning("Recovery Key:"));

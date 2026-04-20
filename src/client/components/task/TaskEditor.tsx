@@ -17,6 +17,7 @@ import {
   priorityDisplayLabel,
   sortPrioritiesByValue,
   sortTaskGroupsForDisplay,
+  taskDisplayTitle,
   type Task,
 } from "../../../shared/models";
 import { sortReleasesForDisplay } from "../../../shared/releaseSort";
@@ -25,6 +26,7 @@ import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
 import { useDeleteTask, useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
+import { TaskAgentPromptActions } from "@/components/task/TaskAgentPromptActions";
 import { TaskFieldSwatchSelect } from "@/components/task/TaskFieldSwatchSelect";
 import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
@@ -430,13 +432,32 @@ export function TaskEditor({
           onClick={(e) => e.stopPropagation()}
           onWheel={(e) => e.stopPropagation()}
         >
-          <h2 id={titleId} className="text-lg font-semibold text-foreground">
-            {mode === "create"
-              ? "New task"
-              : task != null
-                ? `Edit task #${formatTaskIdForDisplay(task.taskId)}`
-                : "Edit task"}
-          </h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2
+              id={titleId}
+              className="min-w-0 flex-1 text-lg font-semibold text-foreground"
+            >
+              {mode === "create"
+                ? "New task"
+                : task != null
+                  ? `Edit task #${formatTaskIdForDisplay(task.taskId)}`
+                  : "Edit task"}
+            </h2>
+            {mode === "edit" && task ? (
+              <TaskAgentPromptActions
+                boardId={board.boardId}
+                taskId={task.taskId}
+                // Use form `title` / `emoji` so the copied prompt matches unsaved edits.
+                titleForDisplay={taskDisplayTitle({
+                  ...task,
+                  title,
+                  emoji,
+                })}
+                disabled={busy}
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
 
           <div className="mt-4 space-y-4">
             {emojiFieldError ? (

@@ -748,7 +748,7 @@ describe.skipIf(!runRealStack)(
       // Non-interactive bind defaults to loopback, so no key is required and
       // we should NOT see the auto-mint banner. Make this explicit: a regression
       // that flips the bind default to 0.0.0.0 would leak a key to stdout in CI.
-      expect(setupOut).not.toContain("Minted CLI API key");
+      expect(setupOut).not.toContain("CLI API Key for profile");
       // Sanity: the launcher should NOT have refused the call (the rejection
       // path we just added is for *implicit* setup; --setup-server must work).
       expect(setupErr).not.toContain("--setup-server or --setup-client");

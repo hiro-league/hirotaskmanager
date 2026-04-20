@@ -49,9 +49,11 @@ describe("boardColumnData", () => {
     });
     const spread = boardColumnSpreadProps(board);
     expect(spread.boardId).toBe(7);
+    expect(spread.boardSlug).toBe("b");
     expect(spread.showStats).toBe(true);
     expect(spread.boardVisibleStatuses).toEqual(["a", "b"]);
     expect(spread.boardTasks).toBe(board.tasks);
+    expect(spread.boardLists).toBe(board.lists);
     expect(spread.taskGroups).toBe(board.taskGroups);
     expect(spread.defaultReleaseId).toBe(9);
   });
@@ -61,11 +63,18 @@ describe("boardColumnData", () => {
     const data = taskEditorBoardData(board);
     expect(data).toEqual({
       boardId: 3,
+      boardSlug: "b",
       taskGroups: board.taskGroups,
       taskPriorities: board.taskPriorities,
       releases: board.releases,
       defaultTaskGroupId: board.defaultTaskGroupId,
       defaultReleaseId: board.defaultReleaseId,
     });
+  });
+
+  test("taskEditorBoardData uses numeric board id when slug is absent", () => {
+    const board = minimalBoard({ boardId: 99, slug: undefined });
+    const data = taskEditorBoardData(board);
+    expect(data.boardSlug).toBe("99");
   });
 });

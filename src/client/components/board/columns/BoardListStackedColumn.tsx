@@ -31,7 +31,10 @@ import {
   stackedListColumnMinHeightClass,
 } from "../dnd/boardDragOverlayShell";
 import { EMPTY_SORTABLE_IDS, parseTaskSortableId } from "../dnd/dndIds";
-import type { BoardColumnSpreadProps } from "../boardColumnData";
+import type {
+  BoardColumnSpreadProps,
+  TaskCardOverflowBoardData,
+} from "../boardColumnData";
 import {
   type BoardTaskFilterState,
   listTasksMergedSortedFromIndex,
@@ -58,12 +61,14 @@ interface ListStackedBodyProps extends BoardColumnSpreadProps {
 
 function ListStackedBody({
   boardId,
+  boardSlug,
   showStats,
   taskGroups,
   taskPriorities,
   releases,
   defaultTaskGroupId,
   defaultReleaseId,
+  boardLists,
   boardTasks,
   boardVisibleStatuses: _boardVisibleStatuses,
   list,
@@ -92,6 +97,31 @@ function ListStackedBody({
     for (const t of boardTasks) m.set(t.taskId, t);
     return m;
   }, [boardTasks]);
+
+  const taskOverflowBoard = useMemo<TaskCardOverflowBoardData>(
+    () => ({
+      boardId,
+      boardSlug,
+      taskGroups,
+      taskPriorities,
+      releases,
+      defaultTaskGroupId,
+      defaultReleaseId,
+      lists: boardLists,
+      tasks: boardTasks,
+    }),
+    [
+      boardId,
+      boardSlug,
+      taskGroups,
+      taskPriorities,
+      releases,
+      defaultTaskGroupId,
+      defaultReleaseId,
+      boardLists,
+      boardTasks,
+    ],
+  );
 
   const actions = useStackedListTaskActions({
     boardId,
@@ -247,6 +277,7 @@ function ListStackedBody({
                 quickAddComposer={quickAddComposer}
                 getScrollElement={actions.getScrollElement}
                 enableVirtualization={!forDragOverlay && !actions.adding}
+                taskOverflowBoard={taskOverflowBoard}
               />
             ) : (
               <>
@@ -271,6 +302,7 @@ function ListStackedBody({
                           busy: actions.titleEditBusy,
                         },
                       )}
+                      overflowActionsBoard={taskOverflowBoard}
                     />
                     {staticQuickAddInsertIndex === index + 1 ? quickAddComposer : null}
                   </div>
@@ -301,6 +333,7 @@ function ListStackedBody({
       <TaskEditor
         board={{
           boardId,
+          boardSlug,
           taskGroups,
           taskPriorities,
           releases,
@@ -364,12 +397,14 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   sortableIds,
   tasksByListStatus,
   boardId,
+  boardSlug,
   showStats,
   taskGroups,
   taskPriorities,
   releases,
   defaultTaskGroupId,
   defaultReleaseId,
+  boardLists,
   boardTasks,
   boardVisibleStatuses,
 }: BoardListStackedColumnProps) {
@@ -443,12 +478,14 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
         {!isDragging && inViewport && (
           <ListStackedBody
             boardId={boardId}
+            boardSlug={boardSlug}
             showStats={showStats}
             taskGroups={taskGroups}
             taskPriorities={taskPriorities}
             releases={releases}
             defaultTaskGroupId={defaultTaskGroupId}
             defaultReleaseId={defaultReleaseId}
+            boardLists={boardLists}
             boardTasks={boardTasks}
             boardVisibleStatuses={boardVisibleStatuses}
             list={list}

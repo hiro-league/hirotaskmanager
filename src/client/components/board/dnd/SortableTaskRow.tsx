@@ -1,5 +1,6 @@
 import { memo, useCallback } from "react";
 import type { Task, TaskPriorityDefinition } from "../../../../shared/models";
+import type { TaskCardOverflowBoardData } from "@/components/board/boardColumnData";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import {
   TaskCard,
@@ -20,6 +21,7 @@ export interface SortableTaskRowProps {
   onOpen: () => void;
   inlineEdit?: TaskCardInlineEdit;
   onCompleteFromCircle?: (anchorEl: HTMLElement) => void;
+  overflowActionsBoard?: TaskCardOverflowBoardData;
 }
 
 // Memoized: only re-renders when its own props change, not on sibling reorders
@@ -35,6 +37,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
   onOpen,
   inlineEdit,
   onCompleteFromCircle,
+  overflowActionsBoard,
 }: SortableTaskRowProps) {
   const {
     ref: setSortableNodeRef,
@@ -76,6 +79,7 @@ export const SortableTaskRow = memo(function SortableTaskRow({
         onCompleteFromCircle={onCompleteFromCircle}
         isDragging={isDragging}
         skipNavRegistration
+        overflowActionsBoard={overflowActionsBoard}
       />
     </div>
   );

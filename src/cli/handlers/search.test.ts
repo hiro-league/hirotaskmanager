@@ -308,7 +308,7 @@ describe("handleSearch", () => {
     expect(fetchedPath).toContain("limit=500");
   });
 
-  test("no results — NDJSON empty; human No rows.", async () => {
+  test("no results — NDJSON empty; human contextual no-matches message", async () => {
     const emptyBody: PaginatedListBody<SearchHit> = {
       items: [],
       total: 0,
@@ -348,7 +348,7 @@ describe("handleSearch", () => {
     } finally {
       process.stdout.write = orig;
     }
-    expect(outHu).toContain("No rows.");
+    expect(outHu).toContain('No matches for "q".');
   });
 
   test("--board appears in search URL", async () => {

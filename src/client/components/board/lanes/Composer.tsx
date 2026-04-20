@@ -132,13 +132,14 @@ function ComposerFab({ onOpen }: { onOpen: () => void }) {
       type="button"
       aria-label="Add task"
       className={cn(
-        "absolute bottom-3 right-3 z-10",
+        "absolute bottom-3 left-1/2 -translate-x-1/2 z-10",
         "flex size-11 shrink-0 items-center justify-center rounded-full",
         "bg-primary text-primary-foreground shadow-md ring-1 ring-border/60",
         "opacity-0 pointer-events-none transition-opacity duration-150",
-        "group-hover/list-col:opacity-100 group-hover/list-col:pointer-events-auto",
-        "hover:opacity-90",
-        "focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        // Show at 50% opacity when the list column is hovered; full opacity when the FAB itself is hovered/focused.
+        "group-hover/list-col:opacity-50 group-hover/list-col:pointer-events-auto",
+        "hover:!opacity-100",
+        "focus-visible:pointer-events-auto focus-visible:!opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
       onClick={(e) => {
         e.stopPropagation();

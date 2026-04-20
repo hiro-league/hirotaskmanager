@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { boardKeys, useBoards } from "@/api/queries";
-import { BoardView } from "@/components/board/BoardView";
+import { NoBoardsEmptyState } from "@/components/routing/NoBoardsEmptyState";
 import { RedirectCountdownNotice } from "@/components/routing/RedirectCountdownNotice";
 import {
   boardPath,
@@ -48,10 +48,12 @@ export function HomeRedirect() {
     );
   }
 
+  // Zero boards is a normal first-run state, not an error — show a static empty
+  // state instead of `RedirectCountdownNotice` (which would pointlessly count down to `/`).
   if (!boards?.length) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <BoardView boardId={null} />
+        <NoBoardsEmptyState />
       </div>
     );
   }

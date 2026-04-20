@@ -2,6 +2,7 @@ import {
   useCliGlobalPolicy,
   usePatchCliGlobalPolicy,
 } from "@/api/cliGlobalPolicy";
+import { APP_VERSION } from "@/lib/appVersion";
 
 export function SettingsPage() {
   const { data: globalPolicy, isLoading: globalLoading } = useCliGlobalPolicy();
@@ -16,6 +17,13 @@ export function SettingsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Global options for the local hirotm CLI. Per-board CLI permissions are configured in{" "}
           <span className="font-medium text-foreground">Edit board</span> for each board.
+        </p>
+        <p
+          translate="no"
+          className="mt-2 text-xs text-muted-foreground/60"
+          aria-label={`Application version ${APP_VERSION}`}
+        >
+          ({APP_VERSION})
         </p>
       </div>
 

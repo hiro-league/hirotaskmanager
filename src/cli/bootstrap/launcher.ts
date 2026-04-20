@@ -45,6 +45,7 @@ import {
   runServerSetupWizard,
   type LauncherSetupResult,
 } from "./setupWizards";
+import { CLI_PACKAGE_VERSION } from "../cliVersion";
 
 export type { LauncherSetupResult };
 
@@ -97,6 +98,21 @@ export function resolveLauncherStartPlan(options: {
     shouldOpenBrowserOnReady:
       options.shouldOpenBrowser && !options.alreadyRunning,
   };
+}
+
+/** Human-facing line after server start/stop; kept aligned across launcher paths. */
+function formatServerLifecycleMessage(
+  kind: "started" | "already_started" | "stopped",
+  url: string,
+  profile: string,
+): string {
+  const headline =
+    kind === "stopped"
+      ? "Server Stopped"
+      : kind === "already_started"
+        ? "Server Already started"
+        : "Server Started";
+  return `${headline} @ ${paintValue(url)} for profile: ${paintValue(profile)}`;
 }
 
 async function openBrowser(url: string): Promise<void> {
@@ -185,7 +201,11 @@ export function createHirotaskmanagerProgram(): Command {
   const program = new Command();
   program
     .name("hirotaskmanager")
-    .description("Launch the local TaskManager app")
+    .description(
+      // Match hirotm: root help and --version both surface CLI_PACKAGE_VERSION (cliVersion.ts).
+      `Launch the local TaskManager app (v${CLI_PACKAGE_VERSION})`,
+    )
+    .version(CLI_PACKAGE_VERSION, "-V, --version")
     .option("--setup", "Run or rerun launcher setup for the active profile (role unchanged)")
     .option(
       "--setup-server",
@@ -407,7 +427,13 @@ export function createHirotaskmanagerProgram(): Command {
               const finalUrl = status.url;
               runningUrl = finalUrl;
               startupSpinner.stop(
-                `${startPlan.readyLabel}, listening at ${paintValue(finalUrl)}`,
+                formatServerLifecycleMessage(
+                  startPlan.readyLabel === "Already started"
+                    ? "already_started"
+                    : "started",
+                  finalUrl,
+                  workingProfile,
+                ),
               );
 
               if (!browserHandled && startPlan.shouldOpenBrowserOnReady) {
@@ -524,8 +550,8 @@ export function createHirotaskmanagerProgram(): Command {
         );
 
         try {
-          // Launcher `server start` is human-facing, so prefer concise text
-          // instead of JSON while still sharing the same server lifecycle path.
+          // Launcher `server start` prints the same lifecycle line shape as
+          // `server stop` (see formatServerLifecycleMessage) instead of JSON.
           await startServer(
             {
               kind: "installed",
@@ -534,7 +560,13 @@ export function createHirotaskmanagerProgram(): Command {
             startPlan.startMode,
             async (started) => {
               startupSpinner.stop(
-                `${startPlan.readyLabel}, listening at ${paintValue(started.url)}`,
+                formatServerLifecycleMessage(
+                  startPlan.readyLabel === "Already started"
+                    ? "already_started"
+                    : "started",
+                  started.url,
+                  profile,
+                ),
               );
             },
           );
@@ -575,15 +607,28 @@ export function createHirotaskmanagerProgram(): Command {
         const profile = resolveInstalledLauncherProfile(
           (command.optsWithGlobals() as LauncherServerOptions).profile ?? options.profile,
         );
+        const stopConfig = readConfigFile({ profile, kind: "installed" });
+        if (!stopConfig) {
+          throw new CliError(
+            `No profile config found for "${profile}". Run hirotaskmanager --setup first.`,
+            2,
+            { code: CLI_ERR.missingRequired, profile },
+          );
+        }
+        const stopUrl = buildLocalServerUrl(
+          stopConfig.port ?? INSTALLED_DEFAULT_PORT,
+        );
         const stopSpinner = startInlineSpinner(
-          `Stopping Server with profile ${paintValue(profile)}`,
+          `Stopping Server with profile ${paintValue(profile)}: ${paintValue(stopUrl)}`,
         );
         try {
           await stopServer({
             kind: "installed",
             profile,
           });
-          stopSpinner.stop("Server stopped");
+          stopSpinner.stop(
+            formatServerLifecycleMessage("stopped", stopUrl, profile),
+          );
         } finally {
           stopSpinner.stop(null);
         }

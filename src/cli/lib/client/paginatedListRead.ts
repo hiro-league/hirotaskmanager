@@ -25,6 +25,7 @@ import type {
 } from "../../types/options";
 
 export type {
+  EmptyResultMessages,
   OptionalLimitPaginatedSpec,
   PaginatedListFetch,
   PaginatedListReadCliOptions,
@@ -98,6 +99,15 @@ export async function executePaginatedListRead<T extends object>(
     const pageAll = options.pageAll === true;
     const { basePath, extraParams, fetchPage } = spec;
 
+    const emptyMessages = {
+      emptyMessage: spec.emptyMessage,
+      emptyHint: spec.emptyHint,
+    };
+    const quietPlan = {
+      defaultKeys: spec.quietDefaults,
+      explicitField: quietExplicit,
+    };
+
     if (!pageAll) {
       const q =
         extraParams != null
@@ -114,10 +124,7 @@ export async function executePaginatedListRead<T extends object>(
       const rows = fieldKeys
         ? projectPaginatedItems(body, fieldKeys).items
         : body.items;
-      printPaginatedListRead(body, rows, spec.columns, {
-        defaultKeys: spec.quietDefaults,
-        explicitField: quietExplicit,
-      });
+      printPaginatedListRead(body, rows, spec.columns, quietPlan, emptyMessages);
       return;
     }
 
@@ -136,10 +143,7 @@ export async function executePaginatedListRead<T extends object>(
     const mergedRows = fieldKeys
       ? projectPaginatedItems(merged, fieldKeys).items
       : merged.items;
-    printPaginatedListRead(merged, mergedRows, spec.columns, {
-      defaultKeys: spec.quietDefaults,
-      explicitField: quietExplicit,
-    });
+    printPaginatedListRead(merged, mergedRows, spec.columns, quietPlan, emptyMessages);
     return;
   }
 
@@ -147,16 +151,21 @@ export async function executePaginatedListRead<T extends object>(
   const offset = parseOptionalOffset(options.offset);
   const pageAll = options.pageAll === true;
   const { fetchPage, buildPath } = spec;
+  const emptyMessages = {
+    emptyMessage: spec.emptyMessage,
+    emptyHint: spec.emptyHint,
+  };
+  const quietPlan = {
+    defaultKeys: spec.quietDefaults,
+    explicitField: quietExplicit,
+  };
 
   if (!pageAll) {
     const body = await fetchPage(buildPath(offset, limit));
     const rows = fieldKeys
       ? projectPaginatedItems(body, fieldKeys).items
       : body.items;
-    printPaginatedListRead(body, rows, spec.columns, {
-      defaultKeys: spec.quietDefaults,
-      explicitField: quietExplicit,
-    });
+    printPaginatedListRead(body, rows, spec.columns, quietPlan, emptyMessages);
     return;
   }
 
@@ -166,8 +175,5 @@ export async function executePaginatedListRead<T extends object>(
   const rows = fieldKeys
     ? projectPaginatedItems(merged, fieldKeys).items
     : merged.items;
-  printPaginatedListRead(merged, rows, spec.columns, {
-    defaultKeys: spec.quietDefaults,
-    explicitField: quietExplicit,
-  });
+  printPaginatedListRead(merged, rows, spec.columns, quietPlan, emptyMessages);
 }

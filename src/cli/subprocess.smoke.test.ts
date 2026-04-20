@@ -12,6 +12,13 @@ import { CLI_PACKAGE_VERSION } from "./cliVersion";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..");
 const hirotmEntry = path.join(repoRoot, "src", "cli", "bin", "hirotm.ts");
+const hirotaskmanagerEntry = path.join(
+  repoRoot,
+  "src",
+  "cli",
+  "bin",
+  "hirotaskmanager.ts",
+);
 
 const smokeTempRoots: string[] = [];
 afterEach(() => {
@@ -72,6 +79,18 @@ function spawnHirotm(
     stdout: "pipe",
     stderr: "pipe",
     env,
+  });
+}
+
+function spawnHirotaskmanager(
+  args: string[],
+): ReturnType<typeof Bun.spawn> {
+  return Bun.spawn({
+    cmd: ["bun", "run", hirotaskmanagerEntry, ...args],
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: process.env,
   });
 }
 
@@ -1023,7 +1042,7 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     }
   });
 
-  test("boards list --format human + empty stub → stdout contains No rows.", async () => {
+  test("boards list --format human + empty stub → stdout contains no-boards message", async () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
@@ -1058,8 +1077,10 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
       const code = await proc.exited;
 
       expect(code).toBe(0);
+      // stderr hint is TTY-gated; subprocess pipe is not a TTY → silent.
       expect(stderr.trim()).toBe("");
-      expect(stdout).toContain("No rows.");
+      expect(stdout).toContain("No boards visible to this CLI key.");
+      expect(stdout).toContain("total 0 · showing 0");
     } finally {
       server.stop();
     }
@@ -1124,5 +1145,33 @@ describe("hirotm subprocess smoke (aspect 4)", () => {
     expect(stdout).toContain(
       "Usage: hirotm tasks move <task-id> --to-list <id> [options]",
     );
+  });
+});
+
+describe("hirotaskmanager subprocess smoke", () => {
+  test("--version and -V print package version (stdout) and exit 0", async () => {
+    for (const flag of ["--version", "-V"]) {
+      const proc = spawnHirotaskmanager([flag]);
+      const [stdout, stderr] = await Promise.all([
+        readSubprocessStream(proc.stdout),
+        readSubprocessStream(proc.stderr),
+      ]);
+      const code = await proc.exited;
+      expect(code).toBe(0);
+      expect(stderr.trim()).toBe("");
+      expect(stdout.trim()).toBe(CLI_PACKAGE_VERSION);
+    }
+  });
+
+  test("--help lists -V, --version and package version in description", async () => {
+    const proc = spawnHirotaskmanager(["--help"]);
+    const stdout = await readSubprocessStream(proc.stdout);
+    const code = await proc.exited;
+    expect(code).toBe(0);
+    expect(stdout).toContain("Usage:");
+    expect(stdout.toLowerCase()).toContain("hirotaskmanager");
+    expect(stdout).toContain(`(v${CLI_PACKAGE_VERSION})`);
+    expect(stdout).toContain("--version");
+    expect(stdout).toContain("-V");
   });
 });

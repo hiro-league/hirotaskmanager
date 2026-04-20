@@ -55,7 +55,14 @@
     "test:cli:real-stack": "bun run scripts/run-cli-real-stack-test.ts",
     "profile:summarize": "node --max-old-space-size=8192 docs/profiling/summarize-profiler-export.mjs",
     "profile:chrome": "node docs/chrome-profiling/summarize-chrome-trace.mjs",
-    "seed:perf": "bun run scripts/seed-perf-board.ts"
+    "seed:perf": "bun run scripts/seed-perf-board.ts",
+    "clean:global": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/uninstall-packages.ps1",
+    "clean:global:dry": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/uninstall-packages.ps1 -DryRun",
+    "clean:profiles": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/clean-profiles.ps1",
+    "clean:profiles:all": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/clean-profiles.ps1 -Profiles All",
+    "clean:profiles:keep-dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/clean-profiles.ps1 -Profiles AllExceptDev",
+    "clean:profiles:nuke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/clean-profiles.ps1 -Nuke",
+    "clean:all": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/uninstall.ps1 -AlsoProfiles AllExceptDev"
   },
   "dependencies": {
     "@dnd-kit/abstract": "^0.3.2",

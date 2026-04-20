@@ -32,13 +32,26 @@ export type PaginatedListReadCliOptions = {
   fields?: string;
 };
 
+/**
+ * Optional per-list-read messages used when `total === 0`. NDJSON stdout stays silent
+ * to preserve the one-object-per-line contract; human stdout uses `emptyMessage` (falls
+ * back to "No rows."); stderr writes `emptyHint` only when stderr is a TTY and not `--quiet`.
+ * See clig.dev §Output (data → stdout, messaging → stderr; do not pollute machine streams).
+ */
+export type EmptyResultMessages = {
+  /** Human-mode stdout replacement for the generic "No rows." line. */
+  emptyMessage?: string;
+  /** TTY-only, non-quiet stderr hint with a recovery suggestion. */
+  emptyHint?: string;
+};
+
 type CommonPaginatedSpec<T> = {
   /** Same allowlists as `parseAndValidateFields` in `jsonFieldProjection.ts`. */
   fieldAllowlist: ReadonlySet<string>;
   columns: readonly TableColumn[];
   quietDefaults: readonly string[];
   fetchPage: PaginatedListFetch<T>;
-};
+} & EmptyResultMessages;
 
 /** Lists where `limit` is optional (omit = server default page) and page-all uses `MAX_PAGE_LIMIT` unless `--limit` set. */
 export type OptionalLimitPaginatedSpec<T> = CommonPaginatedSpec<T> & {

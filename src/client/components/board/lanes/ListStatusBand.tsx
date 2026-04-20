@@ -4,7 +4,10 @@ import {
   type List,
   type Task,
 } from "../../../../shared/models";
-import type { BoardBandSpreadProps } from "../boardColumnData";
+import type {
+  BoardBandSpreadProps,
+  TaskCardOverflowBoardData,
+} from "../boardColumnData";
 import { useBoardFilterResolution } from "@/context/BoardFilterResolutionContext";
 import {
   TaskCard,
@@ -33,11 +36,13 @@ interface ListStatusBandProps extends BoardBandSpreadProps {
 
 export const ListStatusBand = memo(function ListStatusBand({
   boardId,
+  boardSlug,
   taskGroups,
   taskPriorities,
   releases,
   defaultTaskGroupId,
   defaultReleaseId,
+  boardLists,
   boardTasks,
   list,
   status,
@@ -59,6 +64,31 @@ export const ListStatusBand = memo(function ListStatusBand({
     for (const t of boardTasks) m.set(t.taskId, t);
     return m;
   }, [boardTasks]);
+
+  const taskOverflowBoard = useMemo<TaskCardOverflowBoardData>(
+    () => ({
+      boardId,
+      boardSlug,
+      taskGroups,
+      taskPriorities,
+      releases,
+      defaultTaskGroupId,
+      defaultReleaseId,
+      lists: boardLists,
+      tasks: boardTasks,
+    }),
+    [
+      boardId,
+      boardSlug,
+      taskGroups,
+      taskPriorities,
+      releases,
+      defaultTaskGroupId,
+      defaultReleaseId,
+      boardLists,
+      boardTasks,
+    ],
+  );
 
   const taskFilter = useMemo<
     Pick<
@@ -101,6 +131,7 @@ export const ListStatusBand = memo(function ListStatusBand({
     <TaskEditor
       board={{
         boardId,
+        boardSlug,
         taskGroups,
         taskPriorities,
         releases,
@@ -134,6 +165,7 @@ export const ListStatusBand = memo(function ListStatusBand({
       onTitleCommit={() => void ctrl.commitInlineTitleEdit()}
       onTitleCancel={ctrl.cancelInlineTitleEdit}
       titleEditBusy={ctrl.titleEditBusy}
+      taskOverflowBoard={taskOverflowBoard}
     />
   ) : null;
 
@@ -164,6 +196,7 @@ export const ListStatusBand = memo(function ListStatusBand({
               ? (anchorEl) => ctrl.completeFromList(task, anchorEl)
               : undefined
           }
+          overflowActionsBoard={taskOverflowBoard}
         />
       ))}
     </div>

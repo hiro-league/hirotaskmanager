@@ -1,9 +1,63 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import { useLogin, useRecoverPassphrase, useSetupAuth } from "@/api/auth";
-// Shared Input/Button: focus-visible rings, autocomplete, password-manager hints (web interface guidelines).
+// Shared Input/Button: focus-visible rings; passphrase fields use autoComplete=off (task: avoid browser/password-manager autofill).
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+/** Passphrase row with reveal toggle; visibility state is per-field (login vs setup vs recovery). */
+function PassphraseField({
+  label,
+  name,
+  value,
+  onChange,
+  autoFocus,
+  "aria-invalid": ariaInvalid,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+  "aria-invalid"?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <div className="relative">
+        <Input
+          type={visible ? "text" : "password"}
+          name={name}
+          // Product: do not suggest saved passphrases / autofill on local TaskManager unlock fields.
+          autoComplete="off"
+          autoFocus={autoFocus}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={ariaInvalid}
+          className="pr-9"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          // Keep Tab order to inputs + primary actions only; reveal is mouse/touch (or screen-reader browse).
+          tabIndex={-1}
+          className="absolute top-0 right-0 text-muted-foreground hover:text-foreground"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? "Hide passphrase" : "Show passphrase"}
+          aria-pressed={visible}
+        >
+          {visible ? (
+            <EyeOff className="size-4" aria-hidden />
+          ) : (
+            <Eye className="size-4" aria-hidden />
+          )}
+        </Button>
+      </div>
+    </label>
+  );
+}
 
 function AuthShell({
   title,
@@ -88,6 +142,7 @@ export function SetupAuthScreen({
       <AuthNotice notice={notice} onDismiss={() => onNoticeChange(null)} />
       <form
         className="space-y-4"
+        autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
           if (!passphrase || mismatch) return;
@@ -103,31 +158,21 @@ export function SetupAuthScreen({
           );
         }}
       >
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-foreground">Passphrase</span>
-          <Input
-            type="password"
-            name="passphrase"
-            autoComplete="new-password"
-            autoFocus
-            value={passphrase}
-            onChange={(event) => setPassphrase(event.target.value)}
-            aria-invalid={mismatch}
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-foreground">
-            Confirm passphrase
-          </span>
-          <Input
-            type="password"
-            name="confirm-passphrase"
-            autoComplete="new-password"
-            value={confirmPassphrase}
-            onChange={(event) => setConfirmPassphrase(event.target.value)}
-            aria-invalid={mismatch}
-          />
-        </label>
+        <PassphraseField
+          label="Passphrase"
+          name="passphrase"
+          autoFocus
+          value={passphrase}
+          onChange={setPassphrase}
+          aria-invalid={mismatch}
+        />
+        <PassphraseField
+          label="Confirm passphrase"
+          name="confirm-passphrase"
+          value={confirmPassphrase}
+          onChange={setConfirmPassphrase}
+          aria-invalid={mismatch}
+        />
         {mismatch ? (
           <p className="text-sm text-destructive">Passphrases must match.</p>
         ) : null}
@@ -186,23 +231,20 @@ export function LoginScreen({
       {!showRecovery ? (
         <form
           className="space-y-4"
+          autoComplete="off"
           onSubmit={(event) => {
             event.preventDefault();
             if (!passphrase) return;
             login.mutate({ passphrase });
           }}
         >
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-foreground">Passphrase</span>
-            <Input
-              type="password"
-              name="passphrase"
-              autoComplete="current-password"
-              autoFocus
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-            />
-          </label>
+          <PassphraseField
+            label="Passphrase"
+            name="passphrase"
+            autoFocus
+            value={passphrase}
+            onChange={setPassphrase}
+          />
           {loginError ? (
             <p className="text-sm text-destructive">{loginError}</p>
           ) : null}
@@ -226,6 +268,7 @@ export function LoginScreen({
       ) : (
         <form
           className="space-y-4"
+          autoComplete="off"
           onSubmit={(event) => {
             event.preventDefault();
             if (!recoveryKey || !newPassphrase || recoveryMismatch) return;
@@ -259,32 +302,20 @@ export function LoginScreen({
               onChange={(event) => setRecoveryKey(event.target.value)}
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-foreground">
-              New passphrase
-            </span>
-            <Input
-              type="password"
-              name="new-passphrase"
-              autoComplete="new-password"
-              value={newPassphrase}
-              onChange={(event) => setNewPassphrase(event.target.value)}
-              aria-invalid={recoveryMismatch}
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-foreground">
-              Confirm new passphrase
-            </span>
-            <Input
-              type="password"
-              name="confirm-new-passphrase"
-              autoComplete="new-password"
-              value={confirmNewPassphrase}
-              onChange={(event) => setConfirmNewPassphrase(event.target.value)}
-              aria-invalid={recoveryMismatch}
-            />
-          </label>
+          <PassphraseField
+            label="New passphrase"
+            name="new-passphrase"
+            value={newPassphrase}
+            onChange={setNewPassphrase}
+            aria-invalid={recoveryMismatch}
+          />
+          <PassphraseField
+            label="Confirm new passphrase"
+            name="confirm-new-passphrase"
+            value={confirmNewPassphrase}
+            onChange={setConfirmNewPassphrase}
+            aria-invalid={recoveryMismatch}
+          />
           {recoveryMismatch ? (
             <p className="text-sm text-destructive">Passphrases must match.</p>
           ) : null}

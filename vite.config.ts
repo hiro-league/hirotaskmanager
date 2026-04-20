@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -6,6 +7,16 @@ import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Same semver as root `package.json` / CLI `--version` (injected for web UI only). */
+const APP_PACKAGE_VERSION = (
+  JSON.parse(
+    readFileSync(path.join(__dirname, "package.json"), "utf8"),
+  ) as { version?: string }
+).version;
+if (typeof APP_PACKAGE_VERSION !== "string" || APP_PACKAGE_VERSION.length === 0) {
+  throw new Error("package.json must define a non-empty string \"version\" for the web build.");
+}
 
 /** Lazy route chunks to hint the browser after first paint (bundle-preload); names come from Rollup chunk `fileName`. */
 const BOARD_ROUTE_MODULE_PRELOAD_PATTERNS = [
@@ -78,6 +89,9 @@ function manualChunks(id: string): string | undefined {
 }
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_PACKAGE_VERSION),
+  },
   plugins: [react(), tailwindcss(), modulePreloadBoardRouteChunks()],
   resolve: {
     alias: {

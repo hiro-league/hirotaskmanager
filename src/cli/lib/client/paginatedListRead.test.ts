@@ -10,7 +10,7 @@ import {
   resetCliOutputFormat,
   syncCliOutputFormatFromGlobals,
 } from "../output/cliFormat";
-import { captureStdout } from "../core/testHelpers";
+import { captureStderr, captureStdout } from "../core/testHelpers";
 
 type TaskRow = { taskId: number; title: string };
 
@@ -234,6 +234,120 @@ describe("executePaginatedListRead (optionalLimit)", () => {
       exitCode: 2,
       details: expect.objectContaining({ code: CLI_ERR.invalidValue }),
     });
+  });
+});
+
+describe("executePaginatedListRead (empty result)", () => {
+  const origStderrIsTTY = process.stderr.isTTY;
+
+  afterEach(() => {
+    resetCliOutputFormat();
+    Reflect.defineProperty(process.stderr, "isTTY", {
+      configurable: true,
+      value: origStderrIsTTY,
+    });
+  });
+
+  function setStderrIsTTY(value: boolean): void {
+    Reflect.defineProperty(process.stderr, "isTTY", {
+      configurable: true,
+      value,
+    });
+  }
+
+  function emptySpec(extras: { emptyMessage?: string; emptyHint?: string } = {}) {
+    return {
+      kind: "optionalLimit" as const,
+      basePath: "/api/boards/brd/tasks",
+      fieldAllowlist: FIELDS_TASK,
+      columns: COLUMNS_TASKS_LIST,
+      quietDefaults: ["taskId"] as const,
+      ...extras,
+      async fetchPage() {
+        return { items: [], total: 0, limit: 50, offset: 0 };
+      },
+    };
+  }
+
+  test("ndjson + total=0 → stdout silent (preserves NDJSON one-object-per-line contract)", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    setStderrIsTTY(false);
+    const out = await captureStdout(() =>
+      executePaginatedListRead(emptySpec(), {}),
+    );
+    expect(out).toBe("");
+  });
+
+  test("ndjson + total=0 + emptyHint + stderr is TTY → hint on stderr, stdout silent", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    setStderrIsTTY(true);
+    let stdout = "";
+    const stderr = await captureStderr(async () => {
+      stdout = await captureStdout(() =>
+        executePaginatedListRead(
+          emptySpec({ emptyHint: "no boards visible to this CLI key." }),
+          {},
+        ),
+      );
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toContain("hint:");
+    expect(stderr).toContain("no boards visible to this CLI key.");
+  });
+
+  test("ndjson + total=0 + emptyHint + stderr not TTY → no stderr noise", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: false });
+    setStderrIsTTY(false);
+    let stdout = "";
+    const stderr = await captureStderr(async () => {
+      stdout = await captureStdout(() =>
+        executePaginatedListRead(
+          emptySpec({ emptyHint: "no boards visible to this CLI key." }),
+          {},
+        ),
+      );
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+  });
+
+  test("--quiet + total=0 → silent on both streams even with hint and TTY", async () => {
+    syncCliOutputFormatFromGlobals({ format: "ndjson", quiet: true });
+    setStderrIsTTY(true);
+    let stdout = "";
+    const stderr = await captureStderr(async () => {
+      stdout = await captureStdout(() =>
+        executePaginatedListRead(
+          emptySpec({ emptyHint: "no boards visible to this CLI key." }),
+          {},
+        ),
+      );
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+  });
+
+  test("human + total=0 + emptyMessage → contextual message + footer to stdout", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
+    setStderrIsTTY(false);
+    const out = await captureStdout(() =>
+      executePaginatedListRead(
+        emptySpec({ emptyMessage: "No boards visible to this CLI key." }),
+        {},
+      ),
+    );
+    expect(out).toContain("No boards visible to this CLI key.");
+    expect(out).toContain("total 0 · showing 0 · limit 50 · offset 0");
+  });
+
+  test("human + total=0 without emptyMessage → falls back to 'No rows.'", async () => {
+    syncCliOutputFormatFromGlobals({ format: "human", quiet: false });
+    setStderrIsTTY(false);
+    const out = await captureStdout(() =>
+      executePaginatedListRead(emptySpec(), {}),
+    );
+    expect(out).toContain("No rows.");
+    expect(out).toContain("total 0 · showing 0 · limit 50 · offset 0");
   });
 });
 

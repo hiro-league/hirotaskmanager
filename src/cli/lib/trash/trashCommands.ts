@@ -108,6 +108,7 @@ export async function runTrashBoards(
       fieldAllowlist: FIELDS_TRASH_BOARD,
       columns: COLUMNS_TRASH_BOARDS,
       quietDefaults: QUIET_DEFAULT_TRASH_BOARD,
+      emptyMessage: "Trash is empty (no boards).",
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<TrashedBoardItem>>(path, { port }),
     },
@@ -134,6 +135,7 @@ export async function runTrashLists(
       fieldAllowlist: FIELDS_TRASH_LIST,
       columns: COLUMNS_TRASH_LISTS,
       quietDefaults: QUIET_DEFAULT_TRASH_LIST,
+      emptyMessage: "Trash is empty (no lists).",
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<TrashedListItem>>(path, { port }),
     },
@@ -160,6 +162,7 @@ export async function runTrashTasks(
       fieldAllowlist: FIELDS_TRASH_TASK,
       columns: COLUMNS_TRASH_TASKS,
       quietDefaults: QUIET_DEFAULT_TRASH_TASK,
+      emptyMessage: "Trash is empty (no tasks).",
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<TrashedTaskItem>>(path, { port }),
     },

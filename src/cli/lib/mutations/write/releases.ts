@@ -76,6 +76,8 @@ export async function runReleasesList(
       fieldAllowlist: FIELDS_RELEASE,
       columns: COLUMNS_RELEASES_LIST,
       quietDefaults: QUIET_DEFAULT_RELEASE,
+      emptyMessage: `No releases on board "${boardId}".`,
+      emptyHint: `no releases on this board. Add one with "hirotm releases add --board ${boardId} --name <name>".`,
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<ReleaseDefinition>>(path, { port }),
     },

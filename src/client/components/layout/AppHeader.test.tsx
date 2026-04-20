@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
+import packageJson from "../../../../package.json";
 import { createTestQueryClient } from "@/test/renderWithProviders";
 import { AppHeader } from "./AppHeader";
 
@@ -18,6 +19,9 @@ describe("AppHeader", () => {
     );
 
     expect(screen.getByText("Hiro Task Manager")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(`Version ${packageJson.version}`),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /collapse sidebar/i }),
     ).toBeInTheDocument();

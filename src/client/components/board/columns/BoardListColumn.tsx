@@ -26,12 +26,14 @@ interface ListColumnBodyProps extends BoardColumnSpreadProps {
 
 function ListColumnBody({
   boardId,
+  boardSlug,
   showStats,
   taskGroups,
   taskPriorities,
   releases,
   defaultTaskGroupId,
   defaultReleaseId,
+  boardLists,
   boardTasks,
   boardVisibleStatuses,
   list,
@@ -138,11 +140,13 @@ function ListColumnBody({
             >
               <ListStatusBand
                 boardId={boardId}
+                boardSlug={boardSlug}
                 taskGroups={taskGroups}
                 taskPriorities={taskPriorities}
                 releases={releases}
                 defaultTaskGroupId={defaultTaskGroupId}
                 defaultReleaseId={defaultReleaseId}
+                boardLists={boardLists}
                 boardTasks={boardTasks}
                 list={list}
                 status={status}

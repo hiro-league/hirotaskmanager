@@ -199,7 +199,7 @@ describe("handleBoardsList (CliContext)", () => {
     expect(lines.length).toBe(2);
   });
 
-  test("empty result — NDJSON no lines; human No rows.", async () => {
+  test("empty result — NDJSON no lines; human contextual no-boards message + footer", async () => {
     const empty: PaginatedListBody<BoardIndexEntry> = {
       items: [],
       total: 0,
@@ -218,7 +218,8 @@ describe("handleBoardsList (CliContext)", () => {
       fetchApi: (async () => empty) as CliContext["fetchApi"],
     });
     const outHu = await captureStdout(() => handleBoardsList(ctxHu, {}));
-    expect(outHu).toContain("No rows.");
+    expect(outHu).toContain("No boards visible to this CLI key.");
+    expect(outHu).toContain("total 0 · showing 0");
   });
 
   test("API 403 — CliError exit 4 forbidden", async () => {

@@ -60,6 +60,23 @@ export async function runBoardsTasksList(
   if (options.from?.trim()) params.set("from", options.from.trim());
   if (options.to?.trim()) params.set("to", options.to.trim());
 
+  const hasFilters =
+    Boolean(options.list?.trim()) ||
+    (options.group?.length ?? 0) > 0 ||
+    (options.priority?.length ?? 0) > 0 ||
+    (options.status?.length ?? 0) > 0 ||
+    (options.releaseId?.length ?? 0) > 0 ||
+    options.untagged === true ||
+    Boolean(options.dateMode?.trim()) ||
+    Boolean(options.from?.trim()) ||
+    Boolean(options.to?.trim());
+  const emptyMessage = hasFilters
+    ? `No tasks match the given filters on board "${idOrSlug}".`
+    : `No tasks on board "${idOrSlug}".`;
+  const emptyHint = hasFilters
+    ? "no tasks match these filters. Try removing --list / --group / --priority / --status / --release-id / --from / --to, or widen the date range."
+    : `no tasks on this board. Add one with "hirotm tasks add --board ${idOrSlug}".`;
+
   await executePaginatedListRead(
     {
       kind: "optionalLimit",
@@ -68,6 +85,8 @@ export async function runBoardsTasksList(
       fieldAllowlist: FIELDS_TASK,
       columns: COLUMNS_TASKS_LIST,
       quietDefaults: QUIET_DEFAULT_TASK,
+      emptyMessage,
+      emptyHint,
       fetchPage: (path) => ctx.fetchApi<PaginatedListBody<TaskWithBoard>>(path, { port }),
     },
     {

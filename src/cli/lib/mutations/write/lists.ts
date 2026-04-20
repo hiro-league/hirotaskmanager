@@ -73,6 +73,8 @@ export async function runListsList(
       fieldAllowlist: FIELDS_LIST,
       columns: COLUMNS_LISTS_LIST,
       quietDefaults: QUIET_DEFAULT_LIST,
+      emptyMessage: `No lists on board "${boardId}".`,
+      emptyHint: `no lists on this board. Add one with "hirotm lists add --board ${boardId} --name <name>".`,
       fetchPage: (path) =>
         ctx.fetchApi<PaginatedListBody<List>>(path, { port }),
     },

@@ -12,6 +12,7 @@ import { parseTaskSortableId } from "../dnd/dndIds";
 import { SortableTaskRow } from "../dnd/SortableTaskRow";
 import { useBoardTaskContainerDroppableReact } from "../dnd/useBoardTaskContainerDroppableReact";
 import { useVirtualizedBand } from "./useVirtualizedBand";
+import type { TaskCardOverflowBoardData } from "@/components/board/boardColumnData";
 
 /** Per-row component that derives stable callbacks from task id, avoiding inline closures */
 export const SortableTaskRowById = memo(function SortableTaskRowById({
@@ -31,6 +32,7 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
   onTitleCommit,
   onTitleCancel,
   titleEditBusy,
+  taskOverflowBoard,
 }: {
   sid: string;
   containerId: string;
@@ -39,6 +41,7 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   releases: Board["releases"];
+  taskOverflowBoard: TaskCardOverflowBoardData;
   viewMode: TaskCardViewMode;
   onComplete: (taskId: number, anchorEl?: HTMLElement) => void;
   onEdit: (taskId: number) => void;
@@ -74,6 +77,7 @@ export const SortableTaskRowById = memo(function SortableTaskRowById({
       onCompleteFromCircle={
         task.status === "open" ? handleCompleteFromCircle : undefined
       }
+      overflowActionsBoard={taskOverflowBoard}
     />
   );
 });
@@ -98,11 +102,13 @@ export const SortableBandContent = memo(function SortableBandContent({
   onTitleCommit,
   onTitleCancel,
   titleEditBusy,
+  taskOverflowBoard,
 }: {
   taskMap: Map<number, Task>;
   taskGroups: Board["taskGroups"];
   taskPriorities: Board["taskPriorities"];
   releases: Board["releases"];
+  taskOverflowBoard: TaskCardOverflowBoardData;
   viewMode: TaskCardViewMode;
   listId: number;
   status: string;
@@ -194,6 +200,7 @@ export const SortableBandContent = memo(function SortableBandContent({
                   onTitleCommit={onTitleCommit}
                   onTitleCancel={onTitleCancel}
                   titleEditBusy={titleEditBusy}
+                  taskOverflowBoard={taskOverflowBoard}
                 />
               </div>
             );
@@ -223,6 +230,7 @@ export const SortableBandContent = memo(function SortableBandContent({
               onTitleCommit={onTitleCommit}
               onTitleCancel={onTitleCancel}
               titleEditBusy={titleEditBusy}
+              taskOverflowBoard={taskOverflowBoard}
             />
           );
         })

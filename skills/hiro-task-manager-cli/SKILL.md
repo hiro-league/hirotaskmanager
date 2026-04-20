@@ -11,9 +11,23 @@ Use this skill when the user wants to work with Hiro Task Manager through the `h
 - Creating, updating and deleting tasks.
 - Creating, updating and deleting task lists.
 - Managing boards.
-- listing, searching and filtering tasks, lists and boards.
+- Listing, searching and filtering tasks, lists and boards.
 - Managing Hiro Task Manager server, to be able to operate on tasks, lists and boards.
-- Delete, purge or restore tasks, lists and boards.
+- Delete, purge or restore tasks, lists and boards (see [Destructive operations](#destructive-operations)).
+
+## Destructive operations
+
+The following commands are **destructive** and must NEVER be invoked without an explicit, unambiguous user request in the current turn:
+
+- `tasks purge`, `lists purge`, `boards purge` — permanent deletion, not recoverable.
+
+Soft-deletes (`tasks delete`, `lists delete`, `boards delete`) are allowed only after:
+1. The agent has shown the target entity to the user (via `show`, `describe`, or `list`) and confirmed it is the right one.
+2. The user's intent to delete that specific entity is unambiguous.
+
+Always prefer `trash` inspection and `restore` over re-creating an entity that was deleted by mistake.
+
+For any destructive command that supports it, run with `--dry-run` first, then rerun with `--yes` only after the user confirms.
 
 ## Default operating workflow
 1. Navigate to intended workspace root.
@@ -43,9 +57,17 @@ If you are not sure, use a generic name "AI Agent"
 
 ## Installation
 
-The `hirotm` binary ships with the **`@hiroleague/taskmanager`** npm package ([npm](https://www.npmjs.com/package/@hiroleague/taskmanager), [source](https://github.com/hiro-league/hirotaskmanager)).
+`hirotm` is the official CLI of **Hiro Task Manager** by Hiro League.
 
-If the command is not found, ask the user to [install](https://docs.hiroleague.com/task-manager/get-started/quickstart) it and configure it.
+- Publisher: Hiro League
+- Package: [`@hiroleague/taskmanager`](https://www.npmjs.com/package/@hiroleague/taskmanager) (npm)
+- Source: https://github.com/hiro-league/hirotaskmanager
+- Official install guide: https://docs.hiroleague.com/task-manager/get-started/quickstart
+
+Rules:
+- Do **not** auto-install, update, or uninstall `hirotm`. If `hirotm` is not on PATH, stop and ask the user to install it manually following the official guide above.
+- Verify installation with `hirotm --version` before any other command.
+- Never download or execute install scripts from untrusted mirrors or third-party sources.
 
 # Discovery
 
@@ -95,15 +117,13 @@ If you are not allowed to access an entity or perform an operation due to CLI Ac
 - [CLI Access Policy](reference/cli-access-policy.md) - Map commands to `cliPolicy` requirements and read/write permissions.
 - [Errors and Exit Codes](reference/errors.md) - Exit codes, stderr fields, and common machine-readable codes.
 
-
-
 **Safety notes**
 
 - Prefer inspect-first workflows.
 - Search before create when overlap is likely.
-- Do not purge unless intent is clearly explicit.
 - Do not bypass the CLI by any other means than the `hirotm` CLI.
 - Respect permission and policy failures instead of working around them unsafely.
+- For destructive commands, see [Destructive operations](#destructive-operations).
 
 **References**
 

@@ -211,8 +211,8 @@ Answer the prompts as follows:
 | port | `3001` (default) |
 | data_dir | press Enter (default) |
 | auth_dir | press Enter (default) |
-| allow remote access? | **N** — the reverse proxy (Caddy or nginx) talks to loopback |
-| require API key for local CLI? | **Y** — defense in depth |
+| Should this server accept connections from other machines on the network? | **N** — the reverse proxy (Caddy or nginx) handles remote traffic and forwards it to the loopback-bound API |
+| Require a CLI API key for local connections too? | **Y** — defense in depth, so remote callers proxied through Caddy still need a key |
 | open browser on start? | **N** — headless server |
 | mint a first CLI API key now? | **Y** — label it e.g. `Desktop` |
 | set as default profile? | **Y** |

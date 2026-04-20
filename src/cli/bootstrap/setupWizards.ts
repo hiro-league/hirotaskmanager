@@ -581,23 +581,32 @@ export async function runServerSetupWizard(options: {
     String(existing.auth_dir ?? defaults.auth_dir),
   );
 
-  const allowRemote = await promptBoolean(
+  // Renamed from the original "Allow remote access?" — that wording made
+  // operators assume "Yes = my server is reachable remotely" (which it always
+  // is, via a reverse proxy), when the toggle actually controls whether the
+  // raw API socket is bound to a public interface. The new wording asks the
+  // outcome plainly, and the explanatory line printed after the answer points
+  // operators at the reverse-proxy alternative.
+  const acceptRemoteDirect = await promptBoolean(
     formatBooleanPrompt(
-      "Allow remote access (listen on all interfaces, 0.0.0.0)?",
+      "Should this server accept connections from other machines on the network?",
       !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
     ),
     !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
   );
 
-  const bindAddress = allowRemote ? "0.0.0.0" : DEFAULT_BIND_ADDRESS;
+  const bindAddress = acceptRemoteDirect ? "0.0.0.0" : DEFAULT_BIND_ADDRESS;
 
   let requireCliApiKey: boolean;
-  if (allowRemote) {
+  if (acceptRemoteDirect) {
     requireCliApiKey = true;
     console.log(
-      "Non-loopback bind requires CLI API keys — require_cli_api_key is set to true.",
+      "  -> The API will accept connections from any network interface (0.0.0.0). A CLI API key will be required.",
     );
   } else {
+    console.log(
+      "  -> The API will only accept connections from this machine (127.0.0.1). Use a reverse proxy (Caddy, nginx, etc.) to expose it remotely.",
+    );
     requireCliApiKey = await promptBoolean(
       formatBooleanPrompt(
         "Require a CLI API key for local connections too?",

@@ -51,9 +51,7 @@ function spawnHirotm(
     const cfgDir = path.join(root, ".taskmanager", "profiles", "default");
     mkdirSync(cfgDir, { recursive: true });
     const dataDir = path.join(root, "data");
-    const authDir = path.join(root, "auth");
     mkdirSync(dataDir, { recursive: true });
-    mkdirSync(authDir, { recursive: true });
     writeFileSync(
       path.join(cfgDir, "config.json"),
       `${JSON.stringify(
@@ -61,7 +59,6 @@ function spawnHirotm(
           role: "server",
           port: options.stubPort,
           data_dir: dataDir,
-          auth_dir: authDir,
         },
         null,
         2,

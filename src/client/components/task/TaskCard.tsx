@@ -420,6 +420,8 @@ function TaskCardContent({
             className={cn(
               "min-w-0 flex-1 font-medium",
               viewSpec.titleClassName,
+              task.status === "closed" &&
+                "line-through decoration-foreground/35 decoration-[2px]",
             )}
           >
             {taskDisplayTitleOnCard(task)}

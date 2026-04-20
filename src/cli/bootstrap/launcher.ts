@@ -16,7 +16,6 @@ import {
 import { CLI_ERR } from "../types/errors";
 import { ensureBundledSkills } from "../../shared/skillsInstall";
 import {
-  getDefaultInstalledAuthDir,
   hasCliConfigFile,
   readConfigFile,
   resolveProfileName,
@@ -37,15 +36,23 @@ import {
   printPassphraseHint,
   printRecoveryKey,
   printRecoveryKeyExitHint,
+  printSetupToken,
   startInlineSpinner,
 } from "../lib/output/launcherUi";
+import {
+  printSetupAbortFinal,
+  printSetupAbortPreview,
+} from "../lib/output/setupAbortMessages";
 import {
   chooseSetupModeInteractive,
   runClientSetupWizard,
   runServerSetupWizard,
   type LauncherSetupResult,
 } from "./setupWizards";
+import { createSetupProgress, type SetupProgress } from "./setupProgress";
+import { installSigintGate } from "../lib/core/sigintGate";
 import { CLI_PACKAGE_VERSION } from "../cliVersion";
+import { mintSetupToken } from "../../server/auth";
 
 export type { LauncherSetupResult };
 
@@ -156,14 +163,26 @@ async function waitForRecoveryKeyFile(authDir: string): Promise<string> {
   return key;
 }
 
-async function waitForEnterKey(): Promise<void> {
+async function waitForEnterKey(progress?: SetupProgress): Promise<void> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
+  // Forward readline's SIGINT into the launcher's gate (sigintGate.ts) so the
+  // first Ctrl+C at this pause prints the two-stage warning instead of being
+  // swallowed silently by readline.
+  const onRlSigint = (): void => {
+    process.emit("SIGINT");
+  };
+  rl.on("SIGINT", onRlSigint);
+  if (progress) {
+    progress.setCurrentPromptLabel("press Enter to continue");
+  }
   try {
     await rl.question("");
   } finally {
+    rl.off("SIGINT", onRlSigint);
+    if (progress) progress.setCurrentPromptLabel(null);
     rl.close();
   }
 }
@@ -217,6 +236,21 @@ export function createHirotaskmanagerProgram(): Command {
     )
     .option("--profile <name>", "Launcher profile name (default: default)")
     .action(async (options: LauncherOptions) => {
+      // Install the two-stage Ctrl+C gate for the entire setup-mode action
+      // (CLIG companion §12). The gate prints a warning + "what's done /
+      // what's not done" report on the first SIGINT and exits 130 on the
+      // second within 5s. Disposed in finally so the foreground server's
+      // own SIGINT forwarder (process.ts) takes a clean SIGINT slot when
+      // it runs later.
+      const progress = createSetupProgress();
+      const gate = installSigintGate({
+        onFirstPress: () => {
+          printSetupAbortPreview(progress.snapshot());
+        },
+        onSecondPress: () => {
+          printSetupAbortFinal(progress.snapshot());
+        },
+      });
       try {
         const selectedProfile = resolveInstalledLauncherProfile(options.profile);
 
@@ -243,6 +277,7 @@ export function createHirotaskmanagerProgram(): Command {
           setupResult = await runServerSetupWizard({
             profile: selectedProfile,
             rerun: false,
+            progress,
           });
           wizardRan = true;
           workingProfile = setupResult.profileName;
@@ -250,6 +285,7 @@ export function createHirotaskmanagerProgram(): Command {
           setupResult = await runClientSetupWizard({
             profile: selectedProfile,
             rerun: false,
+            progress,
           });
           wizardRan = true;
           workingProfile = setupResult.profileName;
@@ -271,11 +307,13 @@ export function createHirotaskmanagerProgram(): Command {
             setupResult = await runServerSetupWizard({
               profile: selectedProfile,
               rerun: true,
+              progress,
             });
           } else {
             setupResult = await runClientSetupWizard({
               profile: selectedProfile,
               rerun: true,
+              progress,
             });
           }
           wizardRan = true;
@@ -284,16 +322,18 @@ export function createHirotaskmanagerProgram(): Command {
           !hasCliConfigFile({ profile: selectedProfile, kind: "installed" })
         ) {
           if (canPromptInteractively()) {
-            const mode = await chooseSetupModeInteractive();
+            const mode = await chooseSetupModeInteractive(progress);
             if (mode === "client") {
               setupResult = await runClientSetupWizard({
                 profile: selectedProfile,
                 rerun: false,
+                progress,
               });
             } else {
               setupResult = await runServerSetupWizard({
                 profile: selectedProfile,
                 rerun: false,
+                progress,
               });
             }
           } else {
@@ -377,24 +417,22 @@ export function createHirotaskmanagerProgram(): Command {
           });
           if (setupResult.setupMeta.justFinishedInteractiveSetup) {
             printSetupContinuePrompt();
-            await waitForEnterKey();
+            await waitForEnterKey(progress);
           }
         }
 
         const port = launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
-        const authDir = path.resolve(
-          launcherConfig.auth_dir ??
-            getDefaultInstalledAuthDir({
-              profile: workingProfile,
-              kind: "installed",
-            }),
-        );
+        const authDir = resolveAuthDir({
+          profile: workingProfile,
+          kind: "installed",
+        });
         const shouldOpenBrowser = launcherConfig.open_browser ?? true;
 
         const url = buildLocalServerUrl(port);
+        const authNotInitialized = !isAuthInitialized(authDir);
         const needsRecoveryKeyExitFlow =
           setupResult.setupMeta.justFinishedInteractiveSetup &&
-          !isAuthInitialized(authDir);
+          authNotInitialized;
         const alreadyRunning = shouldRunSetupForPlan
           ? false
           : (
@@ -403,6 +441,33 @@ export function createHirotaskmanagerProgram(): Command {
                 profile: workingProfile,
               })
             ).running;
+
+        // Task #31338: when the server has no passphrase yet, mint a single-
+        // use bootstrap token *before* it starts listening so a network race
+        // cannot beat the legitimate operator to `POST /api/auth/setup`. We
+        // skip when the server is already running on this profile — in that
+        // case the prior launcher process already minted a token (or setup is
+        // already complete), and minting a second token now would silently
+        // invalidate the one the operator may have already pasted into a
+        // browser tab.
+        let bootstrapSetupToken: string | null = null;
+        if (authNotInitialized && !alreadyRunning) {
+          try {
+            bootstrapSetupToken = await mintSetupToken(authDir);
+          } catch (error) {
+            // Mint failures (disk full, permission denied) must surface — a
+            // missing sidecar would lock the operator out of the web setup
+            // form, which is a worse failure than crashing here with a clear
+            // CliError. Wrap so exitWithError prints the usual JSON shape.
+            throw new CliError(
+              `Failed to mint first-time setup token in ${authDir}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              1,
+              { code: CLI_ERR.internalError, authDir },
+            );
+          }
+        }
         const startPlan = resolveLauncherStartPlan({
           shouldRunSetup: shouldRunSetupForPlan,
           needsRecoveryKeyExitFlow,
@@ -426,6 +491,8 @@ export function createHirotaskmanagerProgram(): Command {
             async (status) => {
               const finalUrl = status.url;
               runningUrl = finalUrl;
+              progress.setServerUrl(finalUrl);
+              progress.mark("server_started");
               startupSpinner.stop(
                 formatServerLifecycleMessage(
                   startPlan.readyLabel === "Already started"
@@ -436,9 +503,26 @@ export function createHirotaskmanagerProgram(): Command {
                 ),
               );
 
+              if (bootstrapSetupToken) {
+                // Print before opening the browser so the operator sees the
+                // token in the terminal even if `openBrowser` fires their
+                // browser to the front and steals focus.
+                printSetupToken({
+                  token: bootstrapSetupToken,
+                  appUrl: finalUrl,
+                  bindAddress: launcherConfig.bind_address,
+                });
+              }
+
               if (!browserHandled && startPlan.shouldOpenBrowserOnReady) {
                 browserHandled = true;
-                await openBrowser(finalUrl);
+                // Pre-fill the token in the URL so a same-machine operator
+                // can finish setup with one click. Network observers don't
+                // see this — it's only sent to the loopback browser.
+                const browserUrl = bootstrapSetupToken
+                  ? `${finalUrl}/?setupToken=${encodeURIComponent(bootstrapSetupToken)}`
+                  : finalUrl;
+                await openBrowser(browserUrl);
               }
 
               if (needsRecoveryKeyExitFlow) {
@@ -451,13 +535,18 @@ export function createHirotaskmanagerProgram(): Command {
             const recoveryKey = await waitForRecoveryKeyFile(authDir);
             printRecoveryKey(recoveryKey);
             printRecoveryKeyExitHint(runningUrl);
-            await waitForEnterKey();
+            // Mark before the final pause so a Ctrl+C here triggers the
+            // recovery-key-aware abort messages ("Server keeps running...").
+            progress.mark("awaiting_recovery_key");
+            await waitForEnterKey(progress);
           }
         } finally {
           startupSpinner.stop(null);
         }
       } catch (error) {
         exitWithError(error);
+      } finally {
+        gate.dispose();
       }
     });
 

@@ -41,7 +41,7 @@ const HIROTM_GLOBAL_ARGS = ["--profile", "default"] as const;
 
 function writeDefaultProfileConfig(
   rootDir: string,
-  config: { port: number; data_dir: string; auth_dir: string },
+  config: { port: number; data_dir: string },
 ): void {
   const profileDir = path.join(rootDir, ".taskmanager", "profiles", "default");
   mkdirSync(profileDir, { recursive: true });
@@ -113,19 +113,16 @@ const CLIENT_NAME = ["--client-name", "Cursor Agent"];
 describe.skipIf(!runRealStack)("hirotm real stack (API + SQLite + subprocess)", () => {
   let rootDir: string;
   let dataDir: string;
-  let authDir: string;
   let port: number;
   let serverProc: ReturnType<typeof Bun.spawn> | null = null;
 
   beforeEach(async () => {
     rootDir = mkdtempSync(path.join(tmpdir(), "hirotm-real-stack-"));
     dataDir = path.join(rootDir, "data");
-    authDir = path.join(rootDir, "auth");
     mkdirSync(dataDir, { recursive: true });
-    mkdirSync(authDir, { recursive: true });
     port = await pickEphemeralPort();
 
-    writeDefaultProfileConfig(rootDir, { port, data_dir: dataDir, auth_dir: authDir });
+    writeDefaultProfileConfig(rootDir, { port, data_dir: dataDir });
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -599,13 +596,10 @@ describe.skipIf(!runRealStack)("hirotm real stack — unreachable port", () => {
     const deadPort = await pickEphemeralPort();
     const rootDir = mkdtempSync(path.join(tmpdir(), "hirotm-unreachable-"));
     const dataDir = path.join(rootDir, "data");
-    const authDir = path.join(rootDir, "auth");
     mkdirSync(dataDir, { recursive: true });
-    mkdirSync(authDir, { recursive: true });
     writeDefaultProfileConfig(rootDir, {
       port: deadPort,
       data_dir: dataDir,
-      auth_dir: authDir,
     });
     const origHome = process.env.HOME;
     process.env.HOME = rootDir;

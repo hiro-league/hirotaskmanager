@@ -108,7 +108,7 @@ Concrete items: **Tests to add — aspect 6** (below). Contract tables: `docs/cl
 
 ## Test environments: profiles
 
-CLI and server both resolve **profile** → config under `~/.taskmanager/profiles/<name>/config.json` (`port`, `data_dir`, `auth_dir`, `api_key`, …). See `src/shared/runtimeConfig.ts`.
+CLI and server both resolve **profile** → config under `~/.taskmanager/profiles/<name>/config.json` (`port`, `data_dir`, `api_key`, …). Auth always lives at `<profileRoot>/auth` and is not a configurable field. See `src/shared/runtimeConfig.ts`.
 
 - **Isolated automation** — Use a dedicated profile (e.g. `test` or `ci`) with **`data_dir`** pointing at a **temp directory** (unique per parallel worker if needed) and a **free port** so runs do not touch the developer’s default DB or port.
 - **`dev` profile caveat** — Default dev data dir is the **repo `data/`** tree; avoid that for hermetic CI unless you intentionally override `data_dir` in profile config or env.

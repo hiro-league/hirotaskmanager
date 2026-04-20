@@ -28,10 +28,11 @@ describe("printSetupNextSteps", () => {
 
     expect(stdout).toContain("+-");
     expect(stdout).toContain("REQUIRED BEFORE USING hirotm");
-    expect(stdout).toContain("Install AI agent skills now. The hirotm CLI depends on these skills.");
+    expect(stdout).toContain("Install AI agent skills on the machine where you will run hirotm.");
     expect(stdout).toContain("hirotm --help");
     expect(stdout).toContain("1. Repo skills  : npx skills add hiro-league/hirotaskmanager");
     expect(stdout).toContain("2. Update later : npx skills update");
+    expect(stdout).toContain("Tip: using Bun? Replace 'npx' with 'bunx'.");
     expect(stdout).toContain("npx skills add hiro-league/hirotaskmanager");
     expect(stdout).not.toContain("npx skills add \"$HOME/.taskmanager/skills\"");
   });
@@ -45,6 +46,7 @@ describe("printSetupNextSteps", () => {
     });
 
     expect(stdout).toContain("npx skills add hiro-league/hirotaskmanager");
+    expect(stdout).toContain("Tip: using Bun? Replace 'npx' with 'bunx'.");
     expect(stdout).toContain("2. Local skills : npx skills add \"$HOME/.taskmanager/skills\"");
     expect(stdout).toContain("3. Update later : npx skills update");
     expect(stdout).toContain("npx skills add \"$HOME/.taskmanager/skills\"");

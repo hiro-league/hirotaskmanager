@@ -24,7 +24,6 @@ writeFileSync(
       role: "server",
       port: INSTALLED_DEFAULT_PORT,
       data_dir: path.join(defaultProfileDir, "data"),
-      auth_dir: path.join(defaultProfileDir, "auth"),
     },
     null,
     2,

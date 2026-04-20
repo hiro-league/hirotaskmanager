@@ -119,11 +119,12 @@ First run of `hirotaskmanager` should:
 
 Auth setup remains in the web app:
 
-1. launcher starts the app
-2. browser opens the app
-3. app detects uninitialized auth
-4. user chooses passphrase in the UI
-5. recovery key is printed once by the server
+1. launcher mints a single-use **bootstrap setup token** (sidecar `auth/setup-token.tmp` stores only its SHA-256 hash) before the HTTP server starts listening
+2. launcher starts the app and prints the token (and a `/?setupToken=...` deep-link) to the operator's terminal
+3. browser opens the app (with the token pre-filled when the launcher opens it on the same machine)
+4. app detects uninitialized auth
+5. user pastes the token (if not pre-filled) and chooses a passphrase; `POST /api/auth/setup` requires the token via `Authorization: Bearer <token>` so a network race cannot squat the passphrase (task #31338)
+6. recovery key is printed once by the server; the setup-token sidecar is consumed (single-use) on success
 
 ### Dev/install coexistence
 
@@ -264,12 +265,15 @@ Config example:
 
 ```json
 {
+  "role": "server",
   "port": 3001,
   "data_dir": "C:\\Users\\<user>\\.taskmanager\\profiles\\default\\data",
-  "auth_dir": "C:\\Users\\<user>\\.taskmanager\\profiles\\default\\auth",
   "open_browser": true
 }
 ```
+
+> Auth always lives at `<profileRoot>/auth` and is no longer a configurable
+> field. The wizard does not prompt for it.
 
 Resolution order should become:
 

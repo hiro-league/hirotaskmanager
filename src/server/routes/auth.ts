@@ -9,6 +9,7 @@ import {
   resetPassphraseWithRecoveryKey,
   setAuthSessionCookie,
   setupPassphrase,
+  SetupPassphraseError,
 } from "../auth";
 import type { AppBindings } from "../auth";
 
@@ -27,14 +28,42 @@ authRoute.post("/setup", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
   if (typeof body.passphrase !== "string" || body.passphrase.length === 0) {
-    return c.json({ error: "Passphrase required" }, 400);
+    return c.json(
+      { error: "Passphrase required", code: "passphrase_required" },
+      400,
+    );
   }
+  // The setup token (task #31338) travels in `Authorization: Bearer <token>`
+  // rather than the JSON body so it never lands in browser dev-tools network
+  // tabs alongside the passphrase by accident, and so the same `Bearer` shape
+  // matches our existing CLI API key conventions.
+  const setupToken =
+    c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
   try {
-    await setupPassphrase(body.passphrase);
+    await setupPassphrase({ passphrase: body.passphrase, setupToken });
   } catch (error) {
+    if (error instanceof SetupPassphraseError) {
+      switch (error.code) {
+        case "auth_setup_token_required":
+          return c.json(
+            {
+              error: error.message,
+              code: error.code,
+              hint: "Look for the boxed setup token printed in the terminal that started TaskManager.",
+            },
+            401,
+          );
+        case "auth_invalid_setup_token":
+          return c.json({ error: error.message, code: error.code }, 401);
+        case "auth_already_initialized":
+          return c.json({ error: error.message, code: error.code }, 409);
+        case "passphrase_required":
+        default:
+          return c.json({ error: error.message, code: error.code }, 400);
+      }
+    }
     const message = error instanceof Error ? error.message : "Setup failed";
-    const status = message === "Auth already initialized" ? 409 : 400;
-    return c.json({ error: message }, status);
+    return c.json({ error: message, code: "setup_failed" }, 400);
   }
   return c.json({ ok: true, recoveryKeyPrinted: true }, 201);
 });

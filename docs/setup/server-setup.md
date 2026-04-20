@@ -210,15 +210,20 @@ Answer the prompts as follows:
 |---|---|
 | port | `3001` (default) |
 | data_dir | press Enter (default) |
-| auth_dir | press Enter (default) |
 | Should this server accept connections from other machines on the network? | **N** — the reverse proxy (Caddy or nginx) handles remote traffic and forwards it to the loopback-bound API |
 | Require a CLI API key for local connections too? | **Y** — defense in depth, so remote callers proxied through Caddy still need a key |
 | open browser on start? | **N** — headless server |
-| mint a first CLI API key now? | **Y** — label it e.g. `Desktop` |
+| Mint a CLI API key now? | **Y** — accept the default; label it e.g. `Desktop`. The wizard always offers this prompt; default is **Y** when the server requires a key (as configured above) and **N** otherwise. If you decline, the wizard prints the exact `hirotaskmanager server api-key generate` command so you can mint one later. |
 | set as default profile? | **Y** |
 | start server now? | **N** — systemd will own the lifecycle |
 
 > **Important:** When the wizard mints the CLI API key, it prints a `tmk-…` string **once**. Copy it now into your password manager — you'll paste it into your laptop's client profile in step 12. The server only stores a SHA-256 hash; if you lose it, you must mint a new one.
+>
+> If you skipped the mint prompt, the wizard printed the day-2 command on the way out. You can mint a key any time with:
+>
+> ```bash
+> sudo -iu taskmanager hirotaskmanager server api-key generate --label "Desktop" --profile vps
+> ```
 
 
 ## **10. Start the server under systemd**
@@ -239,14 +244,22 @@ sudo journalctl -u taskmanager -f
 
 From your laptop browser, visit `https://hirotm.example.com`:
 
-1. Choose a **passphrase**.
-2. The **recovery key** prints once into the server log. Grab it from the journal and store it in your password manager — it's the only way back into the web UI if you forget the passphrase:
+1. The setup screen asks for a **one-time setup token** before letting you create the passphrase. This stops a stranger who reaches the URL first from squatting your passphrase. The token is printed once in the server's terminal/journal — fetch it from the journal:
+
+   ```bash
+   sudo journalctl -u taskmanager | grep -A1 "First-time Setup Token"
+   ```
+
+   The launcher also prints a deep-link of the form `https://hirotm.example.com/?setupToken=<token>` — opening that fills the field for you. The token is single-use; once a passphrase is created the token is destroyed and a new one would only be minted on the next launcher boot if `auth.json` is missing.
+
+2. Choose a **passphrase**.
+3. The **recovery key** prints once into the server log. Grab it from the journal and store it in your password manager — it's the only way back into the web UI if you forget the passphrase:
 
    ```bash
    sudo journalctl -u taskmanager | grep -i "recovery"
    ```
 
-3. Log in with your passphrase.
+4. Log in with your passphrase.
 
 
 ## **12. Connect a CLI client (from your laptop)**

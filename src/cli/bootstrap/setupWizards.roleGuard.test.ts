@@ -65,7 +65,6 @@ describe("setup wizards: role-stomp guard", () => {
         role: "server",
         port: 3001,
         data_dir: path.join(profileDir, "data"),
-        auth_dir: path.join(profileDir, "auth"),
         bind_address: "127.0.0.1",
       }),
       "utf8",

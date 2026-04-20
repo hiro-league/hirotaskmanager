@@ -20,6 +20,11 @@ import {
 } from "../shared/runtimeConfig";
 import { constantTimeHexEquals, sha256Hex } from "./cryptoHex";
 import { hasCliApiKeys, validateCliApiKey } from "./cliApiKeys";
+import {
+  consumeSetupToken,
+  hasSetupToken,
+  validateSetupToken,
+} from "./setupToken";
 
 interface StoredAuthState {
   version: 1;
@@ -265,13 +270,59 @@ export async function getAuthSessionResponse(
   };
 }
 
-export async function setupPassphrase(passphrase: string): Promise<void> {
+/**
+ * Distinguishable failures for `setupPassphrase` so the HTTP route can map
+ * each to a stable machine-readable code/status without parsing message
+ * text. Mirrors the `CLI_ERR.*` discriminator pattern used elsewhere.
+ */
+export type SetupPassphraseFailureCode =
+  | "passphrase_required"
+  | "auth_already_initialized"
+  | "auth_setup_token_required"
+  | "auth_invalid_setup_token";
+
+export class SetupPassphraseError extends Error {
+  readonly code: SetupPassphraseFailureCode;
+  constructor(code: SetupPassphraseFailureCode, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "SetupPassphraseError";
+  }
+}
+
+export interface SetupPassphraseInput {
+  passphrase: string;
+  setupToken: string;
+}
+
+export async function setupPassphrase(input: SetupPassphraseInput): Promise<void> {
+  const { passphrase, setupToken } = input;
   if (!passphrase) {
-    throw new Error("Passphrase required");
+    throw new SetupPassphraseError("passphrase_required", "Passphrase required");
   }
   const existing = await loadStoredAuthState();
   if (existing) {
-    throw new Error("Auth already initialized");
+    throw new SetupPassphraseError(
+      "auth_already_initialized",
+      "Auth already initialized",
+    );
+  }
+  // Token gate (task #31338): without this, the first network caller to a
+  // fresh public-bind server can squat the passphrase. The launcher mints a
+  // single-use token before listening and prints it to the operator's
+  // terminal — the same trust channel the recovery key already uses.
+  const authDir = resolveAuthRootDir();
+  if (!(await hasSetupToken(authDir))) {
+    throw new SetupPassphraseError(
+      "auth_setup_token_required",
+      "Setup token required. Check the terminal running TaskManager for the one-time setup token.",
+    );
+  }
+  if (!(await validateSetupToken(authDir, setupToken))) {
+    throw new SetupPassphraseError(
+      "auth_invalid_setup_token",
+      "Invalid setup token.",
+    );
   }
   const recoveryKey = createRecoveryKey();
   const next: StoredAuthState = {
@@ -305,7 +356,16 @@ export async function setupPassphrase(passphrase: string): Promise<void> {
   if (!wroteKeyFile) {
     printRecoveryKeyToConsole(recoveryKey);
   }
+
+  // Token is single-use (task #31338): delete the sidecar after a successful
+  // setup so a leaked-then-reused token cannot reset the passphrase later.
+  // `setupPassphrase` throws on `auth_already_initialized` afterwards, but
+  // belt-and-braces — the absent sidecar means a stolen token also cannot be
+  // used for any future bootstrap window if `auth.json` is somehow removed.
+  await consumeSetupToken(authDir);
 }
+
+export { mintSetupToken } from "./setupToken";
 
 /** Path to the one-time recovery key sidecar written during first setup. */
 export function resolveRecoveryKeyFilePath(): string {

@@ -26,10 +26,7 @@ import { ListHeader } from "@/components/list/ListHeader";
 import { ListStatsChipsRow } from "@/components/board/header/BoardStatsChips";
 import { useBoardStatsDisplayOptional } from "@/components/board/BoardStatsContext";
 import { cn } from "@/lib/utils";
-import {
-  boardListColumnOverlayShellClass,
-  stackedListColumnMinHeightClass,
-} from "../dnd/boardDragOverlayShell";
+import { boardListColumnOverlayShellClass } from "../dnd/boardDragOverlayShell";
 import { EMPTY_SORTABLE_IDS, parseTaskSortableId } from "../dnd/dndIds";
 import type {
   BoardColumnSpreadProps,
@@ -423,6 +420,15 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
 
   const boardNav = useBoardKeyboardNavOptional();
   const listColumnShellRef = useRef<HTMLDivElement | null>(null);
+  const outerColumnRef = useRef<HTMLDivElement | null>(null);
+  // Task #31336: stacked columns are content-sized (`self-start`); when drag starts
+  // the body unmounts in the same render, so a layout-effect measurement at that
+  // point reads the already-collapsed shell. Track the pre-drag height
+  // continuously while not dragging via ResizeObserver (kept in a ref to avoid
+  // re-renders), then promote the last-known value to inline `style.height` on
+  // the drag-start transition so the placeholder keeps its visible size.
+  const lastIdleHeightRef = useRef<number | null>(null);
+  const [frozenDragHeight, setFrozenDragHeight] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     if (!boardNav) return;
@@ -431,9 +437,29 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     return () => boardNav.registerListElement(list.listId, null);
   }, [boardNav, list]);
 
+  useLayoutEffect(() => {
+    if (isDragging) {
+      const measured = lastIdleHeightRef.current;
+      if (measured != null && measured > 0) setFrozenDragHeight(measured);
+      return;
+    }
+    setFrozenDragHeight(null);
+    const el = outerColumnRef.current;
+    if (!el) return;
+    const snapshot = () => {
+      const h = el.getBoundingClientRect().height;
+      if (h > 0) lastIdleHeightRef.current = h;
+    };
+    snapshot();
+    const ro = new ResizeObserver(snapshot);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isDragging]);
+
   const mergedOuterRef = useCallback(
     (node: HTMLDivElement | null) => {
       ref(node);
+      outerColumnRef.current = node;
       (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     },
     [ref, viewportRef],
@@ -442,10 +468,12 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
   return (
     <div
       ref={mergedOuterRef}
-      className={cn(
-        "relative flex w-72 shrink-0 flex-col self-start",
-        isDragging && stackedListColumnMinHeightClass,
-      )}
+      className="relative flex w-72 shrink-0 flex-col self-start"
+      style={
+        isDragging && frozenDragHeight != null
+          ? { height: `${frozenDragHeight}px` }
+          : undefined
+      }
       data-list-column={list.listId}
       data-board-no-pan
       onPointerEnter={(e) => {

@@ -1,29 +1,27 @@
 import { useCallback, useState } from "react";
 import type { BoardIndexEntry } from "../../../shared/models";
-import { useCreateBoard, useDeleteBoard, usePatchBoard } from "@/api/mutations";
+import {
+  useCreateBoard,
+  useDeleteBoard,
+  usePatchBoard,
+  useRestoreBoard,
+} from "@/api/mutations";
 import { reportMutationError } from "@/lib/mutationErrorUi";
-import { useBoard } from "@/api/queries";
+import { appNavigate } from "@/lib/appNavigate";
+import { boardPath } from "@/lib/boardPath";
+import { useNotificationUiStore } from "@/store/notificationUi";
 
 export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
   const createBoard = useCreateBoard();
   const patchBoard = usePatchBoard();
   const deleteBoard = useDeleteBoard();
+  const restoreBoard = useRestoreBoard();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [addingBoard, setAddingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [boardDeleteCandidate, setBoardDeleteCandidate] = useState<{
-    boardId: number;
-    name: string;
-  } | null>(null);
-  const [deleteTaskCountInput, setDeleteTaskCountInput] = useState("");
-
-  const {
-    data: deleteBoardDetails,
-    isLoading: deleteBoardDetailsLoading,
-  } = useBoard(boardDeleteCandidate?.boardId ?? null);
 
   const startRename = useCallback((id: number, name: string) => {
     setEditingId(String(id));
@@ -53,22 +51,31 @@ export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
     }
   }, [boards, cancelRename, editValue, editingId, patchBoard]);
 
-  const requestDelete = useCallback((id: number, name: string) => {
-    setOpenMenuId(null);
-    setDeleteTaskCountInput("");
-    setBoardDeleteCandidate({ boardId: id, name });
-  }, []);
-
-  const confirmDelete = useCallback(() => {
-    if (!boardDeleteCandidate) return;
-    deleteBoard.mutate(boardDeleteCandidate.boardId, {
-      onSuccess: () => {
-        setBoardDeleteCandidate(null);
-        setDeleteTaskCountInput("");
-      },
-      onError: (err) => reportMutationError("delete board", err),
-    });
-  }, [boardDeleteCandidate, deleteBoard]);
+  // Board soft-delete: no modal (#31351); toast offers Undo (restore) and Trash.
+  const requestDelete = useCallback(
+    (id: number, name: string) => {
+      setOpenMenuId(null);
+      const label = name.trim() || "Board";
+      deleteBoard.mutate(id, {
+        onSuccess: () => {
+          useNotificationUiStore.getState().pushSystemToast({
+            message: `“${label}” moved to Trash.`,
+            trashLink: true,
+            onUndo: () => {
+              restoreBoard.mutate(id, {
+                onSuccess: () => {
+                  appNavigate(boardPath(id));
+                },
+                onError: (err) => reportMutationError("restore board", err),
+              });
+            },
+          });
+        },
+        onError: (err) => reportMutationError("delete board", err),
+      });
+    },
+    [deleteBoard, restoreBoard],
+  );
 
   const cancelAddBoard = useCallback(() => {
     setAddingBoard(false);
@@ -89,16 +96,6 @@ export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
     );
   }, [cancelAddBoard, createBoard, newBoardName]);
 
-  const deleteTaskCountKnown =
-    boardDeleteCandidate == null || (!deleteBoardDetailsLoading && !!deleteBoardDetails);
-  const deleteTaskCount = deleteBoardDetails?.tasks.length ?? 0;
-  const requiresTypedDeleteConfirmation = deleteTaskCountKnown && deleteTaskCount > 0;
-  const deleteTaskCountMatches =
-    Number(deleteTaskCountInput.trim()) === deleteTaskCount;
-  const deleteConfirmDisabled =
-    !deleteTaskCountKnown ||
-    (requiresTypedDeleteConfirmation && !deleteTaskCountMatches);
-
   return {
     createBoard,
     deleteBoard,
@@ -111,22 +108,11 @@ export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
     setNewBoardName,
     openMenuId,
     setOpenMenuId,
-    boardDeleteCandidate,
-    setBoardDeleteCandidate,
-    deleteTaskCountInput,
-    setDeleteTaskCountInput,
-    deleteBoardDetailsLoading,
     startRename,
     cancelRename,
     commitRename,
     requestDelete,
-    confirmDelete,
     cancelAddBoard,
     submitNewBoard,
-    deleteTaskCountKnown,
-    deleteTaskCount,
-    requiresTypedDeleteConfirmation,
-    deleteTaskCountMatches,
-    deleteConfirmDisabled,
   };
 }

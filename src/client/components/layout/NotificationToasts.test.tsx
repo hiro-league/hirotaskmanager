@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { NotificationItem } from "../../../shared/notifications";
 import { useNotificationUiStore } from "@/store/notificationUi";
 import { resetNotificationUiStore } from "@/test/resetStores";
@@ -28,6 +28,29 @@ describe("NotificationToasts", () => {
     expect(screen.getByText("Connection warning")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(screen.queryByText("Connection warning")).toBeNull();
+  });
+
+  test("system toast with Undo invokes callback and dismisses", async () => {
+    const user = userEvent.setup();
+    const onUndo = vi.fn();
+    act(() => {
+      useNotificationUiStore.getState().pushSystemToast({
+        message: "Board moved to Trash (test)",
+        onUndo,
+        trashLink: true,
+      });
+    });
+
+    render(
+      <MemoryRouter>
+        <NotificationToasts />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Board moved to Trash (test)")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^undo$/i }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Board moved to Trash (test)")).toBeNull();
   });
 
   test("renders a notification toast with the message text", () => {

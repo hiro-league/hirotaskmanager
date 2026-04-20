@@ -23,7 +23,6 @@ describe("validateRuntimeConfigFile", () => {
           role: "server",
           port: 3001,
           data_dir: "/d",
-          auth_dir: "/a",
           api_url: "http://x",
         },
         "/p/config.json",
@@ -79,7 +78,6 @@ describe("validateRuntimeConfigFile", () => {
           role: "server",
           port: 3001,
           data_dir: "/d",
-          auth_dir: "/a",
           api_key: "not-a-real-key",
         },
         "/p/config.json",
@@ -99,7 +97,6 @@ describe("validateRuntimeConfigFile", () => {
           role: "server",
           port: 3001,
           data_dir: "/d",
-          auth_dir: "/a",
           bind_address: "0.0.0.0",
           require_cli_api_key: false,
         },
@@ -118,7 +115,6 @@ describe("validateRuntimeConfigFile", () => {
           role: "server",
           port: 3001,
           data_dir: "/d",
-          auth_dir: "/a",
           bind_address: "0.0.0.0",
         },
         "/p/config.json",
@@ -137,7 +133,6 @@ describe("validateRuntimeConfigFile", () => {
         role: "server",
         port: 3001,
         data_dir: "/d",
-        auth_dir: "/a",
         bind_address: "0.0.0.0",
         require_cli_api_key: true,
         api_key: `tmk-${"a".repeat(64)}`,
@@ -157,7 +152,6 @@ describe("validateRuntimeConfigFile", () => {
           role: "server",
           port: 3001,
           data_dir: "/d",
-          auth_dir: "/a",
           bind_address: "127.0.0..1",
         },
         "/p/config.json",
@@ -176,7 +170,6 @@ describe("validateRuntimeConfigFile", () => {
         role: "server",
         port: 3001,
         data_dir: "/d",
-        auth_dir: "/a",
         bind_address: "eth0.local",
         require_cli_api_key: true,
         api_key: `tmk-${"a".repeat(64)}`,
@@ -192,7 +185,6 @@ describe("validateRuntimeConfigFile", () => {
         role: "server",
         port: 3001,
         data_dir: "/d",
-        auth_dir: "/a",
         bind_address: "::",
         require_cli_api_key: true,
         api_key: `tmk-${"a".repeat(64)}`,
@@ -228,7 +220,6 @@ describe("resolveApiUrl", () => {
           role: "server",
           port: 3044,
           data_dir: path.join(profileDir, "data"),
-          auth_dir: path.join(profileDir, "auth"),
         }),
         "utf8",
       );
@@ -343,7 +334,6 @@ describe("resolvePort", () => {
           role: "server",
           port: 3055,
           data_dir: path.join(profileDir, "data"),
-          auth_dir: path.join(profileDir, "auth"),
         }),
         "utf8",
       );
@@ -390,12 +380,12 @@ describe("resolveProfileName + default pointer", () => {
     });
     writeFileSync(
       path.join(tmpRoot, ".taskmanager", "profiles", "a", "config.json"),
-      '{"role":"server","port":1,"data_dir":"/d","auth_dir":"/a"}',
+      '{"role":"server","port":1,"data_dir":"/d"}',
       "utf8",
     );
     writeFileSync(
       path.join(tmpRoot, ".taskmanager", "profiles", "b", "config.json"),
-      '{"role":"server","port":2,"data_dir":"/d","auth_dir":"/a"}',
+      '{"role":"server","port":2,"data_dir":"/d"}',
       "utf8",
     );
     writeDefaultProfileName("b");
@@ -411,12 +401,12 @@ describe("resolveProfileName + default pointer", () => {
     });
     writeFileSync(
       path.join(tmpRoot, ".taskmanager", "profiles", "a", "config.json"),
-      '{"role":"server","port":1,"data_dir":"/d","auth_dir":"/a"}',
+      '{"role":"server","port":1,"data_dir":"/d"}',
       "utf8",
     );
     writeFileSync(
       path.join(tmpRoot, ".taskmanager", "profiles", "b", "config.json"),
-      '{"role":"server","port":2,"data_dir":"/d","auth_dir":"/a"}',
+      '{"role":"server","port":2,"data_dir":"/d"}',
       "utf8",
     );
     expect(() => resolveProfileName({ kind: "installed" })).toThrow(CliError);
@@ -436,7 +426,6 @@ describe("validateRuntimeConfigFile warn dedup", () => {
         role: "server" as const,
         port: 3001,
         data_dir: "/d",
-        auth_dir: "/a",
         bind_address: "127.0.0.1",
         require_cli_api_key: true,
       };

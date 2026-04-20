@@ -26,7 +26,6 @@ export interface RuntimeConfigFile {
   // server-role fields (forbidden on client profiles)
   port?: number;
   data_dir?: string;
-  auth_dir?: string;
   open_browser?: boolean;
   bind_address?: string;
   require_cli_api_key?: boolean;
@@ -225,7 +224,6 @@ export function validateRuntimeConfigFile(
   const serverOnly = [
     "port",
     "data_dir",
-    "auth_dir",
     "open_browser",
     "bind_address",
     "require_cli_api_key",
@@ -239,9 +237,6 @@ export function validateRuntimeConfigFile(
     if (normalizePort(raw.port) === undefined) fields.push("port");
     if (typeof raw.data_dir !== "string" || !raw.data_dir.trim()) {
       fields.push("data_dir");
-    }
-    if (typeof raw.auth_dir !== "string" || !raw.auth_dir.trim()) {
-      fields.push("auth_dir");
     }
     if (typeof raw.bind_address === "string" && !raw.bind_address.trim()) {
       fields.push("bind_address");
@@ -753,16 +748,19 @@ export function resolveDataDir(overrides: RuntimeConfigOverrides = {}): string {
   );
 }
 
+// Auth always lives at <profileRoot>/auth — the prompt/override was removed
+// because (a) the dir only stores the web passphrase hash + CLI API key
+// hashes, neither of which benefits from being on a separate volume, and
+// (b) two profiles pointed at the same auth dir would silently share keys.
+// Server role is still asserted (when a config exists) so non-server profiles
+// fail loudly instead of silently writing keys into the wrong place.
 export function resolveAuthDir(overrides: RuntimeConfigOverrides = {}): string {
   const config = readProfileConfig(overrides);
-  if (!config) {
-    return path.resolve(getDefaultAuthDir(overrides));
+  if (config) {
+    const configPath = getProfileConfigFilePath(overrides);
+    assertRoleServer(config, configPath);
   }
-  const configPath = getProfileConfigFilePath(overrides);
-  assertRoleServer(config, configPath);
-  return path.resolve(
-    config.auth_dir ?? getDefaultAuthDir(overrides),
-  );
+  return path.resolve(getDefaultAuthDir(overrides));
 }
 
 export function resolveOpenBrowser(overrides: RuntimeConfigOverrides = {}): boolean {

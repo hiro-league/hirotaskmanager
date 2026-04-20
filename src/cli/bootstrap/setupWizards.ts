@@ -4,7 +4,9 @@
  */
 import path from "node:path";
 import process from "node:process";
+import type { Interface as ReadlineInterface } from "node:readline";
 import { createInterface } from "node:readline/promises";
+import type { SetupProgress } from "./setupProgress";
 import {
   DEFAULT_BIND_ADDRESS,
   ensureRuntimeDirectories,
@@ -20,7 +22,6 @@ import { INSTALLED_DEFAULT_PORT } from "../../shared/ports";
 import { CLI_ERR } from "../types/errors";
 import { parsePortOption } from "../lib/core/command-helpers";
 import {
-  getDefaultInstalledAuthDir,
   getDefaultInstalledDataDir,
   readConfigFile,
   writeConfigFile,
@@ -89,7 +90,7 @@ function assertRoleAllowsWizard(
 }
 
 function resolveServerProfileDefaults(profile: string): Required<
-  Pick<CliConfigFile, "port" | "data_dir" | "auth_dir" | "open_browser" | "role">
+  Pick<CliConfigFile, "port" | "data_dir" | "open_browser" | "role">
 > {
   const configScope = { profile, kind: "installed" as const };
   const existing: Partial<CliConfigFile> = readConfigFile(configScope) ?? {};
@@ -99,25 +100,52 @@ function resolveServerProfileDefaults(profile: string): Required<
     data_dir: path.resolve(
       existing.data_dir ?? getDefaultInstalledDataDir(configScope),
     ),
-    auth_dir: path.resolve(
-      existing.auth_dir ?? getDefaultInstalledAuthDir(configScope),
-    ),
     open_browser: existing.open_browser ?? true,
   };
+}
+
+/**
+ * Bridge readline's auto-installed SIGINT handler into our launcher-level
+ * gate (sigintGate.ts). Without this re-emit, readline swallows Ctrl+C and
+ * the gate never sees the signal during a prompt — so the first press would
+ * appear to do nothing (the original silent-exit bug). Returns a cleanup
+ * function caller MUST run before closing the rl interface.
+ */
+function forwardReadlineSigint(rl: ReadlineInterface): () => void {
+  const onRlSigint = (): void => {
+    // Re-emit on the process so the launcher's installSigintGate handler
+    // runs. We do not close `rl` here: the user may want to keep typing
+    // their answer after a single Ctrl+C (the gate prints a warning and
+    // waits for a second press to abort).
+    process.emit("SIGINT");
+  };
+  rl.on("SIGINT", onRlSigint);
+  return () => rl.off("SIGINT", onRlSigint);
+}
+
+interface PromptHooks {
+  progress?: SetupProgress;
+  /** Short, human-readable label used when reporting "Waiting on: <label>". */
+  label?: string;
 }
 
 async function promptWithDefault(
   question: string,
   defaultValue: string,
+  hooks: PromptHooks = {},
 ): Promise<string> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
+  const removeSigintForward = forwardReadlineSigint(rl);
+  if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
     const answer = await rl.question(`${question} `);
     return answer.trim() || defaultValue;
   } finally {
+    removeSigintForward();
+    hooks.progress?.setCurrentPromptLabel(null);
     rl.close();
   }
 }
@@ -125,11 +153,14 @@ async function promptWithDefault(
 async function promptBoolean(
   question: string,
   defaultValue: boolean,
+  hooks: PromptHooks = {},
 ): Promise<boolean> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
+  const removeSigintForward = forwardReadlineSigint(rl);
+  if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
     for (;;) {
       const answer = (await rl.question(`${question}: `))
@@ -141,6 +172,8 @@ async function promptBoolean(
       console.log("Please answer yes or no.");
     }
   } finally {
+    removeSigintForward();
+    hooks.progress?.setCurrentPromptLabel(null);
     rl.close();
   }
 }
@@ -162,11 +195,14 @@ async function promptValidatedWithDefault<T>(
   question: string,
   defaultValue: string,
   validate: (raw: string) => T,
+  hooks: PromptHooks = {},
 ): Promise<T> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
+  const removeSigintForward = forwardReadlineSigint(rl);
+  if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
     for (;;) {
       let answer: string;
@@ -191,6 +227,8 @@ async function promptValidatedWithDefault<T>(
       }
     }
   } finally {
+    removeSigintForward();
+    hooks.progress?.setCurrentPromptLabel(null);
     rl.close();
   }
 }
@@ -431,11 +469,15 @@ export function validateCliApiKeyInput(raw: string): string {
 /**
  * Plain `hirotaskmanager` with no profile config: ask server vs client (design §2.8).
  */
-export async function chooseSetupModeInteractive(): Promise<"server" | "client"> {
+export async function chooseSetupModeInteractive(
+  progress?: SetupProgress,
+): Promise<"server" | "client"> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
+  const removeSigintForward = forwardReadlineSigint(rl);
+  progress?.setCurrentPromptLabel("server vs client choice");
   try {
     console.log(`How will this machine use TaskManager?
   [s] server  — run the API + database on this machine
@@ -447,6 +489,8 @@ export async function chooseSetupModeInteractive(): Promise<"server" | "client">
       console.log('Please enter "s" for server or "c" for client.');
     }
   } finally {
+    removeSigintForward();
+    progress?.setCurrentPromptLabel(null);
     rl.close();
   }
 }
@@ -454,9 +498,16 @@ export async function chooseSetupModeInteractive(): Promise<"server" | "client">
 export async function runServerSetupWizard(options: {
   profile: string;
   rerun: boolean;
+  progress?: SetupProgress;
 }): Promise<LauncherSetupResult> {
   const machineHadNoProfilesBefore = !hasAnyProfileConfigOnDisk();
   let activeProfile = options.profile;
+  const progress = options.progress;
+  // Server wizard implies the role even when invoked directly via
+  // --setup-server (i.e. without going through chooseSetupModeInteractive),
+  // so register it up front for the abort report.
+  progress?.setRole("server");
+  progress?.setProfileName(activeProfile);
 
   if (options.rerun && !canPromptInteractively()) {
     throw new CliError(
@@ -545,9 +596,13 @@ export async function runServerSetupWizard(options: {
     const nameAns = await promptWithDefault(
       formatTextPrompt("Profile name", activeProfile),
       activeProfile,
+      { progress, label: "Profile name" },
     );
     const trimmed = nameAns.trim();
-    if (trimmed) activeProfile = trimmed;
+    if (trimmed) {
+      activeProfile = trimmed;
+      progress?.setProfileName(activeProfile);
+    }
   } else {
     printInteractiveSetupHeader({
       profileName: activeProfile,
@@ -563,6 +618,7 @@ export async function runServerSetupWizard(options: {
   const portValue = await promptWithDefault(
     formatTextPrompt("Pick a port for web/api", String(existing.port ?? defaults.port)),
     String(existing.port ?? defaults.port),
+    { progress, label: "Port for web/api" },
   );
 
   const dataDirValue = await promptWithDefault(
@@ -571,15 +627,13 @@ export async function runServerSetupWizard(options: {
       String(existing.data_dir ?? defaults.data_dir),
     ),
     String(existing.data_dir ?? defaults.data_dir),
+    { progress, label: "Data directory" },
   );
 
-  const authDirValue = await promptWithDefault(
-    formatTextPrompt(
-      "Pick an auth directory (passphrase + CLI key storage)",
-      String(existing.auth_dir ?? defaults.auth_dir),
-    ),
-    String(existing.auth_dir ?? defaults.auth_dir),
-  );
+  // Auth dir is no longer prompted — it always lives at <profileRoot>/auth.
+  // Removed because the only contents (web passphrase hash + CLI key hashes)
+  // gain nothing from being on a separate volume, and a shared auth_dir
+  // across profiles would silently share credentials.
 
   // Renamed from the original "Allow remote access?" — that wording made
   // operators assume "Yes = my server is reachable remotely" (which it always
@@ -593,6 +647,7 @@ export async function runServerSetupWizard(options: {
       !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
     ),
     !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
+    { progress, label: "Accept remote connections?" },
   );
 
   const bindAddress = acceptRemoteDirect ? "0.0.0.0" : DEFAULT_BIND_ADDRESS;
@@ -613,6 +668,7 @@ export async function runServerSetupWizard(options: {
         existing.require_cli_api_key === true,
       ),
       existing.require_cli_api_key === true,
+      { progress, label: "Require CLI API key locally?" },
     );
   }
 
@@ -624,6 +680,7 @@ export async function runServerSetupWizard(options: {
       existing.open_browser ?? defaultOpenBrowser,
     ),
     existing.open_browser ?? defaultOpenBrowser,
+    { progress, label: "Open browser on start?" },
   );
 
   const config: CliConfigFile = {
@@ -631,7 +688,6 @@ export async function runServerSetupWizard(options: {
     role: "server",
     port: parsePortOption(portValue) ?? defaults.port,
     data_dir: path.resolve(dataDirValue),
-    auth_dir: path.resolve(authDirValue),
     open_browser: openBrowser,
     bind_address: bindAddress,
   };
@@ -643,6 +699,7 @@ export async function runServerSetupWizard(options: {
 
   writeConfigFile(config, { profile: activeProfile, kind: "installed" });
   ensureRuntimeDirectories({ profile: activeProfile, kind: "installed" });
+  progress?.mark("profile_written");
 
   await spinForMoment(
     machineHadNoProfilesBefore
@@ -661,13 +718,22 @@ export async function runServerSetupWizard(options: {
   });
 
   let nextConfig: CliConfigFile = config;
-  if (needsKeyByPolicy) {
+  // Always offer the mint prompt on a fresh server profile, regardless of the
+  // require_cli_api_key policy — discoverability fix: a loopback-only server
+  // with the policy off still benefits from having a key for any future remote
+  // client (another laptop, agent, tunnel). Default tracks the policy: Y when
+  // the server *requires* a key (no key = unreachable), N when it doesn't
+  // (operator already said "no auth needed locally"). Skip entirely when the
+  // profile already carries an api_key so a re-run never overwrites a key the
+  // operator pasted in elsewhere.
+  if (!existing.api_key) {
+    const mintPromptText = needsKeyByPolicy
+      ? "Mint a CLI API key now? The server requires one for any client to connect"
+      : "Mint a CLI API key now? Not needed for local CLI use, but required for any remote client (another machine, agent, browser-less tool)";
     const mint = await promptBoolean(
-      formatBooleanPrompt(
-        "Mint a first CLI API key now (recommended — server may be unreachable without one)",
-        true,
-      ),
-      true,
+      formatBooleanPrompt(mintPromptText, needsKeyByPolicy),
+      needsKeyByPolicy,
+      { progress, label: "Mint CLI API key?" },
     );
     if (mint) {
       const { key } = await generateCliApiKey({
@@ -679,6 +745,17 @@ export async function runServerSetupWizard(options: {
       printCliApiKey(key, { profileName: activeProfile });
       nextConfig = { ...config, api_key: key };
       writeConfigFile(nextConfig, { profile: activeProfile, kind: "installed" });
+      progress?.mark("api_key_minted");
+    } else {
+      // Closes the discoverability gap when the operator declines: print the
+      // exact day-2 command so they don't have to dig through docs to mint
+      // one later. Mirrors the operator-only command listed in AGENTS.md.
+      console.log(
+        "No CLI API key minted. To create one later, run:",
+      );
+      console.log(
+        `  hirotaskmanager server api-key generate --label "<name>" --profile ${activeProfile}`,
+      );
     }
   }
 
@@ -690,9 +767,11 @@ export async function runServerSetupWizard(options: {
       !hasPointer,
     ),
     !hasPointer,
+    { progress, label: "Set as default profile?" },
   );
   if (setDefault) {
     writeDefaultProfileName(activeProfile);
+    progress?.mark("default_pointer_set");
     // Make a default-profile change visible: agents and humans rely on
     // `hirotm` (no --profile) routing to the right server, and silently
     // retargeting from one profile to another is easy to miss.
@@ -712,6 +791,7 @@ export async function runServerSetupWizard(options: {
   const startAfter = await promptBoolean(
     formatBooleanPrompt("Start the server now", true),
     true,
+    { progress, label: "Start server now?" },
   );
 
   printSavedProfileSummary({
@@ -737,6 +817,7 @@ export async function runServerSetupWizard(options: {
 export async function runClientSetupWizard(options: {
   profile: string;
   rerun: boolean;
+  progress?: SetupProgress;
 }): Promise<LauncherSetupResult> {
   if (!canPromptInteractively()) {
     throw new CliError(
@@ -750,6 +831,12 @@ export async function runClientSetupWizard(options: {
 
   const machineHadNoProfilesBefore = !hasAnyProfileConfigOnDisk();
   let activeProfile = options.profile;
+  const progress = options.progress;
+  // Same rationale as the server wizard: register role + profile up front so
+  // an interrupt at the very first prompt still produces a meaningful abort
+  // report (see setupProgress.describeSetupAbort).
+  progress?.setRole("client");
+  progress?.setProfileName(activeProfile);
 
   printInteractiveSetupHeader({
     profileName: activeProfile,
@@ -761,9 +848,13 @@ export async function runClientSetupWizard(options: {
     const nameAns = await promptWithDefault(
       formatTextPrompt("Profile name", defaultName),
       defaultName,
+      { progress, label: "Profile name" },
     );
     const trimmed = nameAns.trim();
-    if (trimmed) activeProfile = trimmed;
+    if (trimmed) {
+      activeProfile = trimmed;
+      progress?.setProfileName(activeProfile);
+    }
   }
 
   const existingClient: Partial<CliConfigFile> =
@@ -783,6 +874,7 @@ export async function runClientSetupWizard(options: {
     apiUrlPrompt,
     String(existingClient.api_url ?? ""),
     normalizeClientApiUrl,
+    { progress, label: "Server base URL (api_url)" },
   );
 
   // Same retry treatment for the api_key prompt: a paste mistake should not
@@ -797,6 +889,7 @@ export async function runClientSetupWizard(options: {
     apiKeyPrompt,
     String(existingClient.api_key ?? ""),
     validateCliApiKeyInput,
+    { progress, label: "CLI API key" },
   );
 
   const config: CliConfigFile = {
@@ -806,6 +899,7 @@ export async function runClientSetupWizard(options: {
   };
 
   writeConfigFile(config, { profile: activeProfile, kind: "installed" });
+  progress?.mark("profile_written");
 
   const previousDefault = resolveDefaultProfileName();
   const hasPointer = !!previousDefault;
@@ -815,9 +909,11 @@ export async function runClientSetupWizard(options: {
       !hasPointer,
     ),
     !hasPointer,
+    { progress, label: "Set as default profile?" },
   );
   if (setDefault) {
     writeDefaultProfileName(activeProfile);
+    progress?.mark("default_pointer_set");
     // Same surface as the server wizard: switching the default away from a
     // local server profile to a remote client profile retargets `hirotm`
     // silently otherwise.

@@ -10,6 +10,7 @@ import {
 } from "@/lib/notificationPresentation";
 import { formatNotificationTime } from "@/lib/notificationTime";
 import { cn } from "@/lib/utils";
+import type { SystemToast } from "@/store/notificationUi";
 import { useNotificationUiStore } from "@/store/notificationUi";
 
 function ToastCard({ item, onDismiss }: { item: NotificationItem; onDismiss: () => void }) {
@@ -78,29 +79,67 @@ function ToastCard({ item, onDismiss }: { item: NotificationItem; onDismiss: () 
 }
 
 function SystemToastCard({
-  message,
+  toast,
   onDismiss,
 }: {
-  message: string;
+  toast: SystemToast;
   onDismiss: () => void;
 }) {
+  const navigate = useNavigate();
+  const hasActions = Boolean(toast.onUndo || toast.trashLink);
   useEffect(() => {
-    const timer = window.setTimeout(() => onDismiss(), 12_000);
+    // Board trash toast: give time to undo (#31351); errors stay dismiss-only.
+    const ms = hasActions ? 15_000 : 12_000;
+    const timer = window.setTimeout(() => onDismiss(), ms);
     return () => window.clearTimeout(timer);
-  }, [onDismiss]);
+  }, [hasActions, onDismiss]);
 
   return (
-    <div className="pointer-events-auto rounded-xl border border-amber-500/40 bg-amber-950/90 p-3 text-sm text-amber-50 shadow-xl backdrop-blur">
+    <div
+      className={cn(
+        "pointer-events-auto rounded-xl border bg-popover/95 p-3 text-sm text-popover-foreground shadow-xl backdrop-blur",
+        // Match ToastCard surface; light primary ring when Undo / Trash are offered.
+        hasActions ? "border-primary/25" : "border-border",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 leading-5">{message}</p>
+        <p className="min-w-0 leading-5">{toast.message}</p>
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-amber-200 hover:bg-amber-500/20"
+          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Dismiss
         </button>
       </div>
+      {hasActions ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {toast.onUndo ? (
+            <button
+              type="button"
+              className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90"
+              onClick={() => {
+                toast.onUndo?.();
+                onDismiss();
+              }}
+            >
+              Undo
+            </button>
+          ) : null}
+          {toast.trashLink ? (
+            <button
+              type="button"
+              className="rounded-md border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+              onClick={() => {
+                onDismiss();
+                navigate("/trash");
+              }}
+            >
+              Open Trash
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -123,7 +162,7 @@ export function NotificationToasts() {
       {systemToast ? (
         <SystemToastCard
           key={systemToast.id}
-          message={systemToast.message}
+          toast={systemToast}
           onDismiss={dismissSystemToast}
         />
       ) : null}

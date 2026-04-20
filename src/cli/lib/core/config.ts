@@ -1,5 +1,4 @@
 import {
-  getDefaultAuthDir,
   getDefaultDataDir,
   getProfileConfigFilePath,
   getProfileRootDir,
@@ -53,12 +52,6 @@ export function getDefaultInstalledDataDir(
   overrides: ConfigOverrides = {},
 ): string {
   return getDefaultDataDir({ ...overrides, kind: "installed" });
-}
-
-export function getDefaultInstalledAuthDir(
-  overrides: ConfigOverrides = {},
-): string {
-  return getDefaultAuthDir({ ...overrides, kind: "installed" });
 }
 
 export function resolvePort(overrides: ConfigOverrides = {}): number {

@@ -179,9 +179,11 @@ export function printSetupNextSteps(opts: {
   }
   const lines = [
     "REQUIRED BEFORE USING hirotm",
-    "Install AI agent skills now. The hirotm CLI depends on these skills.",
+    "Install AI agent skills on the machine where you will run hirotm.",
     "",
     ...skillLines,
+    "",
+    "Tip: using Bun? Replace 'npx' with 'bunx'.",
     "",
     `After skills install: ${cliHelpCommand}`,
   ];
@@ -247,6 +249,56 @@ export function printCliApiKey(
   line(paint(out, rule, ansi.yellow));
   line(paint(out, savedHint, ansi.dim));
   line(paint(out, copyHint, ansi.dim));
+  line();
+}
+
+/**
+ * Print the one-time bootstrap setup token (task #31338) so the operator can
+ * paste it into the browser's setup screen. Same copy-safety rules as
+ * {@link printCliApiKey}: token sits on its own line with nothing before or
+ * after it, so a triple-click selects exactly the value.
+ *
+ * Also prints the deep-link URL `<appUrl>/?setupToken=<token>` so the
+ * operator can click through and have the token auto-filled — this is the
+ * fast path on a desktop where the server terminal and the browser are on
+ * the same machine. Pipe-safe: drops colours/rules when stdout is not a TTY.
+ */
+export function printSetupToken(opts: {
+  token: string;
+  appUrl: string;
+  bindAddress?: string;
+}): void {
+  const { token, appUrl, bindAddress } = opts;
+  const headingLabel =
+    "First-time Setup Token (one-time, required to create the passphrase):";
+  const reachabilityHint =
+    bindAddress && !isLoopbackAddrLiteral(bindAddress)
+      ? `Open this in a browser on the server (or via your reverse proxy / public host — bind: ${bindAddress}):`
+      : "Open this in your browser:";
+  const deepLink = `${appUrl}/?setupToken=${encodeURIComponent(token)}`;
+  const purposeHint =
+    "Required for the very first passphrase. Without it, anyone reaching this server's URL could squat the passphrase.";
+
+  if (!out.isTTY) {
+    line();
+    line(headingLabel);
+    line(token);
+    line(reachabilityHint);
+    line(deepLink);
+    line(purposeHint);
+    line();
+    return;
+  }
+
+  const rule = "=".repeat(Math.max(72, token.length, deepLink.length));
+  line();
+  line(paintWarning(headingLabel));
+  line(paint(out, rule, ansi.yellow));
+  line(paintValue(token));
+  line(paint(out, rule, ansi.yellow));
+  line(paint(out, reachabilityHint, ansi.dim));
+  line(paintValue(deepLink));
+  line(paint(out, purposeHint, ansi.dim));
   line();
 }
 

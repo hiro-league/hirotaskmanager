@@ -7,7 +7,6 @@ import { NavLink, useMatch, useNavigate } from "react-router-dom";
 import { boardDisplayName } from "../../../shared/models";
 import { boardCollapsedLabel } from "@/components/layout/boardCollapsedLabel";
 import { SidebarBoardItem } from "@/components/layout/SidebarBoardItem";
-import { SidebarConfirmDialog } from "@/components/layout/SidebarConfirmDialog";
 import { SidebarProvider, useSidebar } from "@/components/layout/SidebarContext";
 import { SettingsSidebarMenu } from "@/components/layout/SettingsSidebarMenu";
 
@@ -30,23 +29,12 @@ function SidebarContents() {
     isError,
     error,
     createBoard,
-    deleteBoard,
     addingBoard,
     setAddingBoard,
     newBoardName,
     setNewBoardName,
-    boardDeleteCandidate,
-    setBoardDeleteCandidate,
-    deleteTaskCountInput,
-    setDeleteTaskCountInput,
-    confirmDelete,
     cancelAddBoard,
     submitNewBoard,
-    deleteTaskCountKnown,
-    deleteTaskCount,
-    requiresTypedDeleteConfirmation,
-    deleteTaskCountMatches,
-    deleteConfirmDisabled,
   } = useSidebar();
   const navigate = useNavigate();
   const boardMatch = useMatch({ path: "/board/:boardId", end: true });
@@ -246,63 +234,6 @@ function SidebarContents() {
         />
       </div>
       </div>
-
-      <SidebarConfirmDialog
-        open={boardDeleteCandidate !== null}
-        title="Move this board to Trash?"
-        message={
-          boardDeleteCandidate
-            ? `Move board “${boardDeleteCandidate.name}” to Trash? You can restore it later from Trash, or delete it permanently there.`
-            : ""
-        }
-        confirmLabel="Move to Trash"
-        cancelLabel="Cancel"
-        busy={deleteBoard.isPending}
-        confirmDisabled={deleteConfirmDisabled}
-        onCancel={() => {
-          if (!deleteBoard.isPending) {
-            setBoardDeleteCandidate(null);
-            setDeleteTaskCountInput("");
-          }
-        }}
-        onConfirm={confirmDelete}
-      >
-        {!deleteTaskCountKnown ? (
-          <p className="text-sm text-muted-foreground">Loading task count…</p>
-        ) : requiresTypedDeleteConfirmation ? (
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-destructive">
-              This board has {deleteTaskCount} tasks. Are you sure you want to
-              move it to Trash?
-            </p>
-            <div className="space-y-1.5">
-              <label
-                htmlFor="sidebar-delete-board-task-count"
-                className="text-sm text-foreground"
-              >
-                To move to Trash, type the number of tasks below.
-              </label>
-              <input
-                id="sidebar-delete-board-task-count"
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                value={deleteTaskCountInput}
-                disabled={deleteBoard.isPending}
-                onChange={(e) => setDeleteTaskCountInput(e.target.value)}
-              />
-              {!deleteTaskCountMatches && deleteTaskCountInput.trim() ? (
-                <p className="text-xs text-muted-foreground">
-                  Enter `{deleteTaskCount}` to enable Move to Trash.
-                </p>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </SidebarConfirmDialog>
     </div>
   );
 }

@@ -35,7 +35,6 @@ describe("process.ts server lifecycle (mock fetch)", () => {
           role: "server",
           port: 3001,
           data_dir: path.join(profileDir, "data"),
-          auth_dir: path.join(profileDir, "auth"),
         },
         null,
         2,

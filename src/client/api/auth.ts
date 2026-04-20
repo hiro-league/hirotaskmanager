@@ -56,11 +56,18 @@ export function useAuthSession() {
 export function useSetupAuth() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { passphrase: string }) =>
+    mutationFn: (input: { passphrase: string; setupToken: string }) =>
+      // Token rides in `Authorization: Bearer <token>` rather than the JSON
+      // body so it never lands next to the passphrase in browser dev-tools
+      // request bodies, and matches the same wire shape the CLI uses for
+      // `auth_cli_key_required`. See task #31338.
       authJson<{ ok: true; recoveryKeyPrinted: boolean }>("/api/auth/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${input.setupToken}`,
+        },
+        body: JSON.stringify({ passphrase: input.passphrase }),
       }),
     onSuccess: () => {
       qc.setQueryData<AuthSessionResponse>(authSessionKey, {

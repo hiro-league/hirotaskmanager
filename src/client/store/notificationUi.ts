@@ -10,7 +10,16 @@ export type NotificationToast = {
 export type SystemToast = {
   id: number;
   message: string;
+  /** Board soft-delete: call restore API (#31351). */
+  onUndo?: () => void;
+  /** Board soft-delete: navigate to Trash (#31351). */
+  trashLink?: boolean;
 };
+
+export type SystemToastInput =
+  | string
+  | Pick<SystemToast, "message"> &
+      Partial<Pick<SystemToast, "onUndo" | "trashLink">>;
 
 type NotificationUiState = {
   panelOpen: boolean;
@@ -21,7 +30,7 @@ type NotificationUiState = {
   clearToasts: () => void;
   /** One-shot banner (e.g. SSE connection pool exhaustion). */
   systemToast: SystemToast | null;
-  pushSystemToast: (message: string) => void;
+  pushSystemToast: (input: SystemToastInput) => void;
   dismissSystemToast: () => void;
 };
 
@@ -40,7 +49,19 @@ export const useNotificationUiStore = create<NotificationUiState>((set) => ({
     })),
   clearToasts: () => set({ toasts: [] }),
   systemToast: null,
-  pushSystemToast: (message) =>
-    set({ systemToast: { id: Date.now(), message } }),
+  pushSystemToast: (input) =>
+    set(() => {
+      const id = Date.now();
+      if (typeof input === "string") {
+        return { systemToast: { id, message: input } };
+      }
+      const next: SystemToast = {
+        id,
+        message: input.message,
+      };
+      if (input.onUndo) next.onUndo = input.onUndo;
+      if (input.trashLink) next.trashLink = true;
+      return { systemToast: next };
+    }),
   dismissSystemToast: () => set({ systemToast: null }),
 }));

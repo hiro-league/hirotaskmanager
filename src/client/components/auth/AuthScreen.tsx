@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Eye, EyeOff, KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import { useLogin, useRecoverPassphrase, useSetupAuth } from "@/api/auth";
 // Shared Input/Button: focus-visible rings; passphrase fields use autoComplete=off (task: avoid browser/password-manager autofill).
@@ -121,6 +121,40 @@ function AuthNotice({
   );
 }
 
+/**
+ * Read `?setupToken=...` once at mount so the launcher's deep-link
+ * (`http://host:port/?setupToken=...`) auto-fills the field. Strip the param
+ * from the address bar immediately so the token does not survive in the
+ * browser history / share sheet / referer header. See task #31338.
+ */
+function useInitialSetupTokenFromUrl(): string {
+  const [value] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("setupToken")?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!value) return;
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("setupToken")) return;
+      url.searchParams.delete("setupToken");
+      const cleaned = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState(window.history.state, "", cleaned);
+    } catch {
+      // Best-effort URL cleanup; not worth blocking setup on this.
+    }
+  }, [value]);
+
+  return value;
+}
+
 export function SetupAuthScreen({
   notice,
   onNoticeChange,
@@ -129,10 +163,15 @@ export function SetupAuthScreen({
   onNoticeChange: (value: string | null) => void;
 }) {
   const setupAuth = useSetupAuth();
+  const initialToken = useInitialSetupTokenFromUrl();
+  const [setupToken, setSetupToken] = useState<string>(initialToken);
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const mismatch =
     confirmPassphrase.length > 0 && passphrase !== confirmPassphrase;
+  const tokenTrimmed = setupToken.trim();
+  const canSubmit =
+    !!passphrase && !mismatch && tokenTrimmed.length > 0;
 
   return (
     <AuthShell
@@ -145,9 +184,9 @@ export function SetupAuthScreen({
         autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!passphrase || mismatch) return;
+          if (!canSubmit) return;
           setupAuth.mutate(
-            { passphrase },
+            { passphrase, setupToken: tokenTrimmed },
             {
               onSuccess: () => {
                 onNoticeChange(
@@ -158,10 +197,33 @@ export function SetupAuthScreen({
           );
         }}
       >
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-foreground">
+            One-time setup token
+          </span>
+          <Input
+            type="text"
+            name="setup-token"
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus={!initialToken}
+            className="font-mono"
+            value={setupToken}
+            onChange={(event) => setSetupToken(event.target.value)}
+            aria-describedby="setup-token-hint"
+          />
+          <span
+            id="setup-token-hint"
+            className="block text-xs text-muted-foreground"
+          >
+            Printed once in the terminal running TaskManager. Required so a
+            stranger cannot reach this URL first and squat the passphrase.
+          </span>
+        </label>
         <PassphraseField
           label="Passphrase"
           name="passphrase"
-          autoFocus
+          autoFocus={!!initialToken}
           value={passphrase}
           onChange={setPassphrase}
           aria-invalid={mismatch}
@@ -186,7 +248,7 @@ export function SetupAuthScreen({
         <Button
           type="submit"
           className="w-full gap-2"
-          disabled={setupAuth.isPending || !passphrase || mismatch}
+          disabled={setupAuth.isPending || !canSubmit}
         >
           <LockKeyhole className="size-4" aria-hidden />
           Create passphrase

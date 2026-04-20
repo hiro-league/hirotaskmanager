@@ -40,7 +40,13 @@ test.describe("Phase 7 board journeys", () => {
     await page.goto(`/board/${boardId}`);
     await dismissShortcutHelpIfPresent(page);
 
-    await page.getByLabel(`${listName} — tasks`).click();
+    // Click near the top of the tasks region: the bottom-anchored "Add task" FAB
+    // (Composer.Fab) overlays the geometric center of an empty list and intercepts
+    // the default center click on CI (see Playwright "subtree intercepts pointer
+    // events" failure). Targeting the top edge focuses the list without racing the FAB.
+    await page
+      .getByLabel(`${listName} — tasks`)
+      .click({ position: { x: 12, y: 12 } });
     await page.keyboard.press("t");
     await page
       .getByPlaceholder("Enter a title or paste a link")

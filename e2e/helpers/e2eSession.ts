@@ -1,7 +1,27 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
 
 /** Fixed passphrase for disposable E2E scratch DBs (Phase 7 journeys). */
 export const E2E_PASSPHRASE = "e2e-playwright-passphrase-2026";
+
+/**
+ * Read the one-time setup token that `playwright.config.ts` minted before the
+ * dev server started (task #31338). The token file path is exported via env
+ * so this stays in lock-step with the playwright bootstrap.
+ */
+function readE2eSetupToken(): string {
+  const tokenFile = process.env.HIROTM_E2E_SETUP_TOKEN_FILE;
+  if (!tokenFile) {
+    throw new Error(
+      "HIROTM_E2E_SETUP_TOKEN_FILE env var is not set. Did playwright.config.ts mint a setup token?",
+    );
+  }
+  const token = readFileSync(tokenFile, "utf8").trim();
+  if (!token) {
+    throw new Error(`Setup token file ${tokenFile} was empty.`);
+  }
+  return token;
+}
 
 /**
  * Walks the real auth shell so the session cookie is set on the Vite origin (proxy + credentialed fetch).
@@ -20,6 +40,9 @@ export async function ensureWebSession(page: Page): Promise<void> {
     name: "Set up TaskManager",
   });
   if (await setupHeading.isVisible()) {
+    await page
+      .getByLabel("One-time setup token")
+      .fill(readE2eSetupToken());
     await page.getByLabel("Passphrase", { exact: true }).fill(E2E_PASSPHRASE);
     await page.getByLabel("Confirm passphrase").fill(E2E_PASSPHRASE);
     await page.getByRole("button", { name: "Create passphrase" }).click();

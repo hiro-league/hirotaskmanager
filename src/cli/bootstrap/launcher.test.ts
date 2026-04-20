@@ -44,6 +44,18 @@ describe("resolveLauncherStartPlan", () => {
     });
   });
 
+  test("uses background-attached for recovery outside setup wizard (e.g. server start resume)", () => {
+    expect(
+      resolveLauncherStartPlan({
+        shouldRunSetup: false,
+        needsRecoveryKeyExitFlow: true,
+        alreadyRunning: false,
+        shouldOpenBrowser: false,
+        preferForegroundWhenNotSetup: false,
+      }).startMode,
+    ).toBe("background-attached");
+  });
+
   test("keeps setup launches attached unless recovery flow needs background-attached", () => {
     expect(
       resolveLauncherStartPlan({

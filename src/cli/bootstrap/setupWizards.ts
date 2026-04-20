@@ -30,6 +30,7 @@ import {
 } from "../lib/core/config";
 import { canPromptInteractively } from "../lib/core/tty";
 import { buildLocalServerUrl } from "../../shared/serverStatus";
+import { resolvePersistedServerSetupStateForConfigWrite } from "../../shared/serverSetupLifecycle";
 import { CliError } from "../lib/output/output";
 import {
   formatBooleanPrompt,
@@ -43,7 +44,10 @@ import {
 export interface LauncherSetupMeta {
   justFinishedInteractiveSetup: boolean;
   firstProfileOnMachine: boolean;
-  /** When false, launcher must not start the local Bun server. */
+  /**
+   * Server wizard always continues into the installed-server bootstrap path.
+   * Client wizard never starts a local Bun server — only this case is false.
+   */
   shouldStartLocalServer: boolean;
 }
 
@@ -524,11 +528,19 @@ export async function runServerSetupWizard(options: {
     const existing: Partial<CliConfigFile> =
       readConfigFile({ profile: activeProfile, kind: "installed" }) ?? {};
     const bind = existing.bind_address ?? DEFAULT_BIND_ADDRESS;
+    const authDirNonInteractive = resolveAuthDir({
+      profile: activeProfile,
+      kind: "installed",
+    });
     const config: CliConfigFile = {
       ...defaults,
       ...existing,
       role: "server",
       bind_address: bind,
+      server_setup_state: resolvePersistedServerSetupStateForConfigWrite(
+        existing.server_setup_state,
+        authDirNonInteractive,
+      ),
     };
     if (!isLoopbackBindAddress(bind)) {
       config.require_cli_api_key = true;
@@ -683,6 +695,11 @@ export async function runServerSetupWizard(options: {
     { progress, label: "Open browser on start?" },
   );
 
+  const authDirResolved = resolveAuthDir({
+    profile: activeProfile,
+    kind: "installed",
+  });
+
   const config: CliConfigFile = {
     ...existing,
     role: "server",
@@ -690,6 +707,10 @@ export async function runServerSetupWizard(options: {
     data_dir: path.resolve(dataDirValue),
     open_browser: openBrowser,
     bind_address: bindAddress,
+    server_setup_state: resolvePersistedServerSetupStateForConfigWrite(
+      existing.server_setup_state,
+      authDirResolved,
+    ),
   };
   if (requireCliApiKey) {
     config.require_cli_api_key = true;
@@ -707,11 +728,6 @@ export async function runServerSetupWizard(options: {
       : `Updating profile: ${activeProfile}`,
     `Saved ${activeProfile}`,
   );
-
-  const authDirResolved = resolveAuthDir({
-    profile: activeProfile,
-    kind: "installed",
-  });
   const needsKeyByPolicy = resolveRequireCliApiKey({
     profile: activeProfile,
     kind: "installed",
@@ -788,11 +804,8 @@ export async function runServerSetupWizard(options: {
     }
   }
 
-  const startAfter = await promptBoolean(
-    formatBooleanPrompt("Start the server now", true),
-    true,
-    { progress, label: "Start server now?" },
-  );
+  // No "start server later" option: the launcher always continues into first-time
+  // bootstrap so mint/setup token + recovery use one path (server_setup_state).
 
   printSavedProfileSummary({
     created: machineHadNoProfilesBefore,
@@ -809,7 +822,7 @@ export async function runServerSetupWizard(options: {
     setupMeta: {
       justFinishedInteractiveSetup: true,
       firstProfileOnMachine: machineHadNoProfilesBefore,
-      shouldStartLocalServer: startAfter,
+      shouldStartLocalServer: true,
     },
   };
 }

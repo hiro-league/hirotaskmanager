@@ -16,9 +16,11 @@ coverage/html
 opencode.json
 
 # Packages
-# packages/
+packages/
 
 # Playwright (Phase 6+)
 e2e/.scratch/
 playwright-report/
 test-results/
+
+

@@ -9,6 +9,7 @@ import path from "node:path";
 import { CLI_ERR, CliError } from "../cli/types/errors";
 import { DEV_DEFAULT_PORT, INSTALLED_DEFAULT_PORT } from "./ports";
 import { buildLocalServerUrl } from "./serverStatus";
+import type { PersistedServerSetupState } from "./serverSetupLifecycle";
 
 /**
  * Default `bind_address` when omitted (design §2.1). Used for validation and
@@ -29,6 +30,11 @@ export interface RuntimeConfigFile {
   open_browser?: boolean;
   bind_address?: string;
   require_cli_api_key?: boolean;
+  /**
+   * First-time bootstrap tracking for the installed launcher (server role only).
+   * Omitted on legacy profiles — resolved via {@link resolveEffectiveServerSetupLifecycleState}.
+   */
+  server_setup_state?: PersistedServerSetupState;
   /** Optional on server; required on client. */
   api_key?: string;
 
@@ -227,6 +233,7 @@ export function validateRuntimeConfigFile(
     "open_browser",
     "bind_address",
     "require_cli_api_key",
+    "server_setup_state",
   ] as const;
   const clientOnly = ["api_url"] as const;
 
@@ -320,6 +327,20 @@ export function validateRuntimeConfigFile(
             `The local CLI on this machine may fail until you set api_key or use cli-api-keys file.`,
         );
       }
+    }
+
+    if (raw.server_setup_state !== undefined) {
+      const s = raw.server_setup_state;
+      if (s !== "profile_saved" && s !== "complete") {
+        fields.push("server_setup_state");
+      }
+    }
+    if (fields.length) {
+      throw invalidConfigError(
+        configPath,
+        fields,
+        `Invalid server profile config at ${configPath}: invalid field: ${fields.join(", ")}`,
+      );
     }
   } else {
     // client

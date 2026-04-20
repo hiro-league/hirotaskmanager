@@ -39,56 +39,66 @@ Hiro Task Manager is in active development and is not yet ready for production u
 - **Detailed Documentation** - for developers and AI Agents.
 - **Your data, your machine, your models** - Privacy stays under your control.
 
-## Install (same machine, server + CLI together)
 
-This is the simplest setup: the server, the web UI, and the CLI all run on the same machine.
+## Prerequisites
 
-1. Install with bun
+- Bun (https://bun.sh/docs/installation) for bun/bunx commands
+Or
+- Node.js (https://nodejs.org/en/download/) for npm/npx commands
+
+## Install (Local Setup)
+
+Most users will use the Local Setup. If you're into setting the server up on a VPS, visit the [Advanced Setup](https://docs.hiroleague.com/task-manager/get-started/advanced-setup) page.
+
+**1. Install**
 
 ```bash
 bun install -g @hiroleague/taskmanager
 ```
 
-2. Run the launcher — it walks you through first-run setup, then starts the server
+**2. First time setup - Interactive walkthrough**
 
 ```bash
-hirotaskmanager     # interactive: pick port, data dir, open browser, start server
+hirotaskmanager     # Interactive: pick server option and accept all defaults
 ```
 
-   The launcher writes a profile under `~/.taskmanager/profiles/<name>/` and sets it as the default. Loopback-bound (the default) means **no API key** is required for the local CLI.
+You will be prompted to set a passphrase for website login. A recovery key will be generated for you to recover your access if needed.
 
-3. Add AI Agent Skills
+**3. Add AI Agent Skills**
 
 ```bash
-npx skills add hiro-league/hirotaskmanager        # from our repo
-npx skills add "$HOME/.taskmanager/skills"        # or from the local install
+bunx skills add hiro-league/hirotaskmanager        # from our repo
+bunx skills add "$HOME/.taskmanager/skills"        # or from the local install
 ```
 
-4. Use the CLI from anywhere — no `--profile` needed
+Install the skill globally to any AI Agent. Alternatively, install to specific projects or specific agents.
+
+
+**4. Use the CLI**
 
 ```bash
 hirotm boards list
 ```
 
-For **remote/split installs** (server on a VPS, CLI on a desktop), **hardened single-host** setups (loopback + forced API key), and the **developer dual-profile** workflow, see [Advanced setup](https://docs.hiroleague.com/task-manager/get-started/advanced-setup). The full walkthrough lives in the [Quickstart](https://docs.hiroleague.com/task-manager/get-started/quickstart).
+Go to http://127.0.0.1:3001/ , login, create a board, give it CLI access and your AI Agents can now interact with it.
+
+Need to run the server on VPS and access it from anywhere? Visit the [Advanced Setup](https://docs.hiroleague.com/task-manager/get-started/advanced-setup) page.
 
 ## Update
 
 ```bash
 bun update -g @hiroleague/taskmanager
-npx skills update
+bunx skills update
 ```
 
-## Two binaries
+## Installed Commands
 
 This package installs two commands on your `PATH`:
 
 | Binary | Use it for |
 |--------|------------|
-| **`hirotaskmanager`** | First-run setup (`--setup-server`, `--setup-client`), server lifecycle (`server start/stop/status`), CLI API key management (`server api-key generate/list/revoke`), and changing the default profile (`profile use`). |
-| **`hirotm`** | Day-to-day data ops: boards, lists, tasks, releases, search, trash. |
-
-Both binaries dispatch into the same code; the split is a UX convention so agents and scripts only ever touch `hirotm`.
+| **`hirotaskmanager`** | For Humans. First time setup, profile management and optional server lifecycle management |
+| **`hirotm`** | For AI Agents. Start Server, Manage boards, lists and tasks|
 
 ## `hirotm` command index
 
@@ -109,10 +119,12 @@ Hiro Task Manager exposes `hirotm` for command-line and AI-agent-friendly contro
 
 | Command | Summary |
 |---------|---------|
-| **`--setup-server` / `--setup-client`** | Interactive first-run wizards for server-mode or client-mode profiles. |
+| - | First time wizard, pick a server or client mode |
+| **`--setup-server`** | First time wizard for server mode |
+| **`--setup-client`** | First time wizard for client mode |
 | **`server start/stop/status`** | Manage the local server process. |
-| **`server api-key generate/list/revoke`** | Mint, list, or revoke CLI API keys (server profile only; file-system only — no HTTP needed). |
-| **`profile use <name>`** | Set the default profile so commands run without `--profile`. |
+| **`server api-key generate/list/revoke`** | Mint, list, or revoke CLI API keys (when required) |
+| **`profile use <name>`** | Set the default profile so commands run without `--profile` argument. |
 
 ## Contributing
 

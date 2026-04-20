@@ -194,6 +194,47 @@ describe("validateRuntimeConfigFile", () => {
     expect(c.bind_address).toBe("::");
   });
 
+  test("server profile: rejects invalid server_setup_state", () => {
+    expect(() =>
+      validateRuntimeConfigFile(
+        {
+          role: "server",
+          port: 3001,
+          data_dir: "/d",
+          server_setup_state: "nope",
+        },
+        "/p/config.json",
+      ),
+    ).toThrow(CliError);
+  });
+
+  test("server profile: accepts server_setup_state complete", () => {
+    const c = validateRuntimeConfigFile(
+      {
+        role: "server",
+        port: 3001,
+        data_dir: "/d",
+        server_setup_state: "complete",
+      },
+      "/p/config.json",
+    );
+    expect(c.server_setup_state).toBe("complete");
+  });
+
+  test("client profile: rejects server_setup_state", () => {
+    expect(() =>
+      validateRuntimeConfigFile(
+        {
+          role: "client",
+          api_url: "https://h.example/api",
+          api_key: `tmk-${"a".repeat(64)}`,
+          server_setup_state: "complete",
+        },
+        "/p/config.json",
+      ),
+    ).toThrow(CliError);
+  });
+
   test("client profile: accepts valid absolute https URL", () => {
     const c = validateRuntimeConfigFile(
       {

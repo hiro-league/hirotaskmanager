@@ -69,10 +69,14 @@ test.describe("Phase 7 board journeys", () => {
     await page.goto(`/board/${boardId}`);
     await dismissShortcutHelpIfPresent(page);
 
+    // Click near the top-left of the card: the bottom-anchored "Add task" FAB
+    // (Composer.Fab) fades in on column hover and intercepts clicks targeting
+    // the card's geometric center on a sparse list. Same workaround the
+    // create-task test uses for the empty-list FAB collision (see line ~48).
     await page
       .locator("[data-task-card-root]")
       .filter({ hasText: original })
-      .click();
+      .click({ position: { x: 12, y: 12 } });
     await page.getByRole("dialog").getByPlaceholder("Title").fill(updated);
     await page.getByRole("button", { name: "Save", exact: true }).click();
 

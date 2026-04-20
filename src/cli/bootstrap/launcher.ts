@@ -21,6 +21,7 @@ import {
   resolveProfileName,
   writeConfigFile,
   writeDefaultProfileName,
+  type CliConfigFile,
 } from "../lib/core/config";
 import { INSTALLED_DEFAULT_PORT } from "../../shared/ports";
 import { CliError, exitWithError } from "../lib/output/output";
@@ -53,6 +54,10 @@ import { createSetupProgress, type SetupProgress } from "./setupProgress";
 import { installSigintGate } from "../lib/core/sigintGate";
 import { CLI_PACKAGE_VERSION } from "../cliVersion";
 import { mintSetupToken } from "../../server/auth";
+import {
+  needsInstalledBootstrapCeremony,
+  resolveEffectiveServerSetupLifecycleState,
+} from "../../shared/serverSetupLifecycle";
 
 export type { LauncherSetupResult };
 
@@ -93,14 +98,23 @@ export function resolveLauncherStartPlan(options: {
   readyLabel: "Started" | "Already started";
   shouldOpenBrowserOnReady: boolean;
 } {
+  const needsAttachForRecovery =
+    options.needsRecoveryKeyExitFlow && !options.alreadyRunning;
+
+  let startMode: ServerStartMode;
+  if (needsAttachForRecovery) {
+    // Launcher must stay attached so it can print the recovery key — including
+    // `hirotaskmanager server start` when auth exists but recovery-key.tmp is
+    // still waiting to be shown (first-time bootstrap resume).
+    startMode = "background-attached";
+  } else if (options.shouldRunSetup) {
+    startMode = "foreground";
+  } else {
+    startMode = options.preferForegroundWhenNotSetup ? "foreground" : "background";
+  }
+
   return {
-    startMode: options.shouldRunSetup
-      ? options.needsRecoveryKeyExitFlow
-        ? "background-attached"
-        : "foreground"
-      : options.preferForegroundWhenNotSetup
-        ? "foreground"
-        : "background",
+    startMode,
     readyLabel: options.alreadyRunning ? "Already started" : "Started",
     shouldOpenBrowserOnReady:
       options.shouldOpenBrowser && !options.alreadyRunning,
@@ -214,6 +228,174 @@ function assertLauncherServerProfileForApiKeys(profile: string): void {
 
 function printLauncherJson(data: unknown): void {
   process.stdout.write(`${JSON.stringify(data)}\n`);
+}
+
+/** Persist `server_setup_state: complete` when auth exists but the profile predates the field. */
+function syncServerSetupStateInConfigWhenDerivedComplete(
+  profile: string,
+  config: CliConfigFile,
+  authDir: string,
+): CliConfigFile {
+  if (config.role !== "server") return config;
+  const effective = resolveEffectiveServerSetupLifecycleState(
+    "server",
+    config.server_setup_state,
+    authDir,
+  );
+  if (effective === "complete" && config.server_setup_state !== "complete") {
+    const next: CliConfigFile = {
+      ...config,
+      server_setup_state: "complete",
+    };
+    writeConfigFile(next, { profile, kind: "installed" });
+    return next;
+  }
+  return config;
+}
+
+/**
+ * Installed-server start path shared by the default `hirotaskmanager` action
+ * and `hirotaskmanager server start` — mint/setup token, recovery key, and
+ * persisted {@link CliConfigFile.server_setup_state}.
+ */
+async function runInstalledServerStartWithLifecycle(opts: {
+  profile: string;
+  launcherConfig: CliConfigFile;
+  shouldRunSetupForPlan: boolean;
+  shouldOpenBrowser: boolean;
+  progress?: SetupProgress;
+  /** When true (e.g. `server start --foreground`), prefer foreground if not using recovery attach. */
+  preferForegroundWhenNotSetup?: boolean;
+}): Promise<void> {
+  const {
+    profile,
+    shouldRunSetupForPlan,
+    shouldOpenBrowser,
+    progress,
+    preferForegroundWhenNotSetup,
+  } = opts;
+  const authDir = resolveAuthDir({
+    profile,
+    kind: "installed",
+  });
+  let launcherConfig = syncServerSetupStateInConfigWhenDerivedComplete(
+    profile,
+    opts.launcherConfig,
+    authDir,
+  );
+
+  const port = launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
+  const url = buildLocalServerUrl(port);
+
+  const lifecycle = resolveEffectiveServerSetupLifecycleState(
+    "server",
+    launcherConfig.server_setup_state,
+    authDir,
+  );
+  const needsBootstrapCeremony = needsInstalledBootstrapCeremony(lifecycle);
+
+  const authNotInitialized = !isAuthInitialized(authDir);
+  const alreadyRunning = shouldRunSetupForPlan
+    ? false
+    : (
+        await readServerStatus({
+          kind: "installed",
+          profile,
+        })
+      ).running;
+
+  let bootstrapSetupToken: string | null = null;
+  if (authNotInitialized && !alreadyRunning) {
+    try {
+      bootstrapSetupToken = await mintSetupToken(authDir);
+    } catch (error) {
+      throw new CliError(
+        `Failed to mint first-time setup token in ${authDir}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        1,
+        { code: CLI_ERR.internalError, authDir },
+      );
+    }
+  }
+
+  const needsRecoveryKeyExitFlow = needsBootstrapCeremony;
+  const startPlan = resolveLauncherStartPlan({
+    shouldRunSetup: shouldRunSetupForPlan,
+    needsRecoveryKeyExitFlow,
+    alreadyRunning,
+    shouldOpenBrowser,
+    preferForegroundWhenNotSetup,
+  });
+
+  const startupSpinner = startInlineSpinner(
+    `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(profile)}: ${paintValue(url)}`,
+  );
+
+  let browserHandled = false;
+  let runningUrl = url;
+  try {
+    await startServer(
+      {
+        kind: "installed",
+        profile,
+      },
+      startPlan.startMode,
+      async (status) => {
+        const finalUrl = status.url;
+        runningUrl = finalUrl;
+        progress?.setServerUrl(finalUrl);
+        progress?.mark("server_started");
+        startupSpinner.stop(
+          formatServerLifecycleMessage(
+            startPlan.readyLabel === "Already started"
+              ? "already_started"
+              : "started",
+            finalUrl,
+            profile,
+          ),
+        );
+
+        if (bootstrapSetupToken) {
+          printSetupToken({
+            token: bootstrapSetupToken,
+            appUrl: finalUrl,
+            bindAddress: launcherConfig.bind_address,
+          });
+        }
+
+        if (!browserHandled && startPlan.shouldOpenBrowserOnReady) {
+          browserHandled = true;
+          const browserUrl = bootstrapSetupToken
+            ? `${finalUrl}/?setupToken=${encodeURIComponent(bootstrapSetupToken)}`
+            : finalUrl;
+          await openBrowser(browserUrl);
+        }
+
+        // Only prompt for passphrase creation when auth is not initialized yet (skip on recovery-only resume).
+        if (needsRecoveryKeyExitFlow && authNotInitialized) {
+          await printPassphraseHint();
+        }
+      },
+    );
+
+    if (needsRecoveryKeyExitFlow) {
+      const recoveryKey = await waitForRecoveryKeyFile(authDir);
+      printRecoveryKey(recoveryKey);
+      printRecoveryKeyExitHint(runningUrl);
+      progress?.mark("awaiting_recovery_key");
+      writeConfigFile(
+        {
+          ...launcherConfig,
+          server_setup_state: "complete",
+        },
+        { profile, kind: "installed" },
+      );
+      await waitForEnterKey(progress);
+    }
+  } finally {
+    startupSpinner.stop(null);
+  }
 }
 
 export function createHirotaskmanagerProgram(): Command {
@@ -393,17 +575,6 @@ export function createHirotaskmanagerProgram(): Command {
           return;
         }
 
-        if (!setupResult.setupMeta.shouldStartLocalServer) {
-          const skillsInstalled = ensureBundledSkills();
-          if (setupResult.setupMeta.justFinishedInteractiveSetup) {
-            printSetupNextSteps({
-              profileName: workingProfile,
-              skillsInstalled,
-            });
-          }
-          return;
-        }
-
         const shouldRunSetupForPlan = wizardRan;
 
         const skillsInstalled = ensureBundledSkills();
@@ -421,128 +592,13 @@ export function createHirotaskmanagerProgram(): Command {
           }
         }
 
-        const port = launcherConfig.port ?? INSTALLED_DEFAULT_PORT;
-        const authDir = resolveAuthDir({
+        await runInstalledServerStartWithLifecycle({
           profile: workingProfile,
-          kind: "installed",
+          launcherConfig: launcherConfig,
+          shouldRunSetupForPlan,
+          shouldOpenBrowser: launcherConfig.open_browser ?? true,
+          progress,
         });
-        const shouldOpenBrowser = launcherConfig.open_browser ?? true;
-
-        const url = buildLocalServerUrl(port);
-        const authNotInitialized = !isAuthInitialized(authDir);
-        const needsRecoveryKeyExitFlow =
-          setupResult.setupMeta.justFinishedInteractiveSetup &&
-          authNotInitialized;
-        const alreadyRunning = shouldRunSetupForPlan
-          ? false
-          : (
-              await readServerStatus({
-                kind: "installed",
-                profile: workingProfile,
-              })
-            ).running;
-
-        // Task #31338: when the server has no passphrase yet, mint a single-
-        // use bootstrap token *before* it starts listening so a network race
-        // cannot beat the legitimate operator to `POST /api/auth/setup`. We
-        // skip when the server is already running on this profile — in that
-        // case the prior launcher process already minted a token (or setup is
-        // already complete), and minting a second token now would silently
-        // invalidate the one the operator may have already pasted into a
-        // browser tab.
-        let bootstrapSetupToken: string | null = null;
-        if (authNotInitialized && !alreadyRunning) {
-          try {
-            bootstrapSetupToken = await mintSetupToken(authDir);
-          } catch (error) {
-            // Mint failures (disk full, permission denied) must surface — a
-            // missing sidecar would lock the operator out of the web setup
-            // form, which is a worse failure than crashing here with a clear
-            // CliError. Wrap so exitWithError prints the usual JSON shape.
-            throw new CliError(
-              `Failed to mint first-time setup token in ${authDir}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-              1,
-              { code: CLI_ERR.internalError, authDir },
-            );
-          }
-        }
-        const startPlan = resolveLauncherStartPlan({
-          shouldRunSetup: shouldRunSetupForPlan,
-          needsRecoveryKeyExitFlow,
-          alreadyRunning,
-          shouldOpenBrowser,
-        });
-
-        const startupSpinner = startInlineSpinner(
-          `${alreadyRunning ? "Checking Server" : "Starting Server"} with profile ${paintValue(workingProfile)}: ${paintValue(url)}`,
-        );
-
-        let browserHandled = false;
-        let runningUrl = url;
-        try {
-          await startServer(
-            {
-              kind: "installed",
-              profile: workingProfile,
-            },
-            startPlan.startMode,
-            async (status) => {
-              const finalUrl = status.url;
-              runningUrl = finalUrl;
-              progress.setServerUrl(finalUrl);
-              progress.mark("server_started");
-              startupSpinner.stop(
-                formatServerLifecycleMessage(
-                  startPlan.readyLabel === "Already started"
-                    ? "already_started"
-                    : "started",
-                  finalUrl,
-                  workingProfile,
-                ),
-              );
-
-              if (bootstrapSetupToken) {
-                // Print before opening the browser so the operator sees the
-                // token in the terminal even if `openBrowser` fires their
-                // browser to the front and steals focus.
-                printSetupToken({
-                  token: bootstrapSetupToken,
-                  appUrl: finalUrl,
-                  bindAddress: launcherConfig.bind_address,
-                });
-              }
-
-              if (!browserHandled && startPlan.shouldOpenBrowserOnReady) {
-                browserHandled = true;
-                // Pre-fill the token in the URL so a same-machine operator
-                // can finish setup with one click. Network observers don't
-                // see this — it's only sent to the loopback browser.
-                const browserUrl = bootstrapSetupToken
-                  ? `${finalUrl}/?setupToken=${encodeURIComponent(bootstrapSetupToken)}`
-                  : finalUrl;
-                await openBrowser(browserUrl);
-              }
-
-              if (needsRecoveryKeyExitFlow) {
-                await printPassphraseHint();
-              }
-            },
-          );
-
-          if (needsRecoveryKeyExitFlow) {
-            const recoveryKey = await waitForRecoveryKeyFile(authDir);
-            printRecoveryKey(recoveryKey);
-            printRecoveryKeyExitHint(runningUrl);
-            // Mark before the final pause so a Ctrl+C here triggers the
-            // recovery-key-aware abort messages ("Server keeps running...").
-            progress.mark("awaiting_recovery_key");
-            await waitForEnterKey(progress);
-          }
-        } finally {
-          startupSpinner.stop(null);
-        }
       } catch (error) {
         exitWithError(error);
       } finally {
@@ -622,46 +678,23 @@ export function createHirotaskmanagerProgram(): Command {
             { code: CLI_ERR.missingRequired, profile },
           );
         }
-        const port = config.port ?? INSTALLED_DEFAULT_PORT;
-        const status = await readServerStatus({
-          kind: "installed",
+        if (config.role !== "server") {
+          throw new CliError(
+            `Profile "${profile}" is a client profile — use the remote API URL, not hirotaskmanager server start.`,
+            2,
+            { code: CLI_ERR.invalidArgs, role: config.role },
+          );
+        }
+        // Same bootstrap ceremony as the default launcher: mint/setup token,
+        // recovery key, and server_setup_state — so `server start` is not a
+        // second-class entry point for first-time setup.
+        await runInstalledServerStartWithLifecycle({
           profile,
-        });
-        const startPlan = resolveLauncherStartPlan({
-          shouldRunSetup: false,
-          needsRecoveryKeyExitFlow: false,
-          alreadyRunning: status.running,
+          launcherConfig: config,
+          shouldRunSetupForPlan: false,
           shouldOpenBrowser: false,
           preferForegroundWhenNotSetup: options.foreground === true,
         });
-        const startupSpinner = startInlineSpinner(
-          `${status.running ? "Checking Server" : "Starting Server"} with profile ${paintValue(profile)}: ${paintValue(status.running ? status.url : buildLocalServerUrl(port))}`,
-        );
-
-        try {
-          // Launcher `server start` prints the same lifecycle line shape as
-          // `server stop` (see formatServerLifecycleMessage) instead of JSON.
-          await startServer(
-            {
-              kind: "installed",
-              profile,
-            },
-            startPlan.startMode,
-            async (started) => {
-              startupSpinner.stop(
-                formatServerLifecycleMessage(
-                  startPlan.readyLabel === "Already started"
-                    ? "already_started"
-                    : "started",
-                  started.url,
-                  profile,
-                ),
-              );
-            },
-          );
-        } finally {
-          startupSpinner.stop(null);
-        }
       } catch (error) {
         exitWithError(error);
       }

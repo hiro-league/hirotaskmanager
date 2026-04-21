@@ -42,9 +42,8 @@ Hiro Task Manager is in active development and is not yet ready for production u
 
 ## Prerequisites
 
-- Bun (https://bun.sh/docs/installation) for bun/bunx commands
-Or
-- Node.js (https://nodejs.org/en/download/) for npm/npx commands
+- You need either [bun](https://bun.sh/docs/installation) or [node.js](https://nodejs.org/en/download/), Not both.
+- You can replace all bun/bunx commands below with npm/npx commands.
 
 ## Install (Local Setup)
 

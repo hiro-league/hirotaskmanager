@@ -172,6 +172,8 @@ export function printSetupNextSteps(opts: {
     "",
     ...skillLines,
     "",
+    `Explore the CLI: ${cliHelpCommand}`,
+    "",
     "Tip: using Bun? Replace 'npx' with 'bunx'.",
   ];
 

@@ -245,7 +245,7 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     // Mint prompt was actually shown with "no" as the default (default tracks
     // the require_cli_api_key policy: off => mint default no).
     expect(run.mintPromptText).toContain("Mint a CLI API key now?");
-    expect(run.mintPromptText).toContain("Not needed for local CLI use");
+    expect(run.mintPromptText).toContain("Required for remote CLI clients");
     expect(run.mintPromptDefault).toBe("no");
 
     expect(

@@ -90,7 +90,9 @@ export function TaskMarkdownField({
         autoFocus={autoFocus}
         data-color-mode={mdColorMode}
         previewOptions={{
-          components: markdownPreviewComponents,
+          // @uiw/react-md-editor bundles react-markdown@9; the app depends on react-markdown@10.
+          // Their `Components` types diverge (e.g. `symbol`); the runtime shape is compatible.
+          components: markdownPreviewComponents as never,
         }}
         textareaProps={{
           id: `${titleId}-body`,

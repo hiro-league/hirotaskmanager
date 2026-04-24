@@ -27,8 +27,8 @@ describe("printSetupNextSteps", () => {
     });
 
     expect(stdout).toContain("+-");
-    expect(stdout).toContain("REQUIRED BEFORE USING hirotm");
-    expect(stdout).toContain("Install AI agent skills on the machine where you will run hirotm.");
+    expect(stdout).toContain("**IMPORTANT**");
+    expect(stdout).toContain("Install AI agent skills on the machine where you will run hirotm cli.");
     expect(stdout).toContain("hirotm --help");
     expect(stdout).toContain("1. Repo skills  : npx skills add hiro-league/hirotaskmanager");
     expect(stdout).toContain("2. Update later : npx skills update");

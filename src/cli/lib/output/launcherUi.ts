@@ -94,17 +94,6 @@ export async function spinForMoment(
   spinner.stop(finalText);
 }
 
-export function formatTextPrompt(label: string, defaultValue: string): string {
-  return `${label}: ${paintValue(`[${defaultValue}]`)}`;
-}
-
-export function formatBooleanPrompt(
-  label: string,
-  defaultValue: boolean,
-): string {
-  return `${label} ${paintValue(`[${defaultValue ? "Y/n" : "y/N"}]`)}`;
-}
-
 export function printInteractiveSetupHeader(opts: {
   profileName: string;
   firstProfileOnMachine: boolean;
@@ -178,14 +167,12 @@ export function printSetupNextSteps(opts: {
     skillLines.push("2. Update later : npx skills update");
   }
   const lines = [
-    "REQUIRED BEFORE USING hirotm",
-    "Install AI agent skills on the machine where you will run hirotm.",
+    "**IMPORTANT**",
+    "Install AI agent skills on the machine where you will run hirotm cli.",
     "",
     ...skillLines,
     "",
     "Tip: using Bun? Replace 'npx' with 'bunx'.",
-    "",
-    `After skills install: ${cliHelpCommand}`,
   ];
 
   // Package managers may block postinstall hooks, so setup must surface the
@@ -277,7 +264,7 @@ export function printSetupToken(opts: {
       : "Open this in your browser:";
   const deepLink = `${appUrl}/?setupToken=${encodeURIComponent(token)}`;
   const purposeHint =
-    "Required for the very first passphrase. Without it, anyone reaching this server's URL could squat the passphrase.";
+    "Required for the very first passphrase.";
 
   if (!out.isTTY) {
     line();

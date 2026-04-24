@@ -1,84 +1,82 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
-import { runServerSetupWizard } from "./setupWizards";
 import { resetRuntimeConfigSelectionForTests } from "../../shared/runtimeConfig";
 
 // The interactive server wizard always offers "Mint a CLI API key now?" on a
 // fresh server profile (regardless of require_cli_api_key policy), with a
 // policy-aware default and a breadcrumb command printed when the operator
-// declines. These tests pin that contract end-to-end: scripted stdin drives
-// the full prompt sequence, and we assert on what landed in the profile and
-// what was printed.
+// declines. These tests pin that contract end-to-end: a per-test answer table
+// drives the @inquirer/prompts mock, and we assert on what landed in the
+// profile and what was printed.
+//
+// Prompts are matched by a substring of the prompt's `message` (the wizard's
+// own prompt text). When the wizard adds or removes a prompt this test will
+// throw with a clear "no scripted answer for prompt: <message>" so the table
+// stays in lockstep with the wizard.
 
 interface ScriptedRun {
   readonly tmpRoot: string;
   readonly profile: string;
-  /** Lines written via console.log (post-prompt status, breadcrumbs, etc.). */
   readonly stdoutLines: string[];
   readonly stderrLines: string[];
-  /**
-   * Lines written via process.stdout.write — this is where readline prompt
-   * questions surface, since `rl.question(...)` writes the question text
-   * straight to stdout rather than going through console.log. We split on `\n`
-   * and discard the spinner clear/redraw fragments so prompt-text assertions
-   * stay readable.
-   */
-  readonly stdoutWriteLines: string[];
+  readonly mintPromptText: string | null;
+  readonly mintPromptDefault: "yes" | "no" | null;
 }
 
-/**
- * Drive `runServerSetupWizard` with a fixed script of prompt answers.
- *
- * The wizard creates a fresh `readline` interface for every prompt and reads
- * from `process.stdin`. We swap stdin for a single `Readable` that emits the
- * scripted lines; consecutive readline interfaces drain it sequentially. TTY
- * is forced on for both stdin and stdout so the wizard takes the interactive
- * branch; ANSI is suppressed via NO_COLOR so output assertions stay readable.
- */
+type AnswerEntry =
+  | { kind: "select"; value: "yes" | "no" }
+  | { kind: "input"; value: string };
+
+type AnswerMap = ReadonlyArray<readonly [string, AnswerEntry]>;
+
+function findAnswer(
+  table: AnswerMap,
+  message: string,
+  promptKind: "select" | "input",
+): AnswerEntry {
+  for (const [needle, entry] of table) {
+    if (message.includes(needle) && entry.kind === promptKind) return entry;
+  }
+  throw new Error(
+    `No scripted ${promptKind} answer for prompt: "${message}". ` +
+      "Add it to the test's answer table.",
+  );
+}
+
+interface InquirerCallSpy {
+  /** Captures every select prompt the wizard renders, in order. */
+  readonly selectCalls: { message: string; default?: string }[];
+  /** Captures every input prompt the wizard renders, in order. */
+  readonly inputCalls: { message: string; default?: string }[];
+}
+
 async function runScriptedServerWizard(opts: {
   tmpRoot: string;
   profile: string;
   rerun?: boolean;
-  answers: readonly string[];
+  answers: AnswerMap;
 }): Promise<ScriptedRun> {
   const stdoutLines: string[] = [];
   const stderrLines: string[] = [];
-  let stdoutWriteBuffer = "";
-  const stdoutWriteLines: string[] = [];
+  const spy: InquirerCallSpy = { selectCalls: [], inputCalls: [] };
 
-  const fakeStdin = Readable.from(
-    (async function* () {
-      for (const line of opts.answers) {
-        yield `${line}\n`;
-      }
-    })(),
-  );
-
-  const originalStdin = process.stdin;
-  const originalStdinIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
-  const originalStdoutIsTTY = process.stdout.isTTY;
-  const originalNoColor = process.env.NO_COLOR;
   const originalLog = console.log;
   const originalErr = console.error;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-
-  Object.defineProperty(process, "stdin", {
+  // canPromptInteractively() requires both stdin.isTTY and stdout.isTTY; under
+  // bun:test neither is set, so the wizard would take its non-interactive
+  // branch (no prompts) without this shim.
+  const originalStdinIsTTY = (process.stdin as { isTTY?: boolean }).isTTY;
+  const originalStdoutIsTTY = process.stdout.isTTY;
+  Object.defineProperty(process.stdin, "isTTY", {
     configurable: true,
-    get: () => fakeStdin,
+    value: true,
   });
   Object.defineProperty(process.stdout, "isTTY", {
     configurable: true,
     value: true,
   });
-  // canPromptInteractively() requires both stdin.isTTY and stdout.isTTY.
-  Object.defineProperty(fakeStdin, "isTTY", {
-    configurable: true,
-    value: true,
-  });
-  process.env.NO_COLOR = "1";
 
   console.log = (...args: unknown[]): void => {
     stdoutLines.push(args.map((a) => String(a)).join(" "));
@@ -86,25 +84,48 @@ async function runScriptedServerWizard(opts: {
   console.error = (...args: unknown[]): void => {
     stderrLines.push(args.map((a) => String(a)).join(" "));
   };
-  // process.stdout.write is what readline's question() and the spinner use;
-  // intercept it so we can assert on prompt text. Spinner frames write
-  // partial lines, so buffer-and-split keeps logical lines whole. Also drop
-  // ANSI clearLine sequences (`\x1b[2K`) and `cursorTo(0)` (`\r`) noise.
-  process.stdout.write = ((chunk: unknown): boolean => {
-    const text =
-      typeof chunk === "string"
-        ? chunk
-        : chunk instanceof Buffer
-          ? chunk.toString("utf8")
-          : String(chunk);
-    stdoutWriteBuffer += text;
-    let nl: number;
-    while ((nl = stdoutWriteBuffer.indexOf("\n")) >= 0) {
-      stdoutWriteLines.push(stdoutWriteBuffer.slice(0, nl));
-      stdoutWriteBuffer = stdoutWriteBuffer.slice(nl + 1);
-    }
-    return true;
-  }) as typeof process.stdout.write;
+
+  // Mock @inquirer/prompts so each prompt resolves with the scripted answer
+  // for its message text. We deliberately swap in a fresh module object per
+  // test (via mock.module) so answer tables don't leak across tests.
+  mock.module("@inquirer/prompts", () => ({
+    select: async (config: {
+      message: string;
+      choices: { value: unknown }[];
+      default?: unknown;
+    }): Promise<unknown> => {
+      spy.selectCalls.push({
+        message: config.message,
+        default: config.default as string | undefined,
+      });
+      const ans = findAnswer(opts.answers, config.message, "select");
+      return ans.value;
+    },
+    input: async (config: {
+      message: string;
+      default?: string;
+      validate?: (v: string) => true | string | Promise<true | string>;
+    }): Promise<string> => {
+      spy.inputCalls.push({ message: config.message, default: config.default });
+      const ans = findAnswer(opts.answers, config.message, "input");
+      // Honour the validator the wizard installs (so a malformed value in the
+      // test would still be caught); a successful validate returns true.
+      if (config.validate) {
+        const verdict = await config.validate(ans.value);
+        if (verdict !== true) {
+          throw new Error(
+            `Scripted input "${ans.value}" failed validation: ${verdict}`,
+          );
+        }
+      }
+      return ans.value;
+    },
+  }));
+
+  // Re-import the wizard AFTER the mock is installed so it picks up the
+  // mocked module. Importing once at the top of the file would bind to the
+  // real module before the mock takes effect.
+  const { runServerSetupWizard } = await import("./setupWizards");
 
   try {
     await runServerSetupWizard({
@@ -112,10 +133,8 @@ async function runScriptedServerWizard(opts: {
       rerun: opts.rerun ?? false,
     });
   } finally {
-    Object.defineProperty(process, "stdin", {
-      configurable: true,
-      get: () => originalStdin,
-    });
+    console.log = originalLog;
+    console.error = originalErr;
     Object.defineProperty(process.stdout, "isTTY", {
       configurable: true,
       value: originalStdoutIsTTY,
@@ -128,24 +147,19 @@ async function runScriptedServerWizard(opts: {
         value: originalStdinIsTTY,
       });
     }
-    if (originalNoColor === undefined) {
-      delete process.env.NO_COLOR;
-    } else {
-      process.env.NO_COLOR = originalNoColor;
-    }
-    console.log = originalLog;
-    console.error = originalErr;
-    process.stdout.write = originalStdoutWrite;
   }
 
-  if (stdoutWriteBuffer.length > 0) stdoutWriteLines.push(stdoutWriteBuffer);
+  const mintCall = spy.selectCalls.find((c) =>
+    c.message.includes("Mint a CLI API key now?"),
+  );
 
   return {
     tmpRoot: opts.tmpRoot,
     profile: opts.profile,
     stdoutLines,
     stderrLines,
-    stdoutWriteLines,
+    mintPromptText: mintCall?.message ?? null,
+    mintPromptDefault: (mintCall?.default as "yes" | "no" | undefined) ?? null,
   };
 }
 
@@ -186,23 +200,39 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     } else {
       process.env.USERPROFILE = prevUserProfile;
     }
+    // Note: bun's mock.module persists the mock for the rest of the test
+    // run. Each test's runScriptedServerWizard re-installs its own answer
+    // table before importing the wizard, so leakage between these tests is
+    // controlled. A defensive "throw on unmocked import" stub here breaks
+    // unrelated subsequent test files that legitimately import the prompts
+    // module via the wizard, so we deliberately don't reset the mock here.
   });
 
-  test("loopback-only + no-auth: mint prompt is offered with default N, declining prints the day-2 command", async () => {
+  test("loopback-only + no-auth: mint prompt is offered with default 'no', declining prints the day-2 command", async () => {
     const profile = "server";
     const run = await runScriptedServerWizard({
       tmpRoot,
       profile,
       answers: [
-        "", // 1. profile name (accept default)
-        "", // 2. port
-        "", // 3. data dir
-        "", // 4. accept remote? (default N)
-        "", // 5. require CLI API key locally? (default N)
-        "n", // 6. open browser (force N — keeps Bun.sleep noise minimal)
-        "", // 7. mint key now? (default N because policy doesn't require it)
-        "n", // 8. set as default profile? (force N — single-profile machine, both Y/N work)
-        "n", // 9. start server now? (force N)
+        ["Profile name", { kind: "input", value: profile }],
+        ["Pick a port", { kind: "input", value: "" }],
+        ["Pick a data directory", { kind: "input", value: "" }],
+        [
+          "Require a CLI API key for local connections too?",
+          { kind: "select", value: "no" },
+        ],
+        [
+          "Open the default browser",
+          { kind: "select", value: "no" },
+        ],
+        [
+          "Mint a CLI API key now?",
+          { kind: "select", value: "no" },
+        ],
+        [
+          "Set this profile as the default",
+          { kind: "select", value: "no" },
+        ],
       ],
     });
 
@@ -212,16 +242,12 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     expect(cfg.require_cli_api_key).toBeUndefined();
     expect(cfg.api_key).toBeUndefined();
 
-    // Mint prompt was actually shown with N as the default ([y/N], not [Y/n]).
-    // Prompt text comes through readline's question() -> process.stdout.write.
-    const mintPromptLine = run.stdoutWriteLines.find((l) =>
-      l.includes("Mint a CLI API key now?"),
-    );
-    expect(mintPromptLine).toBeDefined();
-    expect(mintPromptLine!).toContain("[y/N]");
-    expect(mintPromptLine!).toContain("Not needed for local CLI use");
+    // Mint prompt was actually shown with "no" as the default (default tracks
+    // the require_cli_api_key policy: off => mint default no).
+    expect(run.mintPromptText).toContain("Mint a CLI API key now?");
+    expect(run.mintPromptText).toContain("Not needed for local CLI use");
+    expect(run.mintPromptDefault).toBe("no");
 
-    // Breadcrumb printed after declining.
     expect(
       run.stdoutLines.some((l) =>
         l.includes("No CLI API key minted. To create one later, run:"),
@@ -242,15 +268,16 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
       tmpRoot,
       profile,
       answers: [
-        "", // profile name
-        "", // port
-        "", // data dir
-        "", // accept remote? N
-        "", // require CLI API key locally? N
-        "n", // open browser
-        "y", // mint key now? -> Y
-        "n", // set as default? N
-        "n", // start now? N
+        ["Profile name", { kind: "input", value: profile }],
+        ["Pick a port", { kind: "input", value: "" }],
+        ["Pick a data directory", { kind: "input", value: "" }],
+        [
+          "Require a CLI API key for local connections too?",
+          { kind: "select", value: "no" },
+        ],
+        ["Open the default browser", { kind: "select", value: "no" }],
+        ["Mint a CLI API key now?", { kind: "select", value: "yes" }],
+        ["Set this profile as the default", { kind: "select", value: "no" }],
       ],
     });
 
@@ -259,7 +286,6 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     expect(cfg.api_key as string).toMatch(/^tmk-[0-9a-f]{64}$/);
     expect(cfg.require_cli_api_key).toBeUndefined(); // policy unchanged
 
-    // Breadcrumb must NOT appear when a key was minted.
     expect(
       run.stdoutLines.some((l) =>
         l.includes("No CLI API key minted. To create one later, run:"),
@@ -267,21 +293,23 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     ).toBe(false);
   });
 
-  test("require_cli_api_key=Y: mint prompt defaults to Y and uses the policy-aware wording", async () => {
+  test("require_cli_api_key=yes: mint prompt defaults to 'yes' and uses the policy-aware wording", async () => {
     const profile = "server";
     const run = await runScriptedServerWizard({
       tmpRoot,
       profile,
       answers: [
-        "", // profile name
-        "", // port
-        "", // data dir
-        "", // accept remote? N (stay loopback)
-        "y", // require CLI API key locally? Y -> needsKeyByPolicy=true
-        "n", // open browser
-        "", // mint key now? -> default Y under this policy
-        "n", // set as default? N
-        "n", // start now? N
+        ["Profile name", { kind: "input", value: profile }],
+        ["Pick a port", { kind: "input", value: "" }],
+        ["Pick a data directory", { kind: "input", value: "" }],
+        [
+          "Require a CLI API key for local connections too?",
+          { kind: "select", value: "yes" },
+        ],
+        ["Open the default browser", { kind: "select", value: "no" }],
+        // Accept the mint default — it should be "yes" under this policy.
+        ["Mint a CLI API key now?", { kind: "select", value: "yes" }],
+        ["Set this profile as the default", { kind: "select", value: "no" }],
       ],
     });
 
@@ -290,12 +318,9 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
     expect(typeof cfg.api_key).toBe("string");
     expect(cfg.api_key as string).toMatch(/^tmk-[0-9a-f]{64}$/);
 
-    const mintPromptLine = run.stdoutWriteLines.find((l) =>
-      l.includes("Mint a CLI API key now?"),
-    );
-    expect(mintPromptLine).toBeDefined();
-    expect(mintPromptLine!).toContain("[Y/n]");
-    expect(mintPromptLine!).toContain("server requires one");
+    expect(run.mintPromptText).toContain("Mint a CLI API key now?");
+    expect(run.mintPromptText).toContain("server requires one");
+    expect(run.mintPromptDefault).toBe("yes");
 
     expect(
       run.stdoutLines.some((l) =>
@@ -321,29 +346,28 @@ describe("server setup wizard: mint prompt + breadcrumb", () => {
       "utf8",
     );
 
-    // rerun=true skips the "Profile name" prompt, so one fewer answer.
     const run = await runScriptedServerWizard({
       tmpRoot,
       profile,
       rerun: true,
       answers: [
-        "", // port
-        "", // data dir
-        "", // accept remote? N
-        "", // require CLI API key locally? N
-        "n", // open browser
-        // (no mint prompt because existing.api_key is set)
-        "n", // set as default? N
-        "n", // start now? N
+        ["Pick a port", { kind: "input", value: "" }],
+        ["Pick a data directory", { kind: "input", value: "" }],
+        [
+          "Require a CLI API key for local connections too?",
+          { kind: "select", value: "no" },
+        ],
+        ["Open the default browser", { kind: "select", value: "no" }],
+        // No mint prompt because existing.api_key is set — if the wizard
+        // tries to render one, findAnswer() will throw with a clear message.
+        ["Set this profile as the default", { kind: "select", value: "no" }],
       ],
     });
 
     const cfg = readProfileConfig(tmpRoot, profile);
     expect(cfg.api_key).toBe(preExistingKey);
 
-    expect(
-      run.stdoutWriteLines.some((l) => l.includes("Mint a CLI API key now?")),
-    ).toBe(false);
+    expect(run.mintPromptText).toBe(null);
     expect(
       run.stdoutLines.some((l) =>
         l.includes("No CLI API key minted. To create one later, run:"),

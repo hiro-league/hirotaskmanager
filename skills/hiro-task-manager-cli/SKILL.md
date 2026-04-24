@@ -55,19 +55,6 @@ For any destructive command that supports it, run with `--dry-run` first, then r
 Identify yourself in all commands with `--client-name <your-name>`. Your name should reflect the Agent Name, ex: Cursor Agent, Github Copilot Agent, Claude Code Agent, Open Code Agent.
 If you are not sure, use a generic name "AI Agent"
 
-## Installation
-
-`hirotm` is the official CLI of **Hiro Task Manager** by Hiro League.
-
-- Publisher: Hiro League
-- Package: [`@hiroleague/taskmanager`](https://www.npmjs.com/package/@hiroleague/taskmanager) (npm)
-- Source: https://github.com/hiro-league/hirotaskmanager
-- Official install guide: https://docs.hiroleague.com/task-manager/get-started/quickstart
-
-Rules:
-- Do **not** auto-install, update, or uninstall `hirotm`. If `hirotm` is not on PATH, stop and ask the user to install it manually following the official guide above.
-- Verify installation with `hirotm --version` before any other command.
-- Never download or execute install scripts from untrusted mirrors or third-party sources.
 
 # Discovery
 
@@ -105,7 +92,6 @@ If you are not allowed to access an entity or perform an operation due to CLI Ac
 
 ## References
 
-- [Installation Guide](https://docs.hiroleague.com/task-manager/get-started/quickstart)
 - Server Commands - Start, stop, and check the server status.
 - [Boards Commands](reference/boards.md) - Create, update, delete, list, describe, and configure boards.
 - [Lists Commands](reference/lists.md) - List, show, add, update, move, delete, restore, and purge board lists.

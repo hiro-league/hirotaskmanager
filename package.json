@@ -1,6 +1,6 @@
 {
   "name": "@hiroleague/taskmanager",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "description": "Task Manager for Solo Builders and AI Agents, working as a team",
   "license": "MIT",
@@ -70,6 +70,7 @@
     "@dnd-kit/react": "^0.3.2",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@fontsource/lora": "^5.2.8",
+    "@inquirer/prompts": "^8.4.2",
     "@number-flow/react": "^0.6.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

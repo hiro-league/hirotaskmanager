@@ -1,11 +1,17 @@
 /**
  * Phase 6: interactive setup flows for server and client profiles (design §2.8).
  * Initial development: no backward compatibility with pre-role profiles.
+ *
+ * All operator-facing prompts route through @inquirer/prompts (arrow-key
+ * select for finite choices, inline input with [default] hint for free text).
+ * The three local helpers below are thin adapters that preserve our
+ * SetupProgress label hooks and SIGINT bridging — call sites stay identical
+ * to the prior readline-based version.
  */
 import path from "node:path";
 import process from "node:process";
-import type { Interface as ReadlineInterface } from "node:readline";
-import { createInterface } from "node:readline/promises";
+import { input, select } from "@inquirer/prompts";
+import { ansi, colorEnabled } from "../../shared/terminalColors";
 import type { SetupProgress } from "./setupProgress";
 import {
   DEFAULT_BIND_ADDRESS,
@@ -33,8 +39,6 @@ import { buildLocalServerUrl } from "../../shared/serverStatus";
 import { resolvePersistedServerSetupStateForConfigWrite } from "../../shared/serverSetupLifecycle";
 import { CliError } from "../lib/output/output";
 import {
-  formatBooleanPrompt,
-  formatTextPrompt,
   printCliApiKey,
   printInteractiveSetupHeader,
   printSavedProfileSummary,
@@ -108,29 +112,68 @@ function resolveServerProfileDefaults(profile: string): Required<
   };
 }
 
-/**
- * Bridge readline's auto-installed SIGINT handler into our launcher-level
- * gate (sigintGate.ts). Without this re-emit, readline swallows Ctrl+C and
- * the gate never sees the signal during a prompt — so the first press would
- * appear to do nothing (the original silent-exit bug). Returns a cleanup
- * function caller MUST run before closing the rl interface.
- */
-function forwardReadlineSigint(rl: ReadlineInterface): () => void {
-  const onRlSigint = (): void => {
-    // Re-emit on the process so the launcher's installSigintGate handler
-    // runs. We do not close `rl` here: the user may want to keep typing
-    // their answer after a single Ctrl+C (the gate prints a warning and
-    // waits for a second press to abort).
-    process.emit("SIGINT");
-  };
-  rl.on("SIGINT", onRlSigint);
-  return () => rl.off("SIGINT", onRlSigint);
-}
-
 interface PromptHooks {
   progress?: SetupProgress;
   /** Short, human-readable label used when reporting "Waiting on: <label>". */
   label?: string;
+}
+
+/**
+ * Shared Inquirer theme for every wizard prompt. Two operator-visible tweaks
+ * over the library default:
+ *   - Done-state prefix uses bold green to match `paintSuccess` (the same
+ *     green as "Profile Saved:" / "Profile Created:") instead of the default
+ *     theme's check, which renders as a violet/blue glyph in some terminals.
+ *   - A trailing space inside the prefix string adds breathing room between
+ *     the glyph and the message — Inquirer concatenates `${prefix}${message}`
+ *     verbatim, so the gap has to live in the prefix itself.
+ * Honours NO_COLOR / non-TTY via `colorEnabled` so piped output stays clean.
+ */
+const wizardPromptTheme = {
+  prefix: {
+    idle: colorEnabled(process.stdout)
+      ? `${ansi.bold}${ansi.cyan}?${ansi.reset} `
+      : "? ",
+    done: colorEnabled(process.stdout)
+      ? `${ansi.bold}${ansi.green}\u2714${ansi.reset} `
+      : "\u2714 ",
+  },
+} as const;
+
+/**
+ * Inquirer throws an ExitPromptError when the user presses Ctrl+C inside any
+ * of its prompts. We intercept that, re-emit SIGINT so the launcher-level
+ * gate (sigintGate.ts) sees the signal and runs its two-press abort UX, and
+ * re-throw so the wizard unwinds — same observable behavior as the prior
+ * readline-based bridge, just routed through Inquirer's lifecycle.
+ */
+function bridgeInquirerExit(err: unknown): never {
+  process.emit("SIGINT");
+  throw err;
+}
+
+function isInquirerExitError(err: unknown): boolean {
+  return err instanceof Error && err.name === "ExitPromptError";
+}
+
+function isInquirerNonTtyError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NonTtyError";
+}
+
+/**
+ * Translate Inquirer's NonTtyError into a CLI-shaped error so the wizard
+ * surfaces a single, actionable failure when stdin/stdout aren't a real TTY
+ * (CI, piped input, `ssh host cmd` without -t). We require interactivity
+ * everywhere the wizard prompts: there's no plain-readline fallback.
+ */
+function rethrowAsNonTtyCliError(label: string | undefined): never {
+  const where = label ? ` (waiting on: ${label})` : "";
+  throw new CliError(
+    `Setup needs an interactive terminal${where}. ` +
+      "Run hirotaskmanager from a real terminal, or use `ssh -t` for remote sessions.",
+    2,
+    { code: CLI_ERR.invalidArgs },
+  );
 }
 
 async function promptWithDefault(
@@ -138,19 +181,20 @@ async function promptWithDefault(
   defaultValue: string,
   hooks: PromptHooks = {},
 ): Promise<string> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  const removeSigintForward = forwardReadlineSigint(rl);
   if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
-    const answer = await rl.question(`${question} `);
+    const answer = await input({
+      message: question,
+      default: defaultValue,
+      theme: wizardPromptTheme,
+    });
     return answer.trim() || defaultValue;
+  } catch (err) {
+    if (isInquirerNonTtyError(err)) rethrowAsNonTtyCliError(hooks.label);
+    if (isInquirerExitError(err)) bridgeInquirerExit(err);
+    throw err;
   } finally {
-    removeSigintForward();
     hooks.progress?.setCurrentPromptLabel(null);
-    rl.close();
   }
 }
 
@@ -159,41 +203,44 @@ async function promptBoolean(
   defaultValue: boolean,
   hooks: PromptHooks = {},
 ): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  const removeSigintForward = forwardReadlineSigint(rl);
   if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
-    for (;;) {
-      const answer = (await rl.question(`${question}: `))
-        .trim()
-        .toLowerCase();
-      if (!answer) return defaultValue;
-      if (answer === "y" || answer === "yes") return true;
-      if (answer === "n" || answer === "no") return false;
-      console.log("Please answer yes or no.");
-    }
+    // `select` over `confirm` so the user sees both options as a list and
+    // arrow-keys between them, with the default visibly highlighted. Matches
+    // the operator request: "selection instead of text input, default
+    // selected but user can change it."
+    const choice = await select<"yes" | "no">({
+      message: question,
+      choices: [
+        { name: "Yes", value: "yes" },
+        { name: "No", value: "no" },
+      ],
+      default: defaultValue ? "yes" : "no",
+      theme: wizardPromptTheme,
+    });
+    return choice === "yes";
+  } catch (err) {
+    if (isInquirerNonTtyError(err)) rethrowAsNonTtyCliError(hooks.label);
+    if (isInquirerExitError(err)) bridgeInquirerExit(err);
+    throw err;
   } finally {
-    removeSigintForward();
     hooks.progress?.setCurrentPromptLabel(null);
-    rl.close();
   }
 }
 
 /**
  * Prompt for a value with validation, re-prompting on bad input. Mirrors
- * `promptBoolean`'s loop-until-valid pattern (issue #31343: previously a single
+ * the previous loop-until-valid pattern (issue #31343: previously a single
  * typo in the api_url/api_key prompt threw and exited the wizard, forcing the
  * operator to restart `--setup-client` from scratch).
  *
  * - On empty input, falls back to `defaultValue` (which is itself fed through
  *   `validate`, so a blank default like "" is rejected naturally).
- * - On `CliError` from `validate`, prints the message and re-prompts. No retry
- *   cap — Ctrl+C is the user's exit. Other errors propagate.
- * - On EOF / closed stdin (no human to retry), throws once instead of looping
- *   forever.
+ * - On `CliError` from `validate`, the message becomes Inquirer's inline
+ *   validation hint and the prompt re-renders for another attempt. No retry
+ *   cap — Ctrl+C is the user's exit.
+ * - On EOF / closed stdin (no human to retry), throws once via the non-TTY
+ *   bridge instead of looping forever.
  */
 async function promptValidatedWithDefault<T>(
   question: string,
@@ -201,39 +248,32 @@ async function promptValidatedWithDefault<T>(
   validate: (raw: string) => T,
   hooks: PromptHooks = {},
 ): Promise<T> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  const removeSigintForward = forwardReadlineSigint(rl);
   if (hooks.label) hooks.progress?.setCurrentPromptLabel(hooks.label);
   try {
-    for (;;) {
-      let answer: string;
-      try {
-        answer = await rl.question(`${question} `);
-      } catch {
-        throw new CliError(
-          "Setup aborted: stdin closed before a valid value was provided.",
-          2,
-          { code: CLI_ERR.invalidArgs },
-        );
-      }
-      const raw = answer.trim() || defaultValue;
-      try {
-        return validate(raw);
-      } catch (err) {
-        if (err instanceof CliError) {
-          console.log(err.message);
-          continue;
+    const raw = await input({
+      message: question,
+      default: defaultValue || undefined,
+      theme: wizardPromptTheme,
+      validate: (value: string): true | string => {
+        const candidate = value.trim() || defaultValue;
+        try {
+          validate(candidate);
+          return true;
+        } catch (vErr) {
+          if (vErr instanceof CliError) return vErr.message;
+          throw vErr;
         }
-        throw err;
-      }
-    }
+      },
+    });
+    // Validator above already proved this passes; re-run to obtain the
+    // normalized return value (e.g. trimmed URL, parsed key).
+    return validate(raw.trim() || defaultValue);
+  } catch (err) {
+    if (isInquirerNonTtyError(err)) rethrowAsNonTtyCliError(hooks.label);
+    if (isInquirerExitError(err)) bridgeInquirerExit(err);
+    throw err;
   } finally {
-    removeSigintForward();
     hooks.progress?.setCurrentPromptLabel(null);
-    rl.close();
   }
 }
 
@@ -476,26 +516,31 @@ export function validateCliApiKeyInput(raw: string): string {
 export async function chooseSetupModeInteractive(
   progress?: SetupProgress,
 ): Promise<"server" | "client"> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  const removeSigintForward = forwardReadlineSigint(rl);
   progress?.setCurrentPromptLabel("server vs client choice");
   try {
-    console.log(`How will this machine use TaskManager?
-  [s] server  — run the API + database on this machine
-  [c] client  — CLI only; connect to a remote server elsewhere`);
-    for (;;) {
-      const answer = (await rl.question("Choice [s/c]: ")).trim().toLowerCase();
-      if (answer === "s" || answer === "server") return "server";
-      if (answer === "c" || answer === "client") return "client";
-      console.log('Please enter "s" for server or "c" for client.');
+    return await select<"server" | "client">({
+      message: "How will this machine use TaskManager?",
+      choices: [
+        {
+          name: "Server — run the API + database on this machine",
+          value: "server",
+        },
+        {
+          name: "Client — CLI only; connect to a remote server elsewhere",
+          value: "client",
+        },
+      ],
+      default: "server",
+      theme: wizardPromptTheme,
+    });
+  } catch (err) {
+    if (isInquirerNonTtyError(err)) {
+      rethrowAsNonTtyCliError("server vs client choice");
     }
+    if (isInquirerExitError(err)) bridgeInquirerExit(err);
+    throw err;
   } finally {
-    removeSigintForward();
     progress?.setCurrentPromptLabel(null);
-    rl.close();
   }
 }
 
@@ -606,7 +651,7 @@ export async function runServerSetupWizard(options: {
         : `Using profile: ${activeProfile}`,
     );
     const nameAns = await promptWithDefault(
-      formatTextPrompt("Profile name", activeProfile),
+      "Profile name",
       activeProfile,
       { progress, label: "Profile name" },
     );
@@ -628,16 +673,13 @@ export async function runServerSetupWizard(options: {
     readConfigFile({ profile: activeProfile, kind: "installed" }) ?? {};
 
   const portValue = await promptWithDefault(
-    formatTextPrompt("Pick a port for web/api", String(existing.port ?? defaults.port)),
+    "Pick a port for web/api",
     String(existing.port ?? defaults.port),
     { progress, label: "Port for web/api" },
   );
 
   const dataDirValue = await promptWithDefault(
-    formatTextPrompt(
-      "Pick a data directory for the database",
-      String(existing.data_dir ?? defaults.data_dir),
-    ),
+    "Pick a data directory for the database",
     String(existing.data_dir ?? defaults.data_dir),
     { progress, label: "Data directory" },
   );
@@ -647,38 +689,23 @@ export async function runServerSetupWizard(options: {
   // gain nothing from being on a separate volume, and a shared auth_dir
   // across profiles would silently share credentials.
 
-  // Renamed from the original "Allow remote access?" — that wording made
-  // operators assume "Yes = my server is reachable remotely" (which it always
-  // is, via a reverse proxy), when the toggle actually controls whether the
-  // raw API socket is bound to a public interface. The new wording asks the
-  // outcome plainly, and the explanatory line printed after the answer points
-  // operators at the reverse-proxy alternative.
-  const acceptRemoteDirect = await promptBoolean(
-    formatBooleanPrompt(
-      "Should this server accept connections from other machines on the network?",
-      !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
-    ),
-    !!(existing.bind_address && !isLoopbackBindAddress(existing.bind_address)),
-    { progress, label: "Accept remote connections?" },
-  );
-
-  const bindAddress = acceptRemoteDirect ? "0.0.0.0" : DEFAULT_BIND_ADDRESS;
+  // bind_address is treated as an advanced, config-file-only setting: new
+  // profiles always default to loopback, and re-runs preserve whatever an
+  // operator hand-edited into config.json (validated at load time in
+  // runtimeConfig.ts — non-loopback already requires require_cli_api_key:true,
+  // so silent preservation cannot open an unauth public socket).
+  const bindAddress = existing.bind_address ?? DEFAULT_BIND_ADDRESS;
+  const isNonLoopbackBind = !isLoopbackBindAddress(bindAddress);
 
   let requireCliApiKey: boolean;
-  if (acceptRemoteDirect) {
+  if (isNonLoopbackBind) {
+    // Hand-edited public bind: require_cli_api_key MUST be true (config
+    // validator enforces this); skip the prompt so we do not offer the
+    // operator a footgun answer the validator would reject anyway.
     requireCliApiKey = true;
-    console.log(
-      "  -> The API will accept connections from any network interface (0.0.0.0). A CLI API key will be required.",
-    );
   } else {
-    console.log(
-      "  -> The API will only accept connections from this machine (127.0.0.1). Use a reverse proxy (Caddy, nginx, etc.) to expose it remotely.",
-    );
     requireCliApiKey = await promptBoolean(
-      formatBooleanPrompt(
-        "Require a CLI API key for local connections too?",
-        existing.require_cli_api_key === true,
-      ),
+      "Require a CLI API key for local connections too?",
       existing.require_cli_api_key === true,
       { progress, label: "Require CLI API key locally?" },
     );
@@ -687,10 +714,7 @@ export async function runServerSetupWizard(options: {
   const defaultOpenBrowser =
     process.stdout.isTTY && !process.env.SSH_CONNECTION;
   const openBrowser = await promptBoolean(
-    formatBooleanPrompt(
-      "Open the default browser when starting the server via hirotaskmanager",
-      existing.open_browser ?? defaultOpenBrowser,
-    ),
+    "Open the default browser when starting the server via hirotaskmanager",
     existing.open_browser ?? defaultOpenBrowser,
     { progress, label: "Open browser on start?" },
   );
@@ -745,9 +769,9 @@ export async function runServerSetupWizard(options: {
   if (!existing.api_key) {
     const mintPromptText = needsKeyByPolicy
       ? "Mint a CLI API key now? The server requires one for any client to connect"
-      : "Mint a CLI API key now? Not needed for local CLI use, but required for any remote client (another machine, agent, browser-less tool)";
+      : "Mint a CLI API key now? Required for remote CLI clients";
     const mint = await promptBoolean(
-      formatBooleanPrompt(mintPromptText, needsKeyByPolicy),
+      mintPromptText,
       needsKeyByPolicy,
       { progress, label: "Mint CLI API key?" },
     );
@@ -778,10 +802,7 @@ export async function runServerSetupWizard(options: {
   const previousDefault = resolveDefaultProfileName();
   const hasPointer = !!previousDefault;
   const setDefault = await promptBoolean(
-    formatBooleanPrompt(
-      "Set this profile as the default for hirotm (no --profile needed)",
-      !hasPointer,
-    ),
+    "Set this profile as the default for hirotm (no --profile needed)",
     !hasPointer,
     { progress, label: "Set as default profile?" },
   );
@@ -859,7 +880,7 @@ export async function runClientSetupWizard(options: {
   if (!options.rerun) {
     const defaultName = activeProfile === "default" ? "remote" : activeProfile;
     const nameAns = await promptWithDefault(
-      formatTextPrompt("Profile name", defaultName),
+      "Profile name",
       defaultName,
       { progress, label: "Profile name" },
     );
@@ -877,14 +898,10 @@ export async function runClientSetupWizard(options: {
   // (which is itself not a valid URL) and exited the whole wizard on the first
   // typo. Now: only show a default when re-running over an existing profile,
   // and re-prompt on validation failure.
-  const apiUrlPrompt = existingClient.api_url
-    ? formatTextPrompt(
-        "Server base URL (api_url)",
-        String(existingClient.api_url),
-      )
-    : "Server base URL (api_url, e.g. https://tm.example.com):";
   const apiUrl = await promptValidatedWithDefault(
-    apiUrlPrompt,
+    existingClient.api_url
+      ? "Server base URL (api_url)"
+      : "Server base URL (api_url, e.g. https://tm.example.com)",
     String(existingClient.api_url ?? ""),
     normalizeClientApiUrl,
     { progress, label: "Server base URL (api_url)" },
@@ -892,14 +909,8 @@ export async function runClientSetupWizard(options: {
 
   // Same retry treatment for the api_key prompt: a paste mistake should not
   // kill the wizard. Validation lives in `validateCliApiKeyInput`.
-  const apiKeyPrompt = existingClient.api_key
-    ? formatTextPrompt(
-        "CLI API key (from the server: hirotaskmanager server api-key generate)",
-        String(existingClient.api_key),
-      )
-    : "CLI API key (from the server: hirotaskmanager server api-key generate):";
   const apiKeyTrimmed = await promptValidatedWithDefault(
-    apiKeyPrompt,
+    "CLI API key (from the server: hirotaskmanager server api-key generate)",
     String(existingClient.api_key ?? ""),
     validateCliApiKeyInput,
     { progress, label: "CLI API key" },
@@ -917,10 +928,7 @@ export async function runClientSetupWizard(options: {
   const previousDefault = resolveDefaultProfileName();
   const hasPointer = !!previousDefault;
   const setDefault = await promptBoolean(
-    formatBooleanPrompt(
-      "Set this profile as the default for hirotm (no --profile needed)",
-      !hasPointer,
-    ),
+    "Set this profile as the default for hirotm (no --profile needed)",
     !hasPointer,
     { progress, label: "Set as default profile?" },
   );

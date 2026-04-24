@@ -360,7 +360,6 @@ async function runInstalledServerStartWithLifecycle(opts: {
           printSetupToken({
             token: bootstrapSetupToken,
             appUrl: finalUrl,
-            bindAddress: launcherConfig.bind_address,
           });
         }
 

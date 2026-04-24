@@ -252,18 +252,13 @@ export function printCliApiKey(
  * fast path on a desktop where the server terminal and the browser are on
  * the same machine. Pipe-safe: drops colours/rules when stdout is not a TTY.
  */
-export function printSetupToken(opts: {
-  token: string;
-  appUrl: string;
-  bindAddress?: string;
-}): void {
-  const { token, appUrl, bindAddress } = opts;
+export function printSetupToken(opts: { token: string; appUrl: string }): void {
+  const { token, appUrl } = opts;
   const headingLabel =
     "First-time Setup Token (one-time, required to create the passphrase):";
-  const reachabilityHint =
-    bindAddress && !isLoopbackAddrLiteral(bindAddress)
-      ? `Open this in a browser on the server (or via your reverse proxy / public host — bind: ${bindAddress}):`
-      : "Open this in your browser:";
+  const openHint = "Open this in a browser";
+  const remoteUrlHint =
+    "Use https://<hostname> instead http://127.0.0.1:<port> of if running from a client";
   const deepLink = `${appUrl}/?setupToken=${encodeURIComponent(token)}`;
   const purposeHint =
     "Required for the very first passphrase.";
@@ -272,7 +267,8 @@ export function printSetupToken(opts: {
     line();
     line(headingLabel);
     line(token);
-    line(reachabilityHint);
+    line(openHint);
+    line(remoteUrlHint);
     line(deepLink);
     line(purposeHint);
     line();
@@ -285,7 +281,8 @@ export function printSetupToken(opts: {
   line(paint(out, rule, ansi.yellow));
   line(paintValue(token));
   line(paint(out, rule, ansi.yellow));
-  line(paint(out, reachabilityHint, ansi.dim));
+  line(paint(out, openHint, ansi.dim));
+  line(paint(out, remoteUrlHint, ansi.dim));
   line(paintValue(deepLink));
   line(paint(out, purposeHint, ansi.dim));
   line();

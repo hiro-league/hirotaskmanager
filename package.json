@@ -1,6 +1,6 @@
 {
   "name": "@hiroleague/taskmanager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Task Manager for Solo Builders and AI Agents, working as a team",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/hiro-league/hirotaskmanager.git"
   },
-  "homepage": "https://github.com/hiro-league/hirotaskmanager#readme",
+  "homepage": "https://www.hiroleague.com/hiro-task-manager/",
   "bugs": {
     "url": "https://github.com/hiro-league/hirotaskmanager/issues"
   },
@@ -19,6 +19,10 @@
   "files": [
     "dist",
     "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/**/*.spec.ts",
+    "!src/**/*.spec.tsx",
     "skills",
     "LICENSE",
     "README.md",

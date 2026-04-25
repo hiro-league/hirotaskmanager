@@ -7,7 +7,9 @@
 
 Task management for solo builders with endless ideas and a talent for forgetting. Hiro Task Manager adds superpowers to your task lists with AI-agent access control.
 
-[![Hiro Task Manager — watch on YouTube](assets/baymax_video_cover.jpg)](https://youtu.be/NUSbLk1sZQU)
+**One minute demo** — [Open on YouTube](https://youtu.be/gtlFLINg2oQ)
+
+<a href="https://youtu.be/gtlFLINg2oQ" title="Hiro Task Manager — one minute demo"><img src="assets/onminutedemo.jpg" width="400" alt="Hiro Task Manager one minute demo (YouTube)"></a>
 
 ## Releases
 
@@ -48,6 +50,10 @@ Task management for solo builders with endless ideas and a talent for forgetting
 ## Install (Local Setup)
 
 Most users will use the Local Setup. If you're into setting the server up on a VPS, visit the [Advanced Setup](https://docs.hiroleague.com/task-manager/get-started/advanced-setup) page.
+
+**One minute install** — [Open on YouTube](https://youtu.be/laf3w0J6IwU)
+
+<a href="https://youtu.be/laf3w0J6IwU" title="Hiro Task Manager — one minute install"><img src="assets/oneminuteinstall.jpg" width="400" alt="Hiro Task Manager one minute install (YouTube)"></a>
 
 **1. Install**
 
@@ -133,3 +139,4 @@ Issues and pull requests are welcome.
 
 - [Hiro Task Manager Documentation](https://docs.hiroleague.com/task-manager)
 - [Website](https://hiroleague.com/hiro-task-manager)
+- [AI agent walkthrough (longer demo on YouTube)](https://youtu.be/NUSbLk1sZQU)

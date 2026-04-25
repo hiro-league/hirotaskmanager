@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { MutableRefObject } from "react";
 import { boardKeys } from "@/api/queries";
 import {
   ALL_TASK_GROUPS,
@@ -305,8 +305,6 @@ interface BridgeDeps {
   requestEditTaskTitle: (taskId: number) => void;
 }
 
-type SetIntId = Dispatch<SetStateAction<number | null>>;
-
 /**
  * Board-view preference mutations the shortcuts layer triggers. Kept narrow so the shortcuts
  * module does not pull in the full `useMutation` type surface from `@tanstack/react-query`.
@@ -342,8 +340,10 @@ export interface BoardShortcutActionsDeps {
     boardId: string | number,
     mode: TaskCardViewMode,
   ) => void;
-  setTaskDeleteConfirmId: SetIntId;
-  setListDeleteConfirmId: SetIntId;
+  /** Move the highlighted task to Trash via the shared undo-toast flow (#31351 pattern). */
+  requestTrashTaskById: (taskId: number) => void;
+  /** Move the highlighted list to Trash via the shared undo-toast flow (#31351 pattern). */
+  requestTrashListById: (listId: number) => void;
   pendingGroupSavesRef: PendingSaveTimeoutsRef;
   pendingGroupTasksRef: PendingTasksRef;
   pendingPrioritySavesRef: PendingSaveTimeoutsRef;
@@ -370,8 +370,8 @@ export function createBoardShortcutActions(
     setActiveTaskGroupIdsForBoard,
     setActiveTaskPriorityIdsForBoard,
     setTaskCardViewModeForBoard,
-    setTaskDeleteConfirmId,
-    setListDeleteConfirmId,
+    requestTrashTaskById,
+    requestTrashListById,
     pendingGroupSavesRef,
     pendingGroupTasksRef,
     pendingPrioritySavesRef,
@@ -447,12 +447,12 @@ export function createBoardShortcutActions(
     },
     requestDeleteHighlight: () => {
       if (nav?.highlightedListId != null) {
-        setListDeleteConfirmId(nav.highlightedListId);
+        requestTrashListById(nav.highlightedListId);
         return;
       }
       const highlightedTaskId = nav?.highlightedTaskId;
       if (highlightedTaskId != null) {
-        setTaskDeleteConfirmId(highlightedTaskId);
+        requestTrashTaskById(highlightedTaskId);
       }
     },
     addTaskAtHighlight: () => {

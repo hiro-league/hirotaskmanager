@@ -7,8 +7,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useBoardStats, useSuspenseBoard } from "@/api/queries";
@@ -37,6 +35,7 @@ import { type Board, resolvedBoardLayout } from "../../../shared/models";
 import { BoardCanvas } from "./BoardCanvas";
 import { BoardColumnsResolved } from "./columns/BoardColumnsResolved";
 import { BoardLayoutProvider } from "@/context/BoardLayoutContext";
+import { BoardTrashActionsProvider } from "./BoardTrashActionsContext";
 import { BoardEditDialog } from "./dialogs/BoardEditDialog";
 import { BoardHeader } from "./header/BoardHeader";
 import { BoardNotificationDeepLink } from "./BoardNotificationDeepLink";
@@ -55,8 +54,6 @@ import { ReleasesEditorDialog } from "./dialogs/ReleasesEditorDialog";
 import {
   BoardKeyboardNavProvider,
 } from "./shortcuts/BoardKeyboardNavContext";
-import { BoardListDeleteConfirm } from "./shortcuts/BoardListDeleteConfirm";
-import { BoardTaskDeleteConfirm } from "./shortcuts/BoardTaskDeleteConfirm";
 import { ShortcutHelpDialog } from "./shortcuts/ShortcutHelpDialog";
 import { ShortcutScopeProvider } from "./shortcuts/ShortcutScopeContext";
 import { BoardTaskKeyboardBridgeProvider } from "./shortcuts/BoardTaskKeyboardBridge";
@@ -142,12 +139,6 @@ function BoardViewBody({ boardId }: { boardId: string }) {
     headerRef: boardHeaderRef,
   });
 
-  const [taskDeleteConfirmId, setTaskDeleteConfirmId] = useState<number | null>(
-    null,
-  );
-  const [listDeleteConfirmId, setListDeleteConfirmId] = useState<number | null>(
-    null,
-  );
   const activeTaskGroupIds = useResolvedActiveTaskGroupIds(
     String(data.boardId),
     data.taskGroups,
@@ -360,6 +351,11 @@ function BoardViewBody({ boardId }: { boardId: string }) {
                 <BoardTaskCompletionCelebrationProvider
                   celebrationSoundsMuted={data.muteCelebrationSounds}
                 >
+                  <BoardTrashActionsProvider
+                    boardId={data.boardId}
+                    lists={data.lists}
+                    tasks={data.tasks}
+                  >
                   <BoardDialogsProvider board={data}>
                     <BoardShortcutBindings
                       boardId={data.boardId}
@@ -372,8 +368,6 @@ function BoardViewBody({ boardId }: { boardId: string }) {
                       tasks={data.tasks}
                       openBoardSearch={openSearch}
                       toggleFilters={toggleFilterStrip}
-                      setTaskDeleteConfirmId={setTaskDeleteConfirmId}
-                      setListDeleteConfirmId={setListDeleteConfirmId}
                     />
                     <BoardNotificationDeepLink board={data} />
                     <div
@@ -422,13 +416,10 @@ function BoardViewBody({ boardId }: { boardId: string }) {
                         board={data}
                         boardSearchOpen={boardSearchOpen}
                         closeSearch={closeSearch}
-                        taskDeleteConfirmId={taskDeleteConfirmId}
-                        setTaskDeleteConfirmId={setTaskDeleteConfirmId}
-                        listDeleteConfirmId={listDeleteConfirmId}
-                        setListDeleteConfirmId={setListDeleteConfirmId}
                       />
                     </div>
                   </BoardDialogsProvider>
+                  </BoardTrashActionsProvider>
                 </BoardTaskCompletionCelebrationProvider>
               </BoardKeyboardNavProvider>
             </BoardFilterResolutionProvider>
@@ -443,18 +434,10 @@ function BoardViewDialogs({
   board,
   boardSearchOpen,
   closeSearch,
-  taskDeleteConfirmId,
-  setTaskDeleteConfirmId,
-  listDeleteConfirmId,
-  setListDeleteConfirmId,
 }: {
   board: Board;
   boardSearchOpen: boolean;
   closeSearch: () => void;
-  taskDeleteConfirmId: number | null;
-  setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
-  listDeleteConfirmId: number | null;
-  setListDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
 }) {
   const {
     shortcutHelpOpen,
@@ -477,14 +460,6 @@ function BoardViewDialogs({
     [setPrioritiesEditorOpen],
   );
   const closeReleasesEditor = useCallback(() => setReleasesEditorOpen(false), [setReleasesEditorOpen]);
-  const closeTaskDeleteConfirm = useCallback(
-    () => setTaskDeleteConfirmId(null),
-    [setTaskDeleteConfirmId],
-  );
-  const closeListDeleteConfirm = useCallback(
-    () => setListDeleteConfirmId(null),
-    [setListDeleteConfirmId],
-  );
 
   return (
     <>
@@ -522,18 +497,6 @@ function BoardViewDialogs({
         board={board}
         open={releasesEditorOpen}
         onClose={closeReleasesEditor}
-      />
-
-      <BoardTaskDeleteConfirm
-        board={board}
-        taskId={taskDeleteConfirmId}
-        onClose={closeTaskDeleteConfirm}
-      />
-
-      <BoardListDeleteConfirm
-        board={board}
-        listId={listDeleteConfirmId}
-        onClose={closeListDeleteConfirm}
       />
     </>
   );

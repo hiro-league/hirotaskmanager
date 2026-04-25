@@ -1,21 +1,13 @@
 import { useCallback, useState } from "react";
 import type { BoardIndexEntry } from "../../../shared/models";
-import {
-  useCreateBoard,
-  useDeleteBoard,
-  usePatchBoard,
-  useRestoreBoard,
-} from "@/api/mutations";
+import { useCreateBoard, usePatchBoard } from "@/api/mutations";
 import { reportMutationError } from "@/lib/mutationErrorUi";
-import { appNavigate } from "@/lib/appNavigate";
-import { boardPath } from "@/lib/boardPath";
-import { useNotificationUiStore } from "@/store/notificationUi";
+import { useTrashBoardWithUndo } from "@/lib/trashWithUndo";
 
 export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
   const createBoard = useCreateBoard();
   const patchBoard = usePatchBoard();
-  const deleteBoard = useDeleteBoard();
-  const restoreBoard = useRestoreBoard();
+  const trashBoardWithUndo = useTrashBoardWithUndo();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -55,26 +47,9 @@ export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
   const requestDelete = useCallback(
     (id: number, name: string) => {
       setOpenMenuId(null);
-      const label = name.trim() || "Board";
-      deleteBoard.mutate(id, {
-        onSuccess: () => {
-          useNotificationUiStore.getState().pushSystemToast({
-            message: `“${label}” moved to Trash.`,
-            trashLink: true,
-            onUndo: () => {
-              restoreBoard.mutate(id, {
-                onSuccess: () => {
-                  appNavigate(boardPath(id));
-                },
-                onError: (err) => reportMutationError("restore board", err),
-              });
-            },
-          });
-        },
-        onError: (err) => reportMutationError("delete board", err),
-      });
+      trashBoardWithUndo({ boardId: id, label: name });
     },
-    [deleteBoard, restoreBoard],
+    [trashBoardWithUndo],
   );
 
   const cancelAddBoard = useCallback(() => {
@@ -98,7 +73,6 @@ export function useSidebarBoardMutations(boards: BoardIndexEntry[]) {
 
   return {
     createBoard,
-    deleteBoard,
     editingId,
     editValue,
     setEditValue,

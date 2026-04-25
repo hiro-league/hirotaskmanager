@@ -30,6 +30,8 @@ export function useCreateList() {
       boardId: number;
       name: string;
       emoji?: string | null;
+      /** Caller-supplied temp id so the UI can advance synchronously without racing onMutate. */
+      optimisticListId?: number;
     }) => {
       return fetchJson<ListMutationResult>(`/api/boards/${input.boardId}/lists`, {
         method: "POST",
@@ -47,7 +49,7 @@ export function useCreateList() {
       const listName = trimmed || "New list";
       const maxOrder = prev.lists.reduce((m, l) => Math.max(m, l.order), -1);
       const optimisticList: List = {
-        listId: tempNumericId(),
+        listId: input.optimisticListId ?? tempNumericId(),
         name: listName,
         order: maxOrder + 1,
         emoji: input.emoji ?? null,

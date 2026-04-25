@@ -7,8 +7,7 @@ import {
   DragDropProvider,
   DragOverlay as ReactDragOverlay,
 } from "@dnd-kit/react";
-import { useCreateList, useMoveList, usePatchBoardViewPrefs } from "@/api/mutations";
-import { reportMutationError } from "@/lib/mutationErrorUi";
+import { usePatchBoardViewPrefs } from "@/api/mutations";
 import { boardKeys, useStatusWorkflowOrder } from "@/api/queries";
 import { BoardDragOverlayContent } from "../dnd/BoardDragOverlayContent";
 import { boardColumnSpreadProps } from "../boardColumnData";
@@ -30,25 +29,24 @@ interface BoardColumnsProps {
 }
 
 export function AddListSlot({
-  boardId,
   open,
   insertAfterListId,
   onOpen,
   onClose,
+  onSubmit,
+  isPending,
   stacked = false,
 }: {
-  boardId: number;
   open: boolean;
   insertAfterListId: number | null;
   onOpen: (insertAfterListId: number | null) => void;
   onClose: () => void;
+  /** Submits the new list via the parent-owned mutation so the observer survives slot remounts. */
+  onSubmit: (input: { name: string; emoji: string | null }) => void;
+  isPending: boolean;
   /** Stacked layout: column-aligned, content height (no full-height lane). */
   stacked?: boolean;
 }) {
-  const qc = useQueryClient();
-  const createList = useCreateList();
-  const moveList = useMoveList();
-  const boardKeyboardNav = useBoardKeyboardNavOptional();
   const [name, setName] = useState("");
   const [listEmoji, setListEmoji] = useState<string | null>(null);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
@@ -78,41 +76,10 @@ export function AddListSlot({
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const beforeBoard = qc.getQueryData<Board>(boardKeys.detail(boardId));
-    if (!beforeBoard) return;
-    const prevOrder = [...beforeBoard.lists]
-      .sort((x, y) => x.order - y.order)
-      .map((l) => l.listId);
-    const anchor = insertAfterListId;
-
-    createList.mutate(
-      { boardId, name: trimmed, emoji: listEmoji ?? null },
-      {
-        onSuccess: (data) => {
-          const newList = data.entity;
-          cancel();
-          // After creating a list, make it current so the board follows the
-          // user's last action instead of leaving the old selection in place.
-          boardKeyboardNav?.selectList(newList.listId);
-          if (anchor == null) return;
-          const anchorIdx = prevOrder.indexOf(anchor);
-          if (anchorIdx < 0) return;
-          const nextListId = prevOrder[anchorIdx + 1];
-          moveList.mutate(
-            {
-              boardId: data.boardId,
-              listId: newList.listId,
-              beforeListId: nextListId == null ? undefined : nextListId,
-              position: nextListId == null ? "last" : undefined,
-            },
-            {
-              onError: (err) => reportMutationError("move list after create", err),
-            },
-          );
-        },
-        onError: (err) => reportMutationError("create list", err),
-      },
-    );
+    onSubmit({ name: trimmed, emoji: listEmoji });
+    setName("");
+    setListEmoji(null);
+    setEmojiFieldError(null);
   };
 
   const shellClass = stacked
@@ -124,7 +91,9 @@ export function AddListSlot({
       <div ref={shellRef} className={shellClass} data-board-no-pan>
         <button
           type="button"
-          className="flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          disabled={isPending}
+          aria-busy={isPending}
           onClick={() => onOpen(null)}
         >
           <Plus className="size-4 shrink-0" aria-hidden />
@@ -149,7 +118,7 @@ export function AddListSlot({
       <div className="flex gap-2">
         <EmojiPickerMenuButton
           emoji={listEmoji}
-          disabled={createList.isPending}
+          disabled={isPending}
           onValidationError={setEmojiFieldError}
           chooseAriaLabel="Choose list emoji"
           selectedAriaLabel={(e) => `List emoji ${e}`}
@@ -166,7 +135,7 @@ export function AddListSlot({
           className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground select-text"
           placeholder="Enter list name…"
           value={name}
-          disabled={createList.isPending}
+          disabled={isPending}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -181,7 +150,7 @@ export function AddListSlot({
         <button
           type="button"
           className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          disabled={createList.isPending || !name.trim()}
+          disabled={isPending || !name.trim()}
           onClick={() => submit()}
         >
           Add list
@@ -190,7 +159,7 @@ export function AddListSlot({
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Cancel"
-          disabled={createList.isPending}
+          disabled={isPending}
           onClick={cancel}
         >
           <X className="size-4" aria-hidden />
@@ -225,6 +194,8 @@ export function BoardColumns({ board }: BoardColumnsProps) {
     setInsertAfterListId,
     closeAddList,
     onOpenTrailingAddList,
+    submitList,
+    isPending: addListPending,
   } = useAddListComposer(board.boardId);
   useEffect(() => {
     boardKeyboardNav?.setListColumnOrder(localListIds);
@@ -353,11 +324,12 @@ export function BoardColumns({ board }: BoardColumnsProps) {
                   items.push(
                     <AddListSlot
                       key={`add-after-${id}`}
-                      boardId={board.boardId}
                       open
                       insertAfterListId={insertAfterListId}
                       onOpen={setInsertAfterListId}
                       onClose={closeAddList}
+                      onSubmit={submitList}
+                      isPending={addListPending}
                     />,
                   );
                 }
@@ -365,11 +337,12 @@ export function BoardColumns({ board }: BoardColumnsProps) {
               })}
             </div>
             <AddListSlot
-              boardId={board.boardId}
               open={addListOpen && insertAfterListId == null}
               insertAfterListId={null}
               onOpen={onOpenTrailingAddList}
               onClose={closeAddList}
+              onSubmit={submitList}
+              isPending={addListPending}
             />
           </div>
         </div>

@@ -41,8 +41,10 @@ import { StackedSortableList } from "../lanes/StackedTaskList";
 import { useStackedListTaskActions } from "../lanes/useStackedListTaskActions";
 import { useBoardColumnSortableReact } from "../dnd/useBoardColumnSortableReact";
 import { useColumnInViewport } from "../lanes/useColumnInViewport";
+import { isOptimisticListId } from "@/api/mutations/shared";
 import { useStatusWorkflowOrder } from "@/api/queries";
 import { subscribeWindowResize } from "@/lib/useWindowResize";
+import { ListColumnCreatingOverlay } from "./ListColumnCreatingOverlay";
 
 interface ListStackedBodyProps extends BoardColumnSpreadProps {
   list: List;
@@ -278,32 +280,47 @@ function ListStackedBody({
               />
             ) : (
               <>
-                {staticQuickAddInsertIndex === 0 ? quickAddComposer : null}
-                {staticTasks?.map((task, index) => (
-                  <div key={task.taskId} className="contents">
-                    <TaskCard
-                      task={task}
-                      taskPriorities={taskPriorities}
-                      viewMode={taskCardViewMode}
-                      groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
-                      releasePill={taskReleasePill({ releases }, task)}
-                      onOpen={() => actions.openStaticEditor(task)}
-                      inlineEdit={taskCardInlineEditFor(
-                        task.taskId,
-                        actions.editingTitleTaskId,
-                        actions.editingTitleDraft,
-                        {
-                          setDraft: actions.setEditingTitleDraft,
-                          commit: () => void actions.commitInlineTitleEdit(),
-                          cancel: actions.cancelInlineTitleEdit,
-                          busy: actions.titleEditBusy,
-                        },
-                      )}
-                      overflowActionsBoard={taskOverflowBoard}
-                    />
-                    {staticQuickAddInsertIndex === index + 1 ? quickAddComposer : null}
+                {staticQuickAddInsertIndex === 0 && quickAddComposer != null ? (
+                  <div key="__quickadd-slot" className="contents">
+                    {quickAddComposer}
                   </div>
-                ))}
+                ) : null}
+                {staticTasks?.flatMap((task, index) => {
+                  const row = (
+                    <div key={task.taskId} className="contents">
+                      <TaskCard
+                        task={task}
+                        taskPriorities={taskPriorities}
+                        viewMode={taskCardViewMode}
+                        groupLabel={groupDisplayLabelForId(taskGroups, task.groupId)}
+                        releasePill={taskReleasePill({ releases }, task)}
+                        onOpen={() => actions.openStaticEditor(task)}
+                        inlineEdit={taskCardInlineEditFor(
+                          task.taskId,
+                          actions.editingTitleTaskId,
+                          actions.editingTitleDraft,
+                          {
+                            setDraft: actions.setEditingTitleDraft,
+                            commit: () => void actions.commitInlineTitleEdit(),
+                            cancel: actions.cancelInlineTitleEdit,
+                            busy: actions.titleEditBusy,
+                          },
+                        )}
+                        overflowActionsBoard={taskOverflowBoard}
+                      />
+                    </div>
+                  );
+                  const slot =
+                    quickAddComposer != null ? (
+                      <div key="__quickadd-slot" className="contents">
+                        {quickAddComposer}
+                      </div>
+                    ) : null;
+                  if (staticQuickAddInsertIndex === index + 1 && slot) {
+                    return [row, slot];
+                  }
+                  return [row];
+                })}
               </>
             )}
           </div>
@@ -465,6 +482,8 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     [ref, viewportRef],
   );
 
+  const listIsOptimistic = isOptimisticListId(listId);
+
   return (
     <div
       ref={mergedOuterRef}
@@ -487,11 +506,13 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
     >
       <div
         ref={listColumnShellRef}
+        aria-busy={listIsOptimistic}
         className={cn(
-          "group/list-col flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
+          "group/list-col relative flex flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "min-h-0 flex-1 border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
+          listIsOptimistic && "opacity-70",
         )}
         onPointerDown={(e) => {
           if (!boardNav || isDragging) return;
@@ -503,6 +524,7 @@ export const BoardListStackedColumn = memo(function BoardListStackedColumn({
           boardNav.selectList(list.listId);
         }}
       >
+        <ListColumnCreatingOverlay show={listIsOptimistic} />
         {!isDragging && inViewport && (
           <ListStackedBody
             boardId={boardId}

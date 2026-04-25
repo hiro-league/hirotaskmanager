@@ -4,8 +4,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,6 +17,7 @@ import {
   type TaskCardViewMode,
 } from "@/store/preferences";
 import type { Board } from "../../../shared/models";
+import { useBoardTrashActions } from "./BoardTrashActionsContext";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import { useBoardDialogs } from "@/context/BoardDialogsContext";
 import { useBoardTaskKeyboardBridgeOptional } from "./shortcuts/BoardTaskKeyboardBridge";
@@ -38,8 +37,6 @@ interface BoardShortcutBindingsProps {
   tasks: Board["tasks"];
   openBoardSearch: () => void;
   toggleFilters: () => void;
-  setTaskDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
-  setListDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
 }
 
 export function BoardShortcutBindings({
@@ -53,8 +50,6 @@ export function BoardShortcutBindings({
   tasks,
   openBoardSearch,
   toggleFilters,
-  setTaskDeleteConfirmId,
-  setListDeleteConfirmId,
 }: BoardShortcutBindingsProps) {
   const { openHelp } = useBoardDialogs();
   const {
@@ -106,6 +101,7 @@ export function BoardShortcutBindings({
   );
   const pendingGroupTasksRef = useRef(new Map<number, Board["tasks"][number]>());
   const patchViewPrefs = usePatchBoardViewPrefs();
+  const { requestTrashList, requestTrashTask } = useBoardTrashActions();
   const persistTaskUpdate = useCallback(
     (targetBoardId: number, task: Board["tasks"][number]) => {
       updateTask.mutate({ boardId: targetBoardId, task });
@@ -142,6 +138,25 @@ export function BoardShortcutBindings({
   useEffect(() => {
     tasksRef.current = tasks;
   }, [tasks]);
+
+  const requestTrashTaskById = useCallback(
+    (taskId: number) => {
+      // Do not clear task highlight on success: useBoardHighlightState moves to a
+      // neighbor (or the list) when the task id leaves the column map; onTrashed
+      // onSuccess was clearing that, same as list delete.
+      requestTrashTask(taskId);
+    },
+    [requestTrashTask],
+  );
+  const requestTrashListById = useCallback(
+    (listId: number) => {
+      // Do not use onTrashed to clear list highlight: useBoardHighlightState already moves
+      // focus to a neighbor when the list row disappears; onSuccess onTrashed was firing
+      // after and wiping that selection (same as trash toast / delete completing).
+      requestTrashList(listId);
+    },
+    [requestTrashList],
+  );
 
   useEffect(() => {
     return () => {
@@ -189,8 +204,8 @@ export function BoardShortcutBindings({
         setActiveTaskGroupIdsForBoard,
         setActiveTaskPriorityIdsForBoard,
         setTaskCardViewModeForBoard,
-        setTaskDeleteConfirmId,
-        setListDeleteConfirmId,
+        requestTrashTaskById,
+        requestTrashListById,
         pendingGroupSavesRef,
         pendingGroupTasksRef,
         pendingPrioritySavesRef,
@@ -211,8 +226,8 @@ export function BoardShortcutBindings({
       setActiveTaskGroupIdsForBoard,
       setActiveTaskPriorityIdsForBoard,
       setTaskCardViewModeForBoard,
-      setTaskDeleteConfirmId,
-      setListDeleteConfirmId,
+      requestTrashTaskById,
+      requestTrashListById,
     ],
   );
 

@@ -102,8 +102,8 @@ async function main(): Promise<void> {
   const board = await createBoardWithDefaults(boardName, slug, null);
   // Board model uses boardId (not id); undefined here broke priority/list queries.
   const boardId = board.boardId;
-
-  for (let i = 0; i < lists; i++) {
+  // `createBoardWithDefaults` already inserts a "default" list; add the rest to reach `lists` total.
+  for (let i = 0; i < lists - 1; i++) {
     createListOnBoard(boardId, { name: `List ${i + 1}` });
   }
 

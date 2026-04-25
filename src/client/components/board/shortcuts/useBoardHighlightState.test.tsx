@@ -63,4 +63,167 @@ describe("useBoardHighlightState", () => {
     });
     expect(result.current.highlightedTaskIdRef.current).toBe(11);
   });
+
+  const MAP_123 = new Map<number, number[]>([
+    [1, [10]],
+    [2, [20]],
+    [3, [30]],
+  ]);
+
+  test("when highlighted list is removed, focus moves to the list that followed it", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1, 2, 3],
+          columnMap: MAP_123,
+        },
+      },
+    );
+
+    act(() => {
+      result.current.setHighlightedListId(2);
+    });
+    expect(result.current.highlightedListIdRef.current).toBe(2);
+
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [1, 3],
+        columnMap: new Map([
+          [1, [10]],
+          [3, [30]],
+        ]),
+      });
+    });
+    expect(result.current.highlightedListIdRef.current).toBe(3);
+  });
+
+  test("when the last list was highlighted and removed, focus moves to the list before it", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1, 2, 3],
+          columnMap: MAP_123,
+        },
+      },
+    );
+
+    act(() => {
+      result.current.setHighlightedListId(3);
+    });
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [1, 2],
+        columnMap: new Map([
+          [1, [10]],
+          [2, [20]],
+        ]),
+      });
+    });
+    expect(result.current.highlightedListIdRef.current).toBe(2);
+  });
+
+  test("when the only list was highlighted and removed, no list stays highlighted", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1],
+          columnMap: new Map([[1, [10]]]),
+        },
+      },
+    );
+
+    act(() => {
+      result.current.setHighlightedListId(1);
+    });
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [],
+        columnMap: new Map(),
+      });
+    });
+    expect(result.current.highlightedListIdRef.current).toBeNull();
+  });
+
+  test("when a highlighted task is removed, focus moves to the next task in the list", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1],
+          columnMap: new Map<number, number[]>([[1, [10, 11, 12]]]),
+        },
+      },
+    );
+    act(() => {
+      result.current.selectTask(11);
+    });
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [1],
+        columnMap: new Map<number, number[]>([[1, [10, 12]]]),
+      });
+    });
+    expect(result.current.highlightedTaskIdRef.current).toBe(12);
+    expect(result.current.highlightedListIdRef.current).toBeNull();
+  });
+
+  test("when the last task in a list was highlighted and removed, focus moves to the task above it", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1],
+          columnMap: new Map<number, number[]>([[1, [10, 11, 12]]]),
+        },
+      },
+    );
+    act(() => {
+      result.current.selectTask(12);
+    });
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [1],
+        columnMap: new Map<number, number[]>([[1, [10, 11]]]),
+      });
+    });
+    expect(result.current.highlightedTaskIdRef.current).toBe(11);
+  });
+
+  test("when the only task in a list was highlighted and removed, focus moves to the list header", () => {
+    const { result, rerender } = renderHook(
+      (props: typeof HIGHLIGHT_ARGS) => useBoardHighlightState(props),
+      {
+        initialProps: {
+          ...HIGHLIGHT_ARGS,
+          listColumnOrder: [1],
+          columnMap: new Map<number, number[]>([[1, [10]]]),
+        },
+      },
+    );
+    act(() => {
+      result.current.selectTask(10);
+    });
+    act(() => {
+      rerender({
+        ...HIGHLIGHT_ARGS,
+        listColumnOrder: [1],
+        columnMap: new Map<number, number[]>([[1, []]]),
+      });
+    });
+    expect(result.current.highlightedTaskIdRef.current).toBeNull();
+    expect(result.current.highlightedListIdRef.current).toBe(1);
+  });
 });

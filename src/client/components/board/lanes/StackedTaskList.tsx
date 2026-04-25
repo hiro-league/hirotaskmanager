@@ -217,12 +217,17 @@ export const StackedSortableList = memo(function StackedSortableList({
         </div>
       ) : (
         <>
-          {quickAddInsertIndex === 0 ? quickAddComposer : null}
-          {sortableIds.map((sid, index) => {
+          {/* Empty sortableIds: flatMap yields nothing — prefix is the only place insert-0 lives. */}
+          {quickAddInsertIndex === 0 && quickAddComposer != null ? (
+            <div key="__quickadd-slot" className="contents">
+              {quickAddComposer}
+            </div>
+          ) : null}
+          {sortableIds.flatMap((sid, index) => {
             const tid = parseTaskSortableId(sid);
             const task = tid != null ? taskMap.get(tid) : undefined;
-            if (!task) return null;
-            return (
+            if (!task) return [];
+            const row = (
               <div key={sid} className="contents">
                 <StackedSortableTaskRowById
                   sid={sid}
@@ -243,9 +248,21 @@ export const StackedSortableList = memo(function StackedSortableList({
                   titleEditBusy={titleEditBusy}
                   taskOverflowBoard={taskOverflowBoard}
                 />
-                {quickAddInsertIndex === index + 1 ? quickAddComposer : null}
               </div>
             );
+            // Stable keyed sibling so React preserves the composer when insert index shifts
+            // after a new task; nesting under `key={sid}` remounted the textarea and fired
+            // blur → cancelAdd.
+            const slot =
+              quickAddComposer != null ? (
+                <div key="__quickadd-slot" className="contents">
+                  {quickAddComposer}
+                </div>
+              ) : null;
+            if (quickAddInsertIndex === index + 1 && slot) {
+              return [row, slot];
+            }
+            return [row];
           })}
         </>
       )}

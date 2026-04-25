@@ -23,12 +23,11 @@ import {
 import { sortReleasesForDisplay } from "../../../shared/releaseSort";
 import { clampTaskTitleInput } from "../../../shared/taskTitle";
 import type { TaskEditorBoardData } from "@/components/board/boardColumnData";
-import { useDeleteTask, useUpdateTask } from "@/api/mutations";
+import { useUpdateTask } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { TaskAgentPromptActions } from "@/components/task/TaskAgentPromptActions";
 import { TaskFieldSwatchSelect } from "@/components/task/TaskFieldSwatchSelect";
-import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { DiscardChangesDialog } from "@/components/board/shortcuts/DiscardChangesDialog";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { useBackdropDismissClick } from "@/components/board/shortcuts/useBackdropDismissClick";
@@ -42,6 +41,7 @@ import {
 import { useModalFocusTrap } from "@/components/board/shortcuts/useModalFocusTrap";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import { resolveDark, useSystemDark } from "@/components/layout/ThemeRoot";
+import { useBoardTrashActions } from "@/components/board/BoardTrashActionsContext";
 import { usePreferencesStore } from "@/store/preferences";
 import { createTaskMarkdownPreviewComponents } from "@/components/task/taskMarkdownPreviewComponents";
 import { TaskTitleCharsLeft } from "@/components/task/TaskTitleCharsLeft";
@@ -110,7 +110,7 @@ export function TaskEditor({
   task,
 }: TaskEditorProps) {
   const titleId = useId();
-  const deleteTask = useDeleteTask();
+  const { requestTrashTask } = useBoardTrashActions();
   const updateTask = useUpdateTask();
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
@@ -157,7 +157,6 @@ export function TaskEditor({
   const taskMdEditorWrapRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [showDiscard, setShowDiscard] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   const [titleInputFocused, setTitleInputFocused] = useState(false);
 
@@ -172,7 +171,6 @@ export function TaskEditor({
   const busy =
     createTask.isPending ||
     updateTask.isPending ||
-    deleteTask.isPending ||
     (mode === "edit" && taskDetailQuery.isPending);
 
   const shouldBlockNavigation = open && isDirty && !busy;
@@ -210,7 +208,7 @@ export function TaskEditor({
     [requestClose],
   );
 
-  const taskEditorActive = open && !showDiscard && !showDeleteConfirm;
+  const taskEditorActive = open && !showDiscard;
 
   useShortcutOverlay(taskEditorActive, "task-editor", taskEditorKeyHandler);
   useModalFocusTrap({
@@ -356,11 +354,10 @@ export function TaskEditor({
     ],
   );
 
-  const runDelete = useCallback(async () => {
+  const requestTrash = useCallback(() => {
     if (mode !== "edit" || !task) return;
-    await deleteTask.mutateAsync({ boardId: board.boardId, taskId: task.taskId });
-    onClose();
-  }, [mode, task, board.boardId, deleteTask, onClose]);
+    requestTrashTask(task.taskId, { onTrashed: onClose });
+  }, [mode, task, requestTrashTask, onClose]);
 
   const openStatusId =
     workflowOrder.find((id) => id === "open") ?? workflowOrder[0] ?? "open";
@@ -693,7 +690,7 @@ export function TaskEditor({
                 tabIndex={TASK_FIELD_TAB.moveToTrash}
                 className="mr-auto rounded-md border border-destructive/50 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
                 disabled={busy}
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={requestTrash}
               >
                 Move to Trash
               </button>
@@ -734,21 +731,6 @@ export function TaskEditor({
             navigatorBlocker.proceed();
           }
           onClose();
-        }}
-      />
-
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        scope="task-delete-confirmation"
-        title="Move this task to Trash?"
-        message="You can restore it from Trash or delete it permanently there."
-        confirmLabel="Move to Trash"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onCancel={() => setShowDeleteConfirm(false)}
-        onConfirm={() => {
-          setShowDeleteConfirm(false);
-          void runDelete();
         }}
       />
     </>

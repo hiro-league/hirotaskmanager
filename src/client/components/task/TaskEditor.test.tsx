@@ -20,6 +20,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 });
 import type { Status } from "../../../shared/models";
 import * as queries from "@/api/queries";
+import { BoardTrashActionsProvider } from "@/components/board/BoardTrashActionsContext";
 import { ShortcutScopeProvider } from "@/components/board/shortcuts/ShortcutScopeContext";
 import { TaskEditor } from "@/components/task/TaskEditor";
 import { buildTaskEditorBoardData, buildTestBoard, buildTestTask } from "@/test/fixtures";
@@ -88,7 +89,11 @@ function renderTaskEditor(ui: ReactElement) {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <ShortcutScopeProvider>{ui}</ShortcutScopeProvider>
+        <ShortcutScopeProvider>
+          <BoardTrashActionsProvider boardId={1} lists={[]} tasks={[]}>
+            {ui}
+          </BoardTrashActionsProvider>
+        </ShortcutScopeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );

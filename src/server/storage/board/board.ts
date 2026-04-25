@@ -473,7 +473,7 @@ export type CreateBoardOptions = {
   cliBootstrap?: "web_default" | "cli_full";
 };
 
-/** Create board row, default groups/priorities, default view prefs; returns full board. */
+/** Create board row, default groups/priorities, one default list, default view prefs; returns full board. */
 export async function createBoardWithDefaults(
   name: string,
   slug: string,
@@ -535,6 +535,11 @@ export async function createBoardWithDefaults(
         ],
       );
     }
+    // New boards start with a single list so the UI/CLI always has a list id for tasks (no empty-board edge case).
+    db.run(
+      "INSERT INTO list (board_id, name, sort_order, color, emoji, created_by_principal, created_by_label) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, "default", 0, null, null, createdBy.principal, createdBy.label],
+    );
     db.run(
       `INSERT INTO board_view_prefs
          (board_id, visible_statuses, status_band_weights,

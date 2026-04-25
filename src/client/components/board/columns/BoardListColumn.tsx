@@ -10,8 +10,10 @@ import { cn } from "@/lib/utils";
 import { boardListColumnOverlayShellClass } from "../dnd/boardDragOverlayShell";
 import { laneBandContainerId } from "../dnd/dndIds";
 import { laneStatusDividerClass } from "../lanes/laneStatusTheme";
+import { isOptimisticListId } from "@/api/mutations/shared";
 import { useBoardColumnSortableReact } from "../dnd/useBoardColumnSortableReact";
 import { useColumnInViewport } from "../lanes/useColumnInViewport";
+import { ListColumnCreatingOverlay } from "./ListColumnCreatingOverlay";
 
 interface ListColumnBodyProps extends BoardColumnSpreadProps {
   list: List;
@@ -244,6 +246,8 @@ export const BoardListColumn = memo(function BoardListColumn({
     [ref, viewportRef],
   );
 
+  const listIsOptimistic = isOptimisticListId(listId);
+
   return (
     <div
       ref={mergedOuterRef}
@@ -261,11 +265,13 @@ export const BoardListColumn = memo(function BoardListColumn({
     >
       <div
         ref={listColumnShellRef}
+        aria-busy={listIsOptimistic}
         className={cn(
-          "group/list-col flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
+          "group/list-col relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-list-column shadow-sm transition-[opacity,border-color]",
           isDragging
             ? "border-2 border-dashed border-primary/20 bg-muted/30 shadow-none"
             : "border-border",
+          listIsOptimistic && "opacity-70",
         )}
         onPointerDown={(e) => {
           if (!boardNav || isDragging) return;
@@ -277,6 +283,7 @@ export const BoardListColumn = memo(function BoardListColumn({
           boardNav.selectList(list.listId);
         }}
       >
+        <ListColumnCreatingOverlay show={listIsOptimistic} />
         {!isDragging && inViewport && (
           <ListColumnBody
             {...columnSpread}

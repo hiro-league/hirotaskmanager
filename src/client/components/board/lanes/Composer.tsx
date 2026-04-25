@@ -67,13 +67,20 @@ function ComposerTextarea({
       rows={3}
       autoComplete="off"
       spellCheck={false}
-      className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text"
+      className={cn(
+        "w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground select-text",
+        disabled && "cursor-wait opacity-60",
+      )}
       placeholder="Enter a title or paste a link"
       value={value}
-      disabled={disabled}
+      // readOnly while submitting: native disabled drops focus and fires blur, which
+      // raced quick-add blur/cancel and made the add card linger.
+      readOnly={disabled}
+      aria-busy={disabled || undefined}
       onChange={(e) => onChange(clampTaskTitleInput(e.target.value))}
       onBlur={onBlur}
       onKeyDown={(e) => {
+        if (disabled) return;
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           onSubmit();

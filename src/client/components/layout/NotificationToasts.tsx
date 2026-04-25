@@ -5,6 +5,7 @@ import {
   notificationActionVisual,
   notificationContextLabel,
   notificationEntityIcon,
+  notificationRestoreTarget,
   notificationSourceDisplay,
   notificationTargetHref,
 } from "@/lib/notificationPresentation";
@@ -12,6 +13,7 @@ import { formatNotificationTime } from "@/lib/notificationTime";
 import { cn } from "@/lib/utils";
 import type { SystemToast } from "@/store/notificationUi";
 import { useNotificationUiStore } from "@/store/notificationUi";
+import { NotificationRestoreButton } from "./NotificationRestoreButton";
 
 function ToastCard({ item, onDismiss }: { item: NotificationItem; onDismiss: () => void }) {
   const navigate = useNavigate();
@@ -22,11 +24,15 @@ function ToastCard({ item, onDismiss }: { item: NotificationItem; onDismiss: () 
   const { Icon, className } = notificationActionVisual(item);
   const context = notificationContextLabel(item);
   const destination = notificationTargetHref(item);
+  const restoreTarget = notificationRestoreTarget(item);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => onDismiss(), 4500);
+    // Trash-action toasts get the same generous window as the Undo system toast so users have
+    // time to react before auto-dismiss; other notification toasts stay short and unobtrusive.
+    const ms = restoreTarget ? 15_000 : 4500;
+    const timer = window.setTimeout(() => onDismiss(), ms);
     return () => window.clearTimeout(timer);
-  }, [onDismiss]);
+  }, [onDismiss, restoreTarget]);
 
   return (
     <button
@@ -72,6 +78,14 @@ function ToastCard({ item, onDismiss }: { item: NotificationItem; onDismiss: () 
             </span>
             {context ? <span className="truncate">{context}</span> : null}
           </div>
+          {restoreTarget ? (
+            <div className="mt-2">
+              <NotificationRestoreButton
+                target={restoreTarget}
+                onRestored={onDismiss}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </button>

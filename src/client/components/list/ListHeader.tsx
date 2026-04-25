@@ -8,11 +8,11 @@ import {
 } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { MoreVertical } from "lucide-react";
-import { useDeleteList, usePatchList } from "@/api/mutations";
+import { usePatchList } from "@/api/mutations";
 import { EmojiPickerMenuButton } from "@/components/emoji/EmojiPickerMenuButton";
-import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { useShortcutOverlay } from "@/components/board/shortcuts/ShortcutScopeContext";
+import { useBoardTrashActions } from "@/components/board/BoardTrashActionsContext";
 import { cn } from "@/lib/utils";
 import { listDisplayName, type List } from "../../../shared/models";
 
@@ -69,12 +69,11 @@ export function ListHeader({
   dragHandleRef,
 }: ListHeaderProps) {
   const patchList = usePatchList();
-  const deleteList = useDeleteList();
+  const { requestTrashList } = useBoardTrashActions();
   const boardNav = useBoardKeyboardNavOptional();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(list.name);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [listDeleteConfirmOpen, setListDeleteConfirmOpen] = useState(false);
   const [emojiFieldError, setEmojiFieldError] = useState<string | null>(null);
   /** Measures the truncated list name span so we only show a native tooltip when text overflows. */
   const listNameSpanRef = useRef<HTMLSpanElement | null>(null);
@@ -134,17 +133,12 @@ export function ListHeader({
     }, []),
   );
 
+  const displayName = listDisplayName(list);
+
   const handleDelete = useCallback(() => {
     setMenuOpen(false);
-    setListDeleteConfirmOpen(true);
-  }, []);
-
-  const confirmListDelete = useCallback(() => {
-    deleteList.mutate({ boardId, listId: list.listId });
-    setListDeleteConfirmOpen(false);
-  }, [boardId, deleteList, list.listId]);
-
-  const displayName = listDisplayName(list);
+    requestTrashList(list.listId);
+  }, [list.listId, requestTrashList]);
 
   useLayoutEffect(() => {
     if (editing) {
@@ -192,7 +186,6 @@ export function ListHeader({
   );
 
   return (
-    <>
     <div
       className={cn(
         "group/list-header relative flex w-full min-h-10 items-center justify-end gap-1 border-border bg-muted/40 px-2 py-1.5",
@@ -332,18 +325,5 @@ export function ListHeader({
         </DropdownMenu.Root>
       )}
     </div>
-
-      <ConfirmDialog
-        open={listDeleteConfirmOpen}
-        scope="list-delete-confirmation"
-        title="Move this list to Trash?"
-        message={`Move list “${displayName}” to Trash? Its tasks move with it; you can restore from Trash or delete permanently there.`}
-        confirmLabel="Move to Trash"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onCancel={() => setListDeleteConfirmOpen(false)}
-        onConfirm={confirmListDelete}
-      />
-  </>
   );
 }

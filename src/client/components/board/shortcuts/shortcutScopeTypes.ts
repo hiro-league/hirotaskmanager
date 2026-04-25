@@ -12,6 +12,4 @@ export type ShortcutScope =
   | "task-priorities-editor"
   | "releases-editor"
   | "discard-dialog"
-  | "task-delete-confirmation"
-  | "list-delete-confirmation"
   | "list-header-menu";

@@ -203,9 +203,6 @@ export function useStackedListTaskActions({
   const submitTask = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const existingTaskIds = new Set(
-      surfaceRef.current.boardTasks.map((task) => task.taskId),
-    );
     const defaultGroupId = effectiveDefaultTaskGroupId({
       taskGroups,
       defaultTaskGroupId,
@@ -222,13 +219,12 @@ export function useStackedListTaskActions({
       {
         onSuccess: (data) => {
           setTitle("");
-          const createdTask =
-            !existingTaskIds.has(data.entity.taskId) &&
-            data.entity.listId === list.listId &&
-            data.entity.status === quickAddStatus
-              ? data.entity
-              : null;
-          if (createdTask) boardNav?.selectTask(createdTask.taskId);
+          // Move the keyboard highlight to the new task so consecutive adds
+          // animate the selection forward instead of jumping only on cancel.
+          // selectTask only updates the highlight ring + scrolls; it does not
+          // call .focus(), so the composer keeps the textarea focus for the
+          // next add (re-asserted by focusComposerAtQuickAddPosition below).
+          boardNav?.selectTask(data.entity.taskId);
           focusComposerAtQuickAddPosition();
         },
       },

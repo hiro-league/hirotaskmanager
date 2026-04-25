@@ -256,7 +256,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
             Edit board
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Name, icon, description, theme, and hirotm CLI permissions for this board.
+            Board name, description, theme, and CLI access for this board.
           </p>
           {emojiFieldError ? (
             <p className="mt-2 text-sm text-destructive" role="alert">
@@ -264,29 +264,23 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
             </p>
           ) : null}
 
-          <label className="mt-4 block text-sm font-medium text-foreground">
-            Name
+          <div className="mt-4 flex min-w-0 items-center gap-2">
+            <EmojiPickerMenuButton
+              emoji={emoji}
+              disabled={busy}
+              onValidationError={setEmojiFieldError}
+              chooseAriaLabel="Choose board emoji"
+              selectedAriaLabel={(x) => `Board emoji ${x}`}
+              onPick={(next) => setEmoji(next)}
+            />
             <input
               type="text"
-              className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
               value={name}
               disabled={busy}
               onChange={(e) => setName(e.target.value)}
+              aria-label="Board name"
             />
-          </label>
-
-          <div className="mt-3">
-            <span className="text-sm font-medium text-foreground">Icon</span>
-            <div className="mt-1 flex items-center gap-2">
-              <EmojiPickerMenuButton
-                emoji={emoji}
-                disabled={busy}
-                onValidationError={setEmojiFieldError}
-                chooseAriaLabel="Choose board emoji"
-                selectedAriaLabel={(x) => `Board emoji ${x}`}
-                onPick={(next) => setEmoji(next)}
-              />
-            </div>
           </div>
 
           <label className="mt-4 block text-sm font-medium text-foreground">
@@ -300,45 +294,13 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
             />
           </label>
 
-          <div className="mt-6">
-            <span className="text-sm font-medium text-foreground">
-              Board theme
-            </span>
-            <div className="mt-2 grid grid-cols-5 gap-2">
-              {BOARD_COLOR_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  disabled={busy}
-                  title={BOARD_COLOR_LABELS[preset]}
-                  className={cn(
-                    "flex flex-col items-center gap-1 rounded-md border p-1 text-[10px] text-muted-foreground hover:bg-muted/60",
-                    boardColor === preset && "ring-2 ring-ring",
-                  )}
-                  onClick={() => setBoardColor(preset)}
-                >
-                  <span
-                    className="block size-8 rounded border-2 border-border/60"
-                    style={{
-                      background: getBoardThemePreviewBackground(preset),
-                    }}
-                    aria-hidden
-                  />
-                  <span className="max-w-full truncate px-0.5">
-                    {BOARD_COLOR_LABELS[preset]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <details className="group mt-6 rounded-lg border border-border bg-muted/15">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground marker:content-none [&::-webkit-details-marker]:hidden hover:bg-muted/40">
               <ChevronRight
                 className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
                 aria-hidden
               />
-              Hirotm CLI access
+              CLI Access
               <span className="ml-auto text-xs font-normal text-muted-foreground">
                 local API / hirotm
               </span>
@@ -424,6 +386,38 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
               ))}
             </div>
           </details>
+
+          <div className="mt-6">
+            <span className="text-sm font-medium text-foreground">
+              Board theme
+            </span>
+            <div className="mt-2 grid grid-cols-5 gap-2">
+              {BOARD_COLOR_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={busy}
+                  title={BOARD_COLOR_LABELS[preset]}
+                  className={cn(
+                    "flex flex-col items-center gap-1 rounded-md border p-1 text-[10px] text-muted-foreground hover:bg-muted/60",
+                    boardColor === preset && "ring-2 ring-ring",
+                  )}
+                  onClick={() => setBoardColor(preset)}
+                >
+                  <span
+                    className="block size-8 rounded border-2 border-border/60"
+                    style={{
+                      background: getBoardThemePreviewBackground(preset),
+                    }}
+                    aria-hidden
+                  />
+                  <span className="max-w-full truncate px-0.5">
+                    {BOARD_COLOR_LABELS[preset]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-6 flex justify-end gap-2">
             <button

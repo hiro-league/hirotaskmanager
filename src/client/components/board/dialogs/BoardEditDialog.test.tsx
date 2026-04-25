@@ -28,7 +28,7 @@ describe("BoardEditDialog", () => {
       </QueryClientProvider>,
     );
 
-    const nameInput = screen.getByLabelText(/Name/i) as HTMLInputElement;
+    const nameInput = screen.getByLabelText(/Board name/i) as HTMLInputElement;
     expect(nameInput.value).toBe("Named");
 
     await userEvent.clear(nameInput);

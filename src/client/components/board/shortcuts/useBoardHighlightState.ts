@@ -7,6 +7,10 @@ import {
   PAGE_STEP,
 } from "./boardTaskNavigation";
 
+function snapshotColumnMap(m: Map<number, number[]>): Map<number, number[]> {
+  return new Map([...m].map(([listId, ids]) => [listId, ids.slice()]));
+}
+
 const KEYBOARD_SCROLL_MARGIN_PX = 10;
 /** Hoisted: ancestor walk calls this often (react-best-practices P4.3). */
 const SCROLLABLE_OVERFLOW_RE = /(auto|scroll|overlay)/;
@@ -123,6 +127,10 @@ export function useBoardHighlightState({
   const hoveredListIdRef = useRef<number | null>(null);
   const taskElementsRef = useRef<Map<number, HTMLElement>>(new Map());
   const initialHighlightAppliedForBoardId = useRef<number | null>(null);
+  /** Previous column order; used to pick a neighbor when the focused list is deleted. */
+  const prevListColumnOrderRef = useRef<number[]>([]);
+  /** Previous per-list task id order; used to pick a neighbor when the focused task is removed. */
+  const prevColumnMapRef = useRef<Map<number, number[]>>(new Map());
 
   useEffect(() => {
     highlightedTaskIdRef.current = null;
@@ -131,6 +139,8 @@ export function useBoardHighlightState({
     hoveredListIdRef.current = null;
     clearPendingReveal();
     initialHighlightAppliedForBoardId.current = null;
+    prevListColumnOrderRef.current = [];
+    prevColumnMapRef.current = new Map();
   }, [boardId, clearPendingReveal]);
 
   const setKeyboardRing = useCallback((el: HTMLElement | null, active: boolean) => {
@@ -335,26 +345,74 @@ export function useBoardHighlightState({
   ]);
 
   useEffect(() => {
-    const all = [...columnMap.values()].flat();
+    const all = new Set([...columnMap.values()].flat());
+    const prev = prevColumnMapRef.current;
     const highlightedTaskId = highlightedTaskIdRef.current;
-    if (highlightedTaskId != null && !all.includes(highlightedTaskId)) {
-      setHighlightedTaskId(null);
+    if (highlightedTaskId != null && !all.has(highlightedTaskId)) {
+      // Trashed/removed task: next task down-column in previous order, else up, else the list header.
+      const listId = findListIdForTask(prev, highlightedTaskId);
+      const col = listId != null ? (prev.get(listId) ?? []) : [];
+      const idx = col.indexOf(highlightedTaskId);
+      if (listId == null || idx < 0) {
+        setHighlightedTaskId(null);
+      } else {
+        let nextTaskId: number | null = null;
+        for (let j = idx + 1; j < col.length; j++) {
+          if (all.has(col[j]!)) {
+            nextTaskId = col[j]!;
+            break;
+          }
+        }
+        if (nextTaskId == null) {
+          for (let j = idx - 1; j >= 0; j--) {
+            if (all.has(col[j]!)) {
+              nextTaskId = col[j]!;
+              break;
+            }
+          }
+        }
+        if (nextTaskId != null) {
+          setHighlightedTaskId(nextTaskId);
+        } else if (listColumnOrder.includes(listId)) {
+          setHighlightedListId(listId);
+        } else {
+          setHighlightedTaskId(null);
+        }
+      }
     }
     const hoveredTaskId = hoveredTaskIdRef.current;
-    if (hoveredTaskId != null && !all.includes(hoveredTaskId)) {
+    if (hoveredTaskId != null && !all.has(hoveredTaskId)) {
       hoveredTaskIdRef.current = null;
     }
-  }, [columnMap, setHighlightedTaskId]);
+    prevColumnMapRef.current = snapshotColumnMap(columnMap);
+  }, [columnMap, listColumnOrder, setHighlightedListId, setHighlightedTaskId]);
 
   useEffect(() => {
+    const current = listColumnOrder;
+    const prev = prevListColumnOrderRef.current;
     const highlightedListId = highlightedListIdRef.current;
-    if (highlightedListId != null && !listColumnOrder.includes(highlightedListId)) {
-      setHighlightedListId(null);
+    if (highlightedListId != null && !current.includes(highlightedListId)) {
+      // Deleted list: prefer the list that followed it, else the one before, else clear.
+      const idx = prev.indexOf(highlightedListId);
+      let nextListId: number | null = null;
+      if (idx >= 0) {
+        const idAfter = prev[idx + 1];
+        if (idAfter != null && current.includes(idAfter)) {
+          nextListId = idAfter;
+        } else {
+          const idBefore = prev[idx - 1];
+          if (idBefore != null && current.includes(idBefore)) {
+            nextListId = idBefore;
+          }
+        }
+      }
+      setHighlightedListId(nextListId);
     }
     const hoveredListId = hoveredListIdRef.current;
-    if (hoveredListId != null && !listColumnOrder.includes(hoveredListId)) {
+    if (hoveredListId != null && !current.includes(hoveredListId)) {
       hoveredListIdRef.current = null;
     }
+    prevListColumnOrderRef.current = listColumnOrder.slice();
   }, [listColumnOrder, setHighlightedListId]);
 
   const registerListElement = useCallback(

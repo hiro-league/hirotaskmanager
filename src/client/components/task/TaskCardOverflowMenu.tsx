@@ -1,10 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { createPortal } from "react-dom";
 import {
   useCallback,
   useMemo,
   useRef,
-  useState,
   type ComponentType,
 } from "react";
 import {
@@ -33,10 +31,9 @@ import {
 } from "../../../shared/models";
 import { sortReleasesForDisplay } from "../../../shared/releaseSort";
 import type { TaskCardOverflowBoardData } from "@/components/board/boardColumnData";
-import { useDeleteTask, useMoveTask, useUpdateTask } from "@/api/mutations";
+import { useMoveTask, useUpdateTask } from "@/api/mutations";
 import { useStatuses, useStatusWorkflowOrder } from "@/api/queries";
 import { CursorMarkIcon } from "@/components/brand/CursorMarkIcon";
-import { ConfirmDialog } from "@/components/board/shortcuts/ConfirmDialog";
 import { useBoardKeyboardNavOptional } from "@/components/board/shortcuts/BoardKeyboardNavContext";
 import { useBoardTaskCompletionCelebrationOptional } from "@/gamification";
 import {
@@ -47,6 +44,7 @@ import {
 } from "@/lib/agentPrompt";
 import { formatDateMedium } from "@/lib/intlDateFormat";
 import { reportMutationError } from "@/lib/mutationErrorUi";
+import { useBoardTrashActions } from "@/components/board/BoardTrashActionsContext";
 import { cn } from "@/lib/utils";
 import { statusDotClass } from "@/components/board/lanes/laneStatusTheme";
 
@@ -112,18 +110,16 @@ export function TaskCardOverflowMenu({
   board,
 }: TaskCardOverflowMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [trashConfirmOpen, setTrashConfirmOpen] = useState(false);
   const boardNav = useBoardKeyboardNavOptional();
   const completion = useBoardTaskCompletionCelebrationOptional();
 
   const updateTask = useUpdateTask();
   const moveTask = useMoveTask();
-  const deleteTask = useDeleteTask();
+  const { requestTrashTask } = useBoardTrashActions();
   const { data: statuses } = useStatuses();
   const workflowOrder = useStatusWorkflowOrder();
 
-  const busy =
-    updateTask.isPending || moveTask.isPending || deleteTask.isPending;
+  const busy = updateTask.isPending || moveTask.isPending;
 
   const sortedPriorities = useMemo(
     () => (board ? sortPrioritiesByValue(board.taskPriorities) : []),
@@ -301,19 +297,10 @@ export function TaskCardOverflowMenu({
     [moveTask],
   );
 
-  const confirmTrash = useCallback(() => {
+  const requestTrash = useCallback(() => {
     if (!board) return;
-    deleteTask.mutate(
-      { boardId: board.boardId, taskId: task.taskId },
-      {
-        onSuccess: () => {
-          boardNav?.setHighlightedTaskId(null);
-          setTrashConfirmOpen(false);
-        },
-        onError: (err) => reportMutationError("delete task", err),
-      },
-    );
-  }, [board, boardNav, deleteTask, task.taskId]);
+    requestTrashTask(task.taskId);
+  }, [board, requestTrashTask, task.taskId]);
 
   const showFieldMenus = board != null;
   const showStatusMenu = showFieldMenus && otherWorkflowTargetIds != null;
@@ -333,14 +320,13 @@ export function TaskCardOverflowMenu({
   }, [board, task.taskId, task.title, task.emoji]);
 
   return (
-    <>
-      <DropdownMenu.Root
-        modal={false}
-        onOpenChange={(open) => {
-          // Trigger uses stopPropagation so card-root pointer-down never runs; align highlight with opening actions.
-          if (open) boardNav?.selectTask(task.taskId);
-        }}
-      >
+    <DropdownMenu.Root
+      modal={false}
+      onOpenChange={(open) => {
+        // Trigger uses stopPropagation so card-root pointer-down never runs; align highlight with opening actions.
+        if (open) boardNav?.selectTask(task.taskId);
+      }}
+    >
         <DropdownMenu.Trigger asChild>
           <button
             ref={triggerRef}
@@ -726,7 +712,7 @@ export function TaskCardOverflowMenu({
                       )}
                       disabled={busy}
                       onSelect={() => {
-                        setTrashConfirmOpen(true);
+                        requestTrash();
                       }}
                     >
                       <Trash2 className="size-3.5 shrink-0 opacity-90" aria-hidden />
@@ -736,28 +722,8 @@ export function TaskCardOverflowMenu({
                 ) : null}
               </>
             ) : null}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-
-      {board
-        ? createPortal(
-            // Task card uses `overflow-hidden`; `ConfirmDialog` is `fixed` and would be clipped
-            // in the card’s box. Portaling to `document.body` keeps a real full-viewport modal.
-            <ConfirmDialog
-              open={trashConfirmOpen}
-              scope="task-delete-confirmation"
-              title="Move this task to Trash?"
-              message={`Move “${taskDisplayTitle(task)}” to Trash? You can restore from Trash or delete permanently there.`}
-              confirmLabel="Move to Trash"
-              cancelLabel="Cancel"
-              variant="destructive"
-              onCancel={() => setTrashConfirmOpen(false)}
-              onConfirm={confirmTrash}
-            />,
-            document.body,
-          )
-        : null}
-    </>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

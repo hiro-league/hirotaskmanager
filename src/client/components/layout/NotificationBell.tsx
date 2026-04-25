@@ -17,9 +17,11 @@ import {
   notificationActionVisual,
   notificationContextLabel,
   notificationEntityIcon,
+  notificationRestoreTarget,
   notificationSourceDisplay,
   notificationTargetHref,
 } from "@/lib/notificationPresentation";
+import { NotificationRestoreButton } from "./NotificationRestoreButton";
 import { formatNotificationTime } from "@/lib/notificationTime";
 import { formatInteger } from "@/lib/intlNumberFormat";
 import { cn } from "@/lib/utils";
@@ -39,6 +41,7 @@ function NotificationRow({
   const { Icon, className } = notificationActionVisual(item);
   const destination = notificationTargetHref(item);
   const context = notificationContextLabel(item);
+  const restoreTarget = notificationRestoreTarget(item);
   const content = (
     <div
       className={cn(
@@ -79,6 +82,11 @@ function NotificationRow({
           </span>
           {context ? <span className="truncate">{context}</span> : null}
         </div>
+        {restoreTarget ? (
+          <div className="mt-2">
+            <NotificationRestoreButton target={restoreTarget} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -2,7 +2,14 @@ import {
   DragOverlay as ReactDragOverlay,
   DragDropProvider,
 } from "@dnd-kit/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Board } from "../../../../shared/models";
 import { AddListSlot } from "./BoardColumns";
 import { useAddListComposer } from "./useAddListComposer";
@@ -59,6 +66,8 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
     setInsertAfterListId,
     closeAddList,
     onOpenTrailingAddList,
+    submitList,
+    isPending: addListPending,
   } = useAddListComposer(board.boardId);
   useEffect(() => {
     boardKeyboardNav?.setListColumnOrder(localListIds);
@@ -82,6 +91,14 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
   useEffect(() => {
     setMountedColumnCount((c) => Math.min(c, listLen));
   }, [listLen]);
+
+  // Empty board → first list: idle chunking can leave a width placeholder for a whole idle slice; mount the
+  // new column in the same frame as the optimistic list row so the creating overlay and title show at once.
+  useLayoutEffect(() => {
+    if (listLen > 0 && mountedColumnCount === 0) {
+      setMountedColumnCount(Math.min(STACKED_COLUMNS_INITIAL_MOUNT, listLen));
+    }
+  }, [listLen, mountedColumnCount]);
 
   // Mount remaining columns in idle batches so the main thread can paint between chunks.
   useEffect(() => {
@@ -160,11 +177,12 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
                   items.push(
                     <AddListSlot
                       key={`add-after-${id}`}
-                      boardId={board.boardId}
                       open
                       insertAfterListId={insertAfterListId}
                       onOpen={setInsertAfterListId}
                       onClose={closeAddList}
+                      onSubmit={submitList}
+                      isPending={addListPending}
                       stacked
                     />,
                   );
@@ -173,11 +191,12 @@ export function BoardColumnsStacked({ board }: BoardColumnsStackedProps) {
               })}
             </div>
             <AddListSlot
-              boardId={board.boardId}
               open={addListOpen && insertAfterListId == null}
               insertAfterListId={null}
               onOpen={onOpenTrailingAddList}
               onClose={closeAddList}
+              onSubmit={submitList}
+              isPending={addListPending}
               stacked
             />
           </div>

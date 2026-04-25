@@ -9,9 +9,9 @@ Task management for solo builders with endless ideas and a talent for forgetting
 
 [![Hiro Task Manager — watch on YouTube](assets/baymax_video_cover.jpg)](https://youtu.be/NUSbLk1sZQU)
 
-## Current Status
+## Releases
 
-Hiro Task Manager is in active development and is not yet ready for production use. However it is stable enough to try out and get started with.
+- 0.1.0 - First public release.
 
 ## Features
 

@@ -1,6 +1,6 @@
 {
   "name": "@hiroleague/taskmanager",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "type": "module",
   "description": "Task Manager for Solo Builders and AI Agents, working as a team",
   "license": "MIT",

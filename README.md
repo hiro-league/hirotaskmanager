@@ -127,5 +127,5 @@ Issues and pull requests are welcome.
 ## References
 
 - [Hiro Task Manager Documentation](https://docs.hiroleague.com/task-manager)
-- [Website](https://hiroleague.com/hiro-task-manager)
+- [Website](https://taskmanager.hiroleague.com)
 - [AI agent walkthrough (longer demo on YouTube)](https://youtu.be/NUSbLk1sZQU)

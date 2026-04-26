@@ -7,13 +7,13 @@
 
 Task Management for solo-builders with endless ideas. The task manager your AI agent can safely work with.
 
-**One minute demo** — [Open on YouTube](https://youtu.be/gtlFLINg2oQ)
+**One minute demo** — [Open on YouTube](https://youtu.be/FkxxZTN-pW8)
 
-<a href="https://youtu.be/gtlFLINg2oQ" title="Hiro Task Manager — one minute demo"><img src="assets/onminutedemo.jpg" width="400" alt="Hiro Task Manager one minute demo (YouTube)"></a>
+<a href="https://youtu.be/FkxxZTN-pW8" title="Hiro Task Manager — one minute demo"><img src="https://i.ytimg.com/vi/FkxxZTN-pW8/maxresdefault.jpg" width="400" alt="Hiro Task Manager one minute demo (YouTube)"></a>
 
-**One minute install** — [Open on YouTube](https://youtu.be/laf3w0J6IwU)
+**One minute install** — [Open on YouTube](https://www.youtube.com/watch?v=wtF695y2Wzc)
 
-<a href="https://youtu.be/laf3w0J6IwU" title="Hiro Task Manager — one minute install"><img src="assets/oneminuteinstall.jpg" width="400" alt="Hiro Task Manager one minute install (YouTube)"></a>
+<a href="https://www.youtube.com/watch?v=wtF695y2Wzc" title="Hiro Task Manager — one minute install"><img src="https://i.ytimg.com/vi/wtF695y2Wzc/maxresdefault.jpg" width="400" alt="Hiro Task Manager one minute install (YouTube)"></a>
 
 ## Releases
 

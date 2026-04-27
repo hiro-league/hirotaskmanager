@@ -35,7 +35,7 @@ type PolicyField = {
   hint?: string;
 };
 
-/** Grouped for two-column layout: access → tasks → lists → board-level. */
+/** Grouped for multi-column layout: access → tasks → lists → board-level. */
 const POLICY_GROUPS: { title: string; fields: PolicyField[] }[] = [
   {
     title: "Access",
@@ -245,7 +245,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
           ref={dialogRef}
           tabIndex={-1}
           className={cn(
-            "max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text",
+            "max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-lg select-text",
             MODAL_DIALOG_OVERSCROLL_CLASS,
             MODAL_TEXT_FIELD_CURSOR_CLASS,
           )}
@@ -333,7 +333,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {group.title}
                   </h4>
-                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {group.fields.map(({ key, label, hint }) => {
                       const disabled =
                         busy || (!cliPolicy.readBoard && key !== "readBoard");
@@ -346,7 +346,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
                           key={key}
                           className={cn(
                             "flex gap-2.5",
-                            fullWidth && "sm:col-span-2",
+                            fullWidth && "sm:col-span-2 lg:col-span-3",
                           )}
                         >
                           <input
@@ -391,7 +391,7 @@ export function BoardEditDialog({ board, open, onClose }: BoardEditDialogProps) 
             <span className="text-sm font-medium text-foreground">
               Board theme
             </span>
-            <div className="mt-2 grid grid-cols-5 gap-2">
+            <div className="mt-2 grid grid-cols-10 gap-2">
               {BOARD_COLOR_PRESETS.map((preset) => (
                 <button
                   key={preset}

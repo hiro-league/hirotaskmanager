@@ -60,6 +60,7 @@
     "profile:summarize": "node --max-old-space-size=8192 docs/profiling/summarize-profiler-export.mjs",
     "profile:chrome": "node docs/chrome-profiling/summarize-chrome-trace.mjs",
     "seed:perf": "bun run scripts/seed-perf-board.ts",
+    "db:compact-ids": "bun run scripts/compact-taskmanager-ids.ts",
     "clean:global": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/uninstall-packages.ps1",
     "clean:global:dry": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/uninstall-packages.ps1 -DryRun",
     "clean:profiles": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall/clean-profiles.ps1",

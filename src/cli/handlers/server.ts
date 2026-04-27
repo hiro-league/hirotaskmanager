@@ -1,5 +1,6 @@
 import { CLI_ERR } from "../types/errors";
 import { CliError } from "../lib/output/output";
+import { buildFlatServerStatus } from "../lib/core/serverStatusOutput";
 import type { CliContext } from "./context";
 
 export async function handleServerStart(
@@ -33,8 +34,15 @@ export async function handleServerStart(
 
 export async function handleServerStatus(ctx: CliContext): Promise<void> {
   const port = ctx.resolvePort();
-  const status = await ctx.readServerStatus({ port });
-  ctx.printJson(status);
+  const overrides = { port };
+  const status = await ctx.readServerStatus(overrides);
+  // Status output needs the profile URL at top level; otherwise remote client
+  // profiles appear to target the server's loopback-only health URL.
+  ctx.printJson(buildFlatServerStatus(status, {
+    profile: ctx.resolveProfileName(overrides),
+    role: ctx.resolveProfileRole(overrides),
+    api_url: ctx.resolveApiUrl(overrides),
+  }));
 }
 
 export async function handleServerStop(ctx: CliContext): Promise<void> {

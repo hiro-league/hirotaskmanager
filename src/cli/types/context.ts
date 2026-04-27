@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "../../shared/runtimeConfig";
+import type { ProfileRole, RuntimeKind } from "../../shared/runtimeConfig";
 import type { ConfigOverrides } from "./config";
 import type { CliOutputFormat } from "./output";
 import type { ApiPort } from "../ports/api";
@@ -24,6 +24,9 @@ export type CliRuntime = {
 type CliConfigPort = {
   resolvePort: (overrides?: ConfigOverrides) => number;
   resolveDataDir: (overrides?: ConfigOverrides) => string;
+  resolveProfileName: (overrides?: ConfigOverrides) => string;
+  resolveProfileRole: (overrides?: ConfigOverrides) => ProfileRole;
+  resolveApiUrl: (overrides?: ConfigOverrides) => string;
 };
 
 /**

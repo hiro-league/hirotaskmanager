@@ -18,7 +18,9 @@ import { ensureBundledSkills } from "../../shared/skillsInstall";
 import {
   hasCliConfigFile,
   readConfigFile,
+  resolveApiUrl,
   resolveProfileName,
+  resolveProfileRole,
   writeConfigFile,
   writeDefaultProfileName,
   type CliConfigFile,
@@ -26,6 +28,7 @@ import {
 import { INSTALLED_DEFAULT_PORT } from "../../shared/ports";
 import { CliError, exitWithError } from "../lib/output/output";
 import { readServerStatus, startServer, stopServer } from "../lib/core/process";
+import { buildFlatServerStatus } from "../lib/core/serverStatusOutput";
 import { buildLocalServerUrl } from "../../shared/serverStatus";
 import { canPromptInteractively } from "../lib/core/tty";
 import type { ServerStartMode } from "../ports/process";
@@ -708,12 +711,15 @@ export function createHirotaskmanagerProgram(): Command {
         const profile = resolveInstalledLauncherProfile(
           (command.optsWithGlobals() as LauncherServerOptions).profile ?? options.profile,
         );
-        printLauncherJson(
-          await readServerStatus({
-            kind: "installed",
-            profile,
-          }),
-        );
+        const overrides = { kind: "installed" as const, profile };
+        const status = await readServerStatus(overrides);
+        // Match `hirotm server status`: top-level URL fields describe the
+        // active profile, while the server's loopback health URL is diagnostic.
+        printLauncherJson(buildFlatServerStatus(status, {
+          profile: resolveProfileName(overrides),
+          role: resolveProfileRole(overrides),
+          api_url: resolveApiUrl(overrides),
+        }));
       } catch (error) {
         exitWithError(error);
       }

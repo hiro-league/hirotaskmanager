@@ -13,6 +13,9 @@ function baseCtx(overrides: Partial<CliContext> = {}): CliContext {
     resolvePort: (o?: ConfigOverrides) =>
       typeof o?.port === "number" ? o.port : 3020,
     resolveDataDir: () => "/tmp/data",
+    resolveProfileName: () => "remote",
+    resolveProfileRole: () => "client",
+    resolveApiUrl: () => "https://tasks.example.com",
     getRuntime: () => createTestCliRuntime({ port: 3020 }),
     ...overrides,
   };
@@ -38,7 +41,40 @@ describe("handleServerStatus", () => {
 
     await handleServerStatus(ctx);
 
-    expect(printed).toEqual(status);
+    expect(printed).toEqual({
+      kind: "server_status",
+      profile: "remote",
+      role: "client",
+      running: true,
+      reachable: true,
+      api_url: "https://tasks.example.com",
+      server_pid: 42,
+      server_port: 3020,
+      server_runtime: "installed",
+      server_source: "installed",
+      server_reported_url: "http://127.0.0.1:3020",
+    });
+  });
+
+  test("prints flat stopped status with profile context", async () => {
+    let printed: unknown;
+    const ctx = baseCtx({
+      readServerStatus: async () => ({ running: false }),
+      printJson: (d) => {
+        printed = d;
+      },
+    });
+
+    await handleServerStatus(ctx);
+
+    expect(printed).toEqual({
+      kind: "server_status",
+      profile: "remote",
+      role: "client",
+      running: false,
+      reachable: false,
+      api_url: "https://tasks.example.com",
+    });
   });
 });
 
